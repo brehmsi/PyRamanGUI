@@ -696,6 +696,32 @@ class LineBuilder:
         else:
             pass
 
+class LineDrawer:
+    def __init__(self, line):
+        self.line = line
+        self.xs = self.line.get_xdata()
+        self.ys = self.line.get_ydata()
+        self.ax = self.line.axes
+        self.selectedPoint, = self.ax.plot(self.xs[0], self.ys[0], 'o', ms=12, alpha=0.4, color='yellow', visible = False)
+        self.line.set_visible(True)
+        self.cid = self.line.figure.canvas.mpl_connect('pick_event', self)
+        self.line.figure.canvas.draw() 
+
+    def __call__(self, event):
+
+        if event.artist == self.line and event.mouseevent.button == 1 and event.mouseevent.dblclick == True:
+            x = event.mouseevent.xdata
+            y = event.mouseevent.ydata
+            distances = np.hypot(x - self.xs[event.ind], y - self.ys[event.ind])
+            indmin = distances.argmin()
+            lastind = int(event.ind[indmin])
+            self.selectedPoint.set_data(self.xs[lastind], self.ys[lastind])
+            self.selectedPoint.set_visible(True)
+            self.selectedPoint.figure.canvas.draw()
+        else:
+            self.selectedPoint.set_visible(False)
+
+
 #Creates a yellow dot around a selected data point
 class DataPointPicker:
     def __init__(self, line, selected, a):
@@ -917,7 +943,7 @@ class PlotWindow(QMainWindow):
         editNormAct = editMenu.addAction('Normalize Spectrum', self.normalize)
         editNormAct.setStatusTip('Normalizes highest peak to 1')
 
-        ### 3. Menüpunkt: Analysis      ###
+        ### 3. Menüpunkt: Analysis  ###
         analysisMenu = menubar.addMenu('&Analysis')
 
         ### 3.1 Analysis Fit
@@ -1659,9 +1685,11 @@ class PlotWindow(QMainWindow):
 
     def draw_line(self):
         pts = self.fig.ginput(2)
-        drawLine = self.ax.plot([pts[0][0], pts[1][0]], [pts[0][1], pts[1][1]], 'r', lw=2)
+        line, = self.ax.plot([pts[0][0], pts[1][0]], [pts[0][1], pts[1][1]], 'black', lw=2, picker=5)
+        line.set_visible(False)
+        drawedLine = LineDrawer(line)
         canvas = self.Canvas
-        self.ax.figure.canvas.draw()    
+        self.ax.figure.canvas.draw()
 
     def closeEvent(self, event):
         close = QMessageBox()
