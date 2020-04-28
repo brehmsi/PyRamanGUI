@@ -61,10 +61,14 @@ def figure_edit(axes, parent=None):
                (None, "<b>X-Axis</b>"),
                ('Label', axes.get_xlabel()),
                ('Scale', [axes.get_xscale(), 'linear', 'log', 'logit']),
+               ('Upper Limit', axes.get_xlim()[0]),
+               ('Lower Limit', axes.get_xlim()[1]),
                sep,
                (None, "<b>Y-Axis</b>"),
                ('Label', axes.get_ylabel()),
-               ('Scale', [axes.get_yscale(), 'linear', 'log', 'logit'])
+               ('Scale', [axes.get_yscale(), 'linear', 'log', 'logit']),
+               ('Upper Limit', axes.get_ylim()[0]),
+               ('Lower Limit', axes.get_ylim()[1])
                ]
 
     if axes.legend_ is not None:
@@ -203,7 +207,6 @@ def figure_edit(axes, parent=None):
         images.append([imagedata, label, ""])
     # Is there an image displayed?
     has_image = bool(images)
-
     datalist = [(general, "Axes", ""), (legend, "Legend", "")]
 
     if curves:
@@ -222,8 +225,8 @@ def figure_edit(axes, parent=None):
             raise ValueError("Unexpected field")
 
         # Set / General
-        (title, titlesize, labelsize, ticksize, grid, xlabel, xscale,
-         ylabel, yscale) = general
+        (title, titlesize, labelsize, ticksize, grid, xlabel, xscale, xlim_left, xlim_right,
+         ylabel, yscale, ylim_left, ylim_right) = general
 
         if axes.get_xscale() != xscale:
             axes.set_xscale(xscale)
@@ -234,10 +237,12 @@ def figure_edit(axes, parent=None):
         axes.title.set_fontsize(titlesize)
 
         axes.set_xlabel(xlabel)
+        axes.set_xlim(xlim_left, xlim_right)
         axes.xaxis.label.set_size(labelsize)
         axes.xaxis.set_tick_params(labelsize=ticksize)
 
         axes.set_ylabel(ylabel)
+        axes.set_ylim(ylim_left, ylim_right)
         axes.yaxis.label.set_size(labelsize)
         axes.yaxis.set_tick_params(labelsize=ticksize)
 
