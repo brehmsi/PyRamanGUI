@@ -17,6 +17,7 @@ from collections import ChainMap
 from matplotlib import *
 from matplotlib.widgets import Slider, Button, RadioButtons
 from matplotlib.figure import Figure
+from matplotlib.backend_bases import MouseEvent
 from matplotlib.backends.backend_qt5agg import (FigureCanvasQTAgg as FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
 #from matplotlib.backends.backend_qt5agg import (FigureCanvas)
 from matplotlib.backends.qt_compat import QtCore, QtWidgets
@@ -696,30 +697,86 @@ class LineBuilder:
         else:
             pass
 
+#idea: https://github.com/yuma-m/matplotlib-draggable-plot
 class LineDrawer:
     def __init__(self, line):
         self.line = line
+        self.pickedPoint = None
         self.xs = self.line.get_xdata()
         self.ys = self.line.get_ydata()
         self.ax = self.line.axes
+
+        self.startPlot()
+         
+    def startPlot(self):    
         self.selectedPoint, = self.ax.plot(self.xs[0], self.ys[0], 'o', ms=12, alpha=0.4, color='yellow', visible = False)
         self.line.set_visible(True)
-        self.cid = self.line.figure.canvas.mpl_connect('pick_event', self)
-        self.line.figure.canvas.draw() 
+        self.line.figure.canvas.draw()
 
-    def __call__(self, event):
 
-        if event.artist == self.line and event.mouseevent.button == 1 and event.mouseevent.dblclick == True:
-            x = event.mouseevent.xdata
-            y = event.mouseevent.ydata
-            distances = np.hypot(x - self.xs[event.ind], y - self.ys[event.ind])
-            indmin = distances.argmin()
-            lastind = int(event.ind[indmin])
-            self.selectedPoint.set_data(self.xs[lastind], self.ys[lastind])
-            self.selectedPoint.set_visible(True)
-            self.selectedPoint.figure.canvas.draw()
+        def pickpoint(event):
+            if event.artist == self.line and event.mouseevent.button == 1:
+                distance_threshold = 10
+                min_distance = math.sqrt(2 * (100 ** 2))
+                for x, y in zip(self.xs, self.ys):
+                    distance = math.hypot(event.mouseevent.xdata - x, event.mouseevent.ydata - y)
+                    if distance < min_distance:
+                        min_distance = distance
+                        self.pickedPoint = (x, y)
+                if min_distance < distance_threshold:
+                    pass
+                else:
+                    self.pickedPoint = None
+                self.selectedPoint.set_data(self.pickedPoint)
+                self.selectedPoint.set_visible(True)
+                self.selectedPoint.figure.canvas.draw()
+            else:
+                self.selectedPoint.set_visible(False)
+                self.selectedPoint.figure.canvas.draw()
+
+        def unpickpoint(event):
+            if self.pickedPoint and event.button == 1:
+                self.updatePlot()
+                self.pickedPoint = None
+                self.selectedPoint.set_visible(False)
+                self.selectedPoint.figure.canvas.draw()
+            else:
+                return
+
+        def movepoint(event):
+            if not self.pickedPoint:
+                return
+            elif event.xdata is None or event.ydata is None:
+                return
+            else:
+                self.removePoint()
+                self.addPoint(event)
+                self.updatePlot()
+
+        self.cid1 = self.line.figure.canvas.mpl_connect('pick_event', pickpoint)
+        self.cid2 = self.line.figure.canvas.mpl_connect('button_release_event', unpickpoint)
+        self.cid3 = self.line.figure.canvas.mpl_connect('motion_notify_event', movepoint)
+
+    def addPoint(self, e):
+        if isinstance(e, MouseEvent):
+            x, y = float(e.xdata), float(e.ydata)
+            self.xs = np.append(self.xs, x)
+            self.ys = np.append(self.ys, y)
+            self.pickedPoint = [x,y]
         else:
-            self.selectedPoint.set_visible(False)
+            return
+
+    def removePoint(self):
+        self.xs = self.xs[self.xs != self.pickedPoint[0]]
+        self.ys = self.ys[self.ys != self.pickedPoint[1]]
+
+    def updatePlot(self):
+        if self.pickedPoint == None:
+            return
+        else:
+            self.line.set_data(self.xs, self.ys)
+            self.line.figure.canvas.draw()
+
 
 
 #Creates a yellow dot around a selected data point
