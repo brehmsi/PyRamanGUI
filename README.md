@@ -17,3 +17,8 @@ The code needs following packages
   - sympy
   - PyQT5 ( pip3 install PyQt5==5.12.2) 
   - tabulate  
+# Acknowledgement 
+Thanks go to our supervisors Prof. Jens Kortus as well as Dr. Camilu Himchinski. 
+The spectra evaluated by two of us, SB and JaK, are part of the SFB 920 
+and hopefully can help to prodivde further insights in the structure of 
+filter materials. 
