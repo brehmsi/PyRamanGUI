@@ -1,6 +1,6 @@
 # Raman-Analysis-Programm
-  - Author: Simon Brehm (Email:  ) 
-  - Side-kick: Sebastian Schwalbe (Email: theonov13@gmail.com) , Jakob Kraus 
+  - Author: Simon Brehm (SB, Email:  ) 
+  - Side-kick: Sebastian Schwalbe (SS, Email: theonov13@gmail.com) , Jakob Kraus (JaK, Email: ) 
   - Coding language Python 3.0 
   - Licence: 
 # Description
