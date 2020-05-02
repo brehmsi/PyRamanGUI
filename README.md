@@ -1,5 +1,6 @@
 # Raman-Analysis-Programm
   - Author: Simon Brehm (Email:  ) 
+  - Side-kick: Sebastian Schwalbe (Email: theonov13@gmail.com) , Jakob Kraus 
   - Coding language python3.0 
 # Description
 
