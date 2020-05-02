@@ -5,7 +5,7 @@
 
 # Install 
 The code needs following packages 
-    - pandas 
-    - sympy
-    - PyQT5 ( pip3 install PyQt5==5.12.2) 
-    - tabulate  
+  - pandas 
+  - sympy
+  - PyQT5 ( pip3 install PyQt5==5.12.2) 
+  - tabulate  
