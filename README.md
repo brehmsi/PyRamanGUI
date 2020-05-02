@@ -10,6 +10,7 @@ Provide a general purpose tool for RAMAN spectra evaluation
   - projects can be saved and loaded
   - general-purpose background fitting procedure 
   - RAMAN spectra database 
+  - increased reproducibiliy of fitting processes 
 # Install 
 The code needs following packages 
   - pandas 
