@@ -1,6 +1,8 @@
 # Autor: Simon Brehm
 import math
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.widgets as mwidgets
 import numpy as np
 import os
 import pandas as pd
@@ -49,6 +51,7 @@ import myfigureoptions  #see file 'myfigureoptions.py'
 ### 1. Main window
 #####################################################################################################################################################
 class MainWindow(QMainWindow):
+    ''' Creating the main window '''
     updata_menu_signal = QtCore.pyqtSignal()
 
     def __init__(self, parent = None):
@@ -63,6 +66,7 @@ class MainWindow(QMainWindow):
         self.nop_ss  = []                            # list of numbers of open spreadsheet windows
         self.nop_pw   = []                           # list of numbers of open plot windows
         self.FileName = os.path.dirname(__file__)    # path of this python file
+        self.pHomeRmn = None                         # path of Raman File
 
     def create_mainwindow(self):
         self.setWindowTitle('Raman')
@@ -84,8 +88,7 @@ class MainWindow(QMainWindow):
         medit.triggered[QAction].connect(self.edit)
 
     def filesave(self):
-        p_home = 'C:/Users/Simon/Desktop/ITP_Computer/Python-Files/Raman/Spreadsheet'
-        fileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Save as', p_home, 'All Files (*);;Raman Files (*.sbd)')
+        fileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Save as', self.pHomeRmn, 'All Files (*);;Raman Files (*.rmn)')
 
         if fileName[0] != '':
             fileName = fileName[0]
@@ -121,11 +124,10 @@ class MainWindow(QMainWindow):
         # else:
         #     return
 
-        p_home = 'C:/Users/Simon/Desktop/ITP_Computer/Daten/Raman-Files'
-        fileName = QtWidgets.QFileDialog.getOpenFileName(self, 'Save as', p_home, 'All Files (*);;Raman Files (*.sbd)')
+        fileName = QtWidgets.QFileDialog.getOpenFileName(self, 'Save as', self.pHomeRmn, 'All Files (*);;Raman Files (*.rmn)')
 
         if fileName[0] != '':
-            fileName = fileName[0]
+            self.pHomeRmn = fileName[0]
         else:
             return
 
@@ -136,7 +138,7 @@ class MainWindow(QMainWindow):
 
         self.count_ss = 0
         self.count_p = 0
-        file = open(fileName,'rb') 
+        file = open(self.pHomeRmn, 'rb') 
         v = pickle.load(file)          
         file.close()  
         
@@ -313,8 +315,9 @@ class SpreadSheet(QMainWindow):
         self.cells = {}
         self.d = data              # structure of data (dictionary) {'dataX with X = (0,1,2,..)' : actual data,'name of data', 'X, Y or Yerr', 'if loaded: filename')}
         self.mw = mainwindow
-        self.cols = len(self.d)	                                        # Anzahl Spalte
-        self.rows = max([len(self.d[j][0]) for j in self.d.keys()])     # Anzahl Zeilen
+        self.cols = len(self.d)	                                        # number of columns
+        self.rows = max([len(self.d[j][0]) for j in self.d.keys()])     # number of rows
+        self.pHomeTxt = None                                            # path of Txt-File 
 
         self.create_tablewidgets()
         self.create_menubar()
@@ -408,26 +411,23 @@ class SpreadSheet(QMainWindow):
     def show_header_context_menu(self, position):
         selected_column = self.headers.logicalIndexAt(position)
         header_menu = QMenu()
-        delete_column = header_menu.addAction('Diese Spalte löschen?')
-        set_xy   = header_menu.addMenu('Setzen als:')
+        delete_column = header_menu.addAction('Delete this column?')
+        set_xy   = header_menu.addMenu('Set as:')
         set_x    = set_xy.addAction('X')
         set_y    = set_xy.addAction('Y')
         set_yerr = set_xy.addAction('Yerr')
         ac = header_menu.exec_(self.table.mapToGlobal(position))
+        # Delete selected colums
         if ac == delete_column:
-            selCol = sorted(set(index.column() for index in self.table.selectedIndexes()))
-            cap = 0
+            # Get the index of all selected columns in reverse order, so that last column is deleted first
+            selCol = sorted(set(index.column() for index in self.table.selectedIndexes()), reverse = True)      
             for j in selCol:
-                del self.d['data%i'%(j-cap)]
-                for k in range(j+1-cap, self.cols):
-                    data_zs = self.d['data%i'%k]
-                    self.d.update({'data%i'%(k-1) :(self.d['data%i'%k])})
-                del self.d['data%i'%(self.cols-1)]
-                self.table.removeColumn(j-cap)
+                del self.d['data%i'%j]                                                      # Delete data
+                # Rename the remaining columns, so there is no gap in the numbering 
+                for k in range(j+1, self.cols):
+                    self.d['data%i'%(k-1)] = self.d.pop('data%i'%k)
+                self.table.removeColumn(j)                                                  # Delete column
                 self.cols = self.cols - 1
-                headers = [self.d['data%i'%k][1] + '(' + self.d['data%i'%k][2] + ')' for k in range(self.cols)]
-                self.table.setHorizontalHeaderLabels(headers)
-                cap +=1
         if ac == set_x:
             data_zs = self.d['data%i'%selected_column]
             self.d.update({'data%i'%selected_column : (data_zs[0], data_zs[1], 'X', data_zs[3])})
@@ -486,17 +486,18 @@ class SpreadSheet(QMainWindow):
             return
 
         data = np.transpose(data)
-        p_home = '/home/simon/Daten'
-        SaveFileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Save File', p_home)
+        SaveFileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Save File', self.pHomeTxt)
         if SaveFileName:
             SaveFileName = SaveFileName[0]
         else:
             return
-        
+
         if SaveFileName[-4:] == '.txt':
             pass
         else:
             SaveFileName = str(SaveFileName) + '.txt'
+
+        self.pHomeTxt = SaveFileName
 
         np.savetxt(SaveFileName, data, fmt = formattyp)	
 
@@ -529,8 +530,7 @@ class SpreadSheet(QMainWindow):
         dialog.setFileMode(QFileDialog.ExistingFiles)
         dialog.setNameFilter(("Data (*.txt)"))
         dialog.setViewMode(QFileDialog.List)
-        p_home = '/home/simon/Daten/SFB920/19-11-18/Data_dbp_Var1'
-        #dialog.setDirectory(p_home)
+        dialog.setDirectory(self.pHomeTxt)
         if dialog.exec_():
             newFiles = dialog.selectedFiles()
         else:
@@ -568,6 +568,8 @@ class SpreadSheet(QMainWindow):
                 newcell = SpreadSheetItem(self.cells, zwischenspeicher[k])
                 self.cells[cellname(k, j)] = newcell
                 self.table.setItem(k, j, newcell)
+
+        self.pHomeTxt = FileName[0]
                         
     def get_plot_data(self):
         self.plot_data = []
@@ -710,52 +712,51 @@ class LineDrawer:
          
     def startPlot(self):    
         self.selectedPoint, = self.ax.plot(self.xs[0], self.ys[0], 'o', ms=12, alpha=0.4, color='yellow', visible = False)
-        self.line.set_visible(True)
+        self.addArrow()
+        #self.line.set_visible(True)
         self.line.figure.canvas.draw()
+        self.cid1 = self.line.figure.canvas.mpl_connect('pick_event', self.pickpoint)
+        self.cid2 = self.line.figure.canvas.mpl_connect('button_release_event', self.unpickpoint)
+        self.cid3 = self.line.figure.canvas.mpl_connect('motion_notify_event', self.movepoint)
 
-
-        def pickpoint(event):
-            if event.artist == self.line and event.mouseevent.button == 1:
-                distance_threshold = 10
-                min_distance = math.sqrt(2 * (100 ** 2))
-                for x, y in zip(self.xs, self.ys):
-                    distance = math.hypot(event.mouseevent.xdata - x, event.mouseevent.ydata - y)
-                    if distance < min_distance:
-                        min_distance = distance
-                        self.pickedPoint = (x, y)
-                if min_distance < distance_threshold:
-                    pass
-                else:
-                    self.pickedPoint = None
-                self.selectedPoint.set_data(self.pickedPoint)
-                self.selectedPoint.set_visible(True)
-                self.selectedPoint.figure.canvas.draw()
+    def pickpoint(self, event):
+        if event.artist == self.line and event.mouseevent.button == 1:
+            distance_threshold = 10
+            min_distance = math.sqrt(2 * (100 ** 2))
+            for x, y in zip(self.xs, self.ys):
+                distance = math.hypot(event.mouseevent.xdata - x, event.mouseevent.ydata - y)
+                if distance < min_distance:
+                    min_distance = distance
+                    self.pickedPoint = (x, y)
+            if min_distance < distance_threshold:
+                pass
             else:
-                self.selectedPoint.set_visible(False)
-                self.selectedPoint.figure.canvas.draw()
-
-        def unpickpoint(event):
-            if self.pickedPoint and event.button == 1:
-                self.updatePlot()
                 self.pickedPoint = None
-                self.selectedPoint.set_visible(False)
-                self.selectedPoint.figure.canvas.draw()
-            else:
-                return
+            self.selectedPoint.set_data(self.pickedPoint)
+            self.selectedPoint.set_visible(True)
+            self.selectedPoint.figure.canvas.draw()
+        else:
+            self.selectedPoint.set_visible(False)
+            self.selectedPoint.figure.canvas.draw()
 
-        def movepoint(event):
-            if not self.pickedPoint:
-                return
-            elif event.xdata is None or event.ydata is None:
-                return
-            else:
-                self.removePoint()
-                self.addPoint(event)
-                self.updatePlot()
+    def unpickpoint(self, event):
+        if self.pickedPoint and event.button == 1:
+            self.updatePlot()
+            self.pickedPoint = None
+            self.selectedPoint.set_visible(False)
+            self.selectedPoint.figure.canvas.draw()
+        else:
+            return
 
-        self.cid1 = self.line.figure.canvas.mpl_connect('pick_event', pickpoint)
-        self.cid2 = self.line.figure.canvas.mpl_connect('button_release_event', unpickpoint)
-        self.cid3 = self.line.figure.canvas.mpl_connect('motion_notify_event', movepoint)
+    def movepoint(self, event):
+        if not self.pickedPoint:
+            return
+        elif event.xdata is None or event.ydata is None:
+            return
+        else:
+            self.removePoint()
+            self.addPoint(event)
+            self.updatePlot()
 
     def addPoint(self, e):
         if isinstance(e, MouseEvent):
@@ -775,9 +776,76 @@ class LineDrawer:
             return
         else:
             self.line.set_data(self.xs, self.ys)
+            self.arrow.set_positions((self.xs[0], self.ys[0]), (self.xs[1], self.ys[1]))
             self.line.figure.canvas.draw()
+            self.arrow.figure.canvas.draw()
+
+    def addArrow(self):
+        arrow_style = mpatches.ArrowStyle("->", head_length=.6, head_width=.6)
+        self.arrow = mpatches.FancyArrowPatch((self.xs[1], self.ys[1]), (self.xs[0], self.ys[0]),
+                                 mutation_scale=10, arrowstyle=arrow_style)
+        self.ax.add_patch(self.arrow)
+
+class InsertText:
+    def __init__(self, fig): 
+        self.fig = fig
+        self.ax = self.fig.axes[0]
+        self.pickedText = None
+        self.newText = None
+        self.create_textbox()
 
 
+    def create_textbox(self):
+        self.texty = self.ax.annotate('hi', (0, 0), picker = 5)
+
+        self.cid1 = self.texty.figure.canvas.mpl_connect('pick_event', self.on_pick)
+        self.cid2 = self.texty.figure.canvas.mpl_connect('button_release_event', self.on_release)
+        self.cid3 = self.texty.figure.canvas.mpl_connect('motion_notify_event', self.on_motion)
+
+    def on_pick(self, event):
+        if event.artist == self.texty and event.mouseevent.button == 1 and event.mouseevent.dblclick == True:
+            self.cid4 = self.texty.figure.canvas.mpl_connect('key_press_event', self.text_input)
+            self.fig.canvas.setFocusPolicy( QtCore.Qt.ClickFocus )
+            self.fig.canvas.setFocus()
+            self.fig.canvas.start_event_loop(timeout=10000)
+        elif event.artist == self.texty and event.mouseevent.button == 1:
+            self.pickedText = self.texty
+        else:
+            return
+
+    def on_release(self, event):
+        if self.pickedText == None:
+            return
+        elif event.button == 1:
+            self.pickedText = None
+        else:
+            return
+
+    def on_motion(self, event):
+        if self.pickedText == None:
+            return
+        else:
+            pos = (event.xdata, event.ydata)
+            self.texty.set_position(pos)
+            self.fig.canvas.draw()
+
+    def text_input(self, event):
+        insert = event.key
+        if event.key == 'enter':
+            self.texty.figure.canvas.mpl_disconnect(self.cid4)
+            self.texty.figure.canvas.stop_event_loop(self)
+            self.texty.set_text(self.newText)
+            self.fig.canvas.draw()
+            self.newText = None
+            return
+        elif insert == 'shift':
+            pass
+        elif self.newText == None:
+            self.newText = insert
+        else:
+            self.newText = self.newText + insert
+        self.texty.set_text(self.newText)
+        self.fig.canvas.draw()
 
 #Creates a yellow dot around a selected data point
 class DataPointPicker:
@@ -904,7 +972,7 @@ class PlotWindow(QMainWindow):
         self.ax.figure.canvas.draw()
 
     def keyPressEvent(self, event):
-        key = event.key()
+        key = event.key
         if key == (Qt.Key_Control and Qt.Key_Z):
             k = 0
             for j in self.backup_data:
@@ -1045,6 +1113,12 @@ class PlotWindow(QMainWindow):
         DrawAct.setStatusTip('Tool to draw line')
         DrawAct.triggered.connect(self.draw_line)
         toolbar.addAction(DrawAct)
+
+        # Tool to draw line       
+        TextAct = QAction(QIcon.fromTheme(''), 'Text', self)
+        TextAct.setStatusTip('Insert Text')
+        TextAct.triggered.connect(self.insert_text)
+        toolbar.addAction(TextAct)        
  
         self.show()
 
@@ -1744,8 +1818,12 @@ class PlotWindow(QMainWindow):
         pts = self.fig.ginput(2)
         line, = self.ax.plot([pts[0][0], pts[1][0]], [pts[0][1], pts[1][1]], 'black', lw=2, picker=5)
         line.set_visible(False)
-        drawedLine = LineDrawer(line)
+        self.drawedLine = LineDrawer(line)
         canvas = self.Canvas
+        self.ax.figure.canvas.draw()
+
+    def insert_text(self):
+        self.textbox = InsertText(self.fig)
         self.ax.figure.canvas.draw()
 
     def closeEvent(self, event):
@@ -1760,7 +1838,6 @@ class PlotWindow(QMainWindow):
             event.accept()
         else:
             event.ignore()
-
 
 def main():
     app = QApplication(sys.argv)
