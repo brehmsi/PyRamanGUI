@@ -789,14 +789,17 @@ class LineDrawer:
 class InsertText:
     def __init__(self, fig): 
         self.fig = fig
-        self.ax = self.fig.axes[0]
+        self.xs = self.fig.get_xdata()
+        self.ys = self.fig.get_ydata()
+        self.ax = self.fig.axes #[0]
         self.pickedText = None
         self.newText = None
         self.create_textbox()
 
 
     def create_textbox(self):
-        self.texty = self.ax.annotate('hi', (0, 0), picker = 5)
+        #self.texty = self.ax.annotate('hi', (0, 0), picker = 5)
+        self.texty = self.ax.annotate('*', (self.xs[0], self.ys[0]), picker = 5)
 
         self.cid1 = self.texty.figure.canvas.mpl_connect('pick_event', self.on_pick)
         self.cid2 = self.texty.figure.canvas.mpl_connect('button_release_event', self.on_release)
@@ -1823,7 +1826,10 @@ class PlotWindow(QMainWindow):
         self.ax.figure.canvas.draw()
 
     def insert_text(self):
-        self.textbox = InsertText(self.fig)
+        pts = self.fig.ginput(2)
+        line, = self.ax.plot([pts[0][0], pts[1][0]], [pts[0][1], pts[1][1]], 'black', lw=2, picker=5)
+        line.set_visible(False)
+        self.textbox = InsertText(line)
         self.ax.figure.canvas.draw()
 
     def closeEvent(self, event):
