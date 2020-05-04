@@ -787,19 +787,16 @@ class LineDrawer:
         self.ax.add_patch(self.arrow)
 
 class InsertText:
-    def __init__(self, fig): 
-        self.fig = fig
-        self.xs = self.fig.get_xdata()
-        self.ys = self.fig.get_ydata()
-        self.ax = self.fig.axes #[0]
+    def __init__(self, spot): 
+        self.fig = spot.figure
+        self.ax = spot.axes
+        self.textpt = spot.get_data()   #Point, where text is placed
         self.pickedText = None
         self.newText = None
         self.create_textbox()
 
-
     def create_textbox(self):
-        #self.texty = self.ax.annotate('hi', (0, 0), picker = 5)
-        self.texty = self.ax.annotate('*', (self.xs[0], self.ys[0]), picker = 5)
+        self.texty = self.ax.annotate('*', self.textpt, picker = 5)
 
         self.cid1 = self.texty.figure.canvas.mpl_connect('pick_event', self.on_pick)
         self.cid2 = self.texty.figure.canvas.mpl_connect('button_release_event', self.on_release)
@@ -810,9 +807,10 @@ class InsertText:
             self.cid4 = self.texty.figure.canvas.mpl_connect('key_press_event', self.text_input)
             self.fig.canvas.setFocusPolicy( QtCore.Qt.ClickFocus )
             self.fig.canvas.setFocus()
-            self.fig.canvas.start_event_loop(timeout=10000)
         elif event.artist == self.texty and event.mouseevent.button == 1:
             self.pickedText = self.texty
+        elif self.cid4:
+            self.texty.figure.canvas.mpl_disconnect(self.cid4)
         else:
             return
 
@@ -836,13 +834,14 @@ class InsertText:
         insert = event.key
         if event.key == 'enter':
             self.texty.figure.canvas.mpl_disconnect(self.cid4)
-            self.texty.figure.canvas.stop_event_loop(self)
             self.texty.set_text(self.newText)
             self.fig.canvas.draw()
             self.newText = None
             return
         elif insert == 'shift':
             pass
+        elif insert == 'backspace':
+            self.newText = self.newText[:-1]
         elif self.newText == None:
             self.newText = insert
         else:
@@ -923,6 +922,7 @@ class PlotWindow(QMainWindow):
         self.backup_data = plot_data
         self.Spektrum = []
         self.functions = Functions(self)
+        self.InsertedText = []                          # Storage for text inserted in the plot
 
         self.plot()
         self.create_statusbar()
@@ -1128,6 +1128,9 @@ class PlotWindow(QMainWindow):
     ########## Functions and other stuff ##########
 
     def SelectDataset(self):
+        # Select one or several datasets  
+        self.selectedDatasetNumber = []
+        self.selectedData = []
         self.Dialog_SelDataSet = QDialog()
         layout = QtWidgets.QGridLayout()
         self.CheckDataset = []
@@ -1143,8 +1146,7 @@ class PlotWindow(QMainWindow):
         self.Dialog_SelDataSet.exec_()
 
     def Ok_button(self):
-        self.selectedDatasetNumber = []
-        self.selectedData = []
+        # OK Button for function SecetedDataset
         for j in range(len(self.CheckDataset)):
             if self.CheckDataset[j].isChecked():
                 self.selectedDatasetNumber.append(j)
@@ -1155,11 +1157,16 @@ class PlotWindow(QMainWindow):
 
     def menu_save_to_file(self):
         self.SelectDataset()
-        
-        for j in range(len(self.selectedData)):
-            startFileDirName = os.path.dirname(self.selectedData[j][3])
-            startFileName = startFileDirName + '/' + self.selectedData[j][2]
-            save_data = [self.selectedData[j][0], self.selectedData[j][1]]
+        if self.selectedData == []:
+            return
+
+        for j in self.selectedData:
+            if j[3] != None:
+                startFileDirName = os.path.dirname(j[3])
+                startFileName = startFileDirName + '/' + j[2]
+            else:
+                startFileName = None
+            save_data = [j[0], j[1]]
             save_data = np.transpose(save_data)
             self.save_to_file('Save data selected data in file', startFileName, save_data)
 
@@ -1184,6 +1191,9 @@ class PlotWindow(QMainWindow):
 
     def delete_pixel(self):
         self.SelectDataset()
+        if self.selectedData == []:
+            return
+
         for j in self.selectedDatasetNumber:
             controll_delete_parameter = True
             while controll_delete_parameter == True:
@@ -1205,6 +1215,9 @@ class PlotWindow(QMainWindow):
     ### Löscht die Datenpunkte Nr. 630+n*957, da dieser Pixel im CCD Detektor kaputt ist
     def delete_datapoint(self):
         self.SelectDataset()
+        if self.selectedData == []:
+            return
+
         for j in self.selectedDatasetNumber:
             a = 629
             grenze = 6
@@ -1246,6 +1259,9 @@ class PlotWindow(QMainWindow):
 
     def normalize(self):
         self.SelectDataset()
+        if self.selectedData == []:
+            return
+
         for j in self.selectedDatasetNumber:
             self.data[j][1] = self.data[j][1]/numpy.amax(self.data[j][1])
             self.Spektrum[j].set_data(self.data[j][0], self.data[j][1])
@@ -1305,6 +1321,9 @@ class PlotWindow(QMainWindow):
 
     def FitLorentz(self):
         self.SelectDataset()
+        if self.selectedData == []:
+            return
+
         xs = self.selectedData[0][0]
         ys = self.selectedData[0][1]
         x,y = self.SelectArea(xs, ys)
@@ -1324,6 +1343,9 @@ class PlotWindow(QMainWindow):
                 
     def FitGaussian(self):
         self.SelectDataset()
+        if self.selectedData == []:
+            return
+
         xs = self.selectedData[0][0]
         ys = self.selectedData[0][1]
         x,y = self.SelectArea(xs, ys)
@@ -1344,6 +1366,9 @@ class PlotWindow(QMainWindow):
 
     def FitBreitWigner(self):
         self.SelectDataset()
+        if self.selectedData == []:
+            return
+
         xs = self.selectedData[0][0]
         ys = self.selectedData[0][1]
         x,y = self.SelectArea(xs, ys)
@@ -1365,6 +1390,9 @@ class PlotWindow(QMainWindow):
 
     def DefineArea(self):
         self.SelectDataset()
+        if self.selectedData == []:
+            return
+
         xs = self.selectedData[0][0]
         ys = self.selectedData[0][1]
         x,y = self.SelectArea(xs, ys)
@@ -1393,6 +1421,9 @@ class PlotWindow(QMainWindow):
 	
     def menu_baseline_als(self):
         self.SelectDataset()
+        if self.selectedData == []:
+            return
+
         xs = self.selectedData[0][0]
         ys = self.selectedData[0][1]
         x,y = self.SelectArea(xs, ys)
@@ -1493,19 +1524,22 @@ class PlotWindow(QMainWindow):
 #        self.ax.figure.canvas.draw()
         return x, y, z          #x - ist klar, y - background-corrected Intensity-values, z - background
 	
-    # Teilweise nachprogrammiert nach Mathematica Notebook von Christian
-    # Fitroutine für D und G Bande in Kohlenstoffverbindungen
+    # Partially based on Christian's Mathematica Notebook
+    # Fitroutine for D and G bands in spectra of carbon compounds
     def fitroutine1(self):
-        # Auswählen an welchem Datensetz Fit-Routine durchgeführt werden soll (erstmal nur für einen Datensatz pro Durchgang möglich)
+        # Select which data set will be fitted  (at moment only for one at the same time)
         self.SelectDataset()
+        if self.selectedData == []:
+            return
+            
         x = self.selectedData[0][0]
         y = self.selectedData[0][1]
       
-        #Bereich für Untergrundkorrektur definineren
+        #Limits for Backgroundcorrection
         x_min =  200
         x_max = 4000
 
-        #Daten auf Fitbereich begrenzen 
+        #Limit data to fit range 
         working_x = x[np.where((x > x_min)&(x < x_max))]
         working_y = y[np.where((x > x_min)&(x < x_max))]
  
@@ -1518,19 +1552,19 @@ class PlotWindow(QMainWindow):
         self.blcSpektrum, = self.ax.plot(xb, yb, 'c-', label = 'baseline-corrected '+ self.selectedData[0][2])
         self.ax.figure.canvas.draw()
 
-        #Fitbereich definineren
+        #define fitarea 
         x_min =  850 
         x_max = 2000
-        #Daten auf Fitbereich begrenzen 
+        #limit data to fitarea 
         working_x = xb[np.where((xb > x_min)&(xb < x_max))]
         working_y = yb[np.where((xb > x_min)&(xb < x_max))]
 
-        #Fit der D und G Bande
-        #D-Bande: Lorentz
-        #G-Bande: BreitWignerFano
-        self.anzahl_Lorentz = 1   # Anzahl Lorentz
-        self.anzahl_Gauss   = 0   # Anzahl Gauß
-        self.anzahl_BWF     = 1   # Anzahl Breit-Wigner-Fano
+        #Fitprocess
+        #D-Band: Lorentz
+        #G-Band: BreitWignerFano
+        self.anzahl_Lorentz = 1   # number of Lorentzian
+        self.anzahl_Gauss   = 0   # number of Gaussian
+        self.anzahl_BWF     = 1   # number of Breit-Wigner-Fano
 
         aL  = self.anzahl_Lorentz
         aG  = self.anzahl_Gauss
@@ -1570,7 +1604,7 @@ class PlotWindow(QMainWindow):
             p_bounds_low.extend(pBoundsLow[i])
             p_bounds_up.extend(pBoundsUp[i])
 
-        #Grenzen
+        #Limits
         p_bounds = ((p_bounds_low, p_bounds_up))
         popt, pcov = curve_fit(self.functions.FctSumme, working_x, working_y, p0 = p_start, bounds = p_bounds, absolute_sigma = False)
 
@@ -1826,10 +1860,10 @@ class PlotWindow(QMainWindow):
         self.ax.figure.canvas.draw()
 
     def insert_text(self):
-        pts = self.fig.ginput(2)
-        line, = self.ax.plot([pts[0][0], pts[1][0]], [pts[0][1], pts[1][1]], 'black', lw=2, picker=5)
-        line.set_visible(False)
-        self.textbox = InsertText(line)
+        pt = self.fig.ginput(1)
+        textspot, = self.ax.plot([pt[0][0]], [pt[0][1]], 'black', lw=2, picker=5)
+        textspot.set_visible(False)
+        self.InsertedText.append(InsertText(textspot))
         self.ax.figure.canvas.draw()
 
     def closeEvent(self, event):
