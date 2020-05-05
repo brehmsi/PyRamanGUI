@@ -58,9 +58,8 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).__init__(parent)
         self.create_mainwindow()
 
-        self.spreadsheet = []                        # list of spreadsheets
-        self.plotwindow = []                         # list of plotwindows
-        self.pwtitle = []                            # list of plotwindow-titles
+        self.spreadsheet = {}                        # dictionary with spreadsheets
+        self.plotwindow = {}                         # dictionary with plotwindows
         self.count_ss = 0                            # number of spreadsheet windows (closed ones are included)
         self.count_p  = 0                            # number of plot windows (closed ones are included)
         self.nop_ss  = []                            # list of numbers of open spreadsheet windows
@@ -69,7 +68,7 @@ class MainWindow(QMainWindow):
         self.pHomeRmn = None                         # path of Raman File
 
     def create_mainwindow(self):
-        self.setWindowTitle('Raman')
+        self.setWindowTitle('PyRaman')
         self.mdi = QtWidgets.QMdiArea()
         self.setCentralWidget(self.mdi)
         self.create_menubar()
@@ -99,11 +98,11 @@ class MainWindow(QMainWindow):
         ss = [len(self.nop_ss)]
         p  = [len(self.nop_pw)]
 
-        for j in self.nop_ss:
-            ss.append(self.spreadsheet[j].d)
+        for j in self.spreadsheet:
+            ss.append(j.d)
 
-        for j in self.nop_pw:
-            p.append([self.plotwindow[j].data, self.plotwindow[j].fig])
+        for j in self.plotwindow:
+            p.append([j.data, j.fig])
 
         saveFileContent.update({'Spreadsheet' : ss})
         saveFileContent.update({'Plot-Window' : p})
@@ -133,8 +132,8 @@ class MainWindow(QMainWindow):
 
         self.mdi.closeAllSubWindows()
         
-        self.spreadsheet = []
-        self.plotwindow  = []
+        self.spreadsheet = {}
+        self.plotwindow  = {}
 
         self.count_ss = 0
         self.count_p = 0
@@ -166,42 +165,44 @@ class MainWindow(QMainWindow):
             ssd = {'data0' : (np.zeros(1000),'A', 'X', None), 'data1' : (np.zeros(1000),'B', 'Y', None)}  #Spreadsheet- Data (for start only zeros)
         else:
             pass
-        self.spreadsheet.append(SpreadSheet(self, ssd))
-        self.spreadsheet[a].setObjectName('Spreadsheet'+str(a))
-        self.spreadsheet[a].setWindowTitle('Spreadsheet-Window '+str(self.count_ss))
-        self.mdi.addSubWindow(self.spreadsheet[a])
-        self.spreadsheet[a].show()
+        sstitle = 'Spreadsheet-Window '+str(self.count_ss)
+        self.spreadsheet[sstitle] = SpreadSheet(self, ssd)
+        self.spreadsheet[sstitle].setWindowTitle('Spreadsheet-Window '+str(self.count_ss))
+        self.mdi.addSubWindow(self.spreadsheet[sstitle])
+        self.spreadsheet[sstitle].show()
 
-        self.spreadsheet[a].new_pw_signal.connect(lambda: self.newPlot(self.spreadsheet[a].plot_data, None))
-        self.spreadsheet[a].add_pw_signal.connect(lambda pw_name: self.addPlot(pw_name, self.spreadsheet[a].plot_data))
-        self.spreadsheet[a].close_ss_signal.connect(lambda: self.closeSpreadsheetWindow(a))
+        self.spreadsheet[sstitle].new_pw_signal.connect(lambda: self.newPlot(self.spreadsheet[sstitle].plot_data, None))
+        self.spreadsheet[sstitle].add_pw_signal.connect(lambda pw_name: self.addPlot(pw_name, self.spreadsheet[sstitle].plot_data))
+        self.spreadsheet[sstitle].close_ss_signal.connect(lambda: self.closeSpreadsheetWindow(a))
 
     def newPlot(self, plot_data, fig):
         b = self.count_p
         self.count_p = self.count_p + 1
         self.nop_pw.append(b)
 
-        self.plotwindow.append(PlotWindow(plot_data, fig, self))
-        self.plotwindow[b].setObjectName('Plot'+str(b))
-        self.pwtitle.append('Plot-Window '+str(self.count_p))
-        self.plotwindow[b].setWindowTitle(self.pwtitle[b])
-        self.mdi.addSubWindow(self.plotwindow[b])
-        self.plotwindow[b].show()
+        pwtitle = 'Plot-Window '+ str(self.count_p)
+        self.plotwindow[pwtitle] = PlotWindow(plot_data, fig, self)
+        self.plotwindow[pwtitle].setWindowTitle(pwtitle)
+        self.mdi.addSubWindow(self.plotwindow[pwtitle])
+        self.plotwindow[pwtitle].show()
 
         self.updata_menu_signal.emit()
-        self.plotwindow[b].close_p_signal.connect(lambda: self.closePlotWindow(b))
+        self.plotwindow[pwtitle].close_p_signal.connect(lambda: self.closePlotWindow(b, pwtitle))
 
     def addPlot(self, pw_name, plot_data):
-        b = self.pwtitle.index(pw_name)
         for j in plot_data:
-            j[4] = self.plotwindow[b].Spektrum[0].get_linestyle()
-        self.plotwindow[b].add_plot(plot_data)
+            j[4] = self.plotwindow[pw_name].Spektrum[0].get_linestyle()
+        self.plotwindow[pw_name].add_plot(plot_data)
 
     def closeSpreadsheetWindow(self, a):
+        # removes index a from closed Spreadsheet-Window
         self.nop_ss.remove(a)
 
-    def closePlotWindow(self, b):
+    def closePlotWindow(self, b, pwtitle):
+        # removes index b from closed Plot-Window and update menubar from spreadsheets 
         self.nop_pw.remove(b)
+        del self.plotwindow[pwtitle]
+        self.updata_menu_signal.emit()      
 
     def closeEvent(self, event):
         close = QMessageBox()
@@ -347,6 +348,7 @@ class SpreadSheet(QMainWindow):
 
         ### 2. Menüpunkt: Edit
         editMenu = self.menubar.addMenu('&Edit')
+        editMenu.addAction('Change Window Title', self.change_window_title)
         editMenu.addAction('New Column', self.new_col)
 
         ### 3. Menüpunkt: Plot
@@ -355,7 +357,7 @@ class SpreadSheet(QMainWindow):
         plotNew.addAction('Line Plot', self.get_plot_data)
         plotNew.addAction('Dot Plot', self.get_plot_data)
         plotAdd = plotMenu.addMenu('&Add to')
-        for j in self.mw.pwtitle:
+        for j in self.mw.plotwindow.keys():
             plotAdd.addAction(j, self.get_plot_data)
 
         self.show()
@@ -570,6 +572,20 @@ class SpreadSheet(QMainWindow):
                 self.table.setItem(k, j, newcell)
 
         self.pHomeTxt = FileName[0]
+
+    def change_window_title(self):
+        print('Hallo')
+
+    def new_col(self):
+        self.cols = self.cols + 1
+        self.table.setColumnCount(self.cols)
+        self.d.update({'data%i'%(self.cols-1) : (np.zeros(self.rows), str(chr(ord('A') + self.cols - 1)), 'Y', '')})
+        headers = [self.d[j][1] + '(' + self.d[j][2] + ')' for j in self.d.keys()]  
+        self.table.setHorizontalHeaderLabels(headers)
+        for i in range(self.rows):
+            cell = SpreadSheetItem(self.cells, 0)
+            self.cells[cellname(i, self.cols-1)] = cell
+            self.table.setItem(i, self.cols-1, cell)
                         
     def get_plot_data(self):
         self.plot_data = []
@@ -618,17 +634,6 @@ class SpreadSheet(QMainWindow):
             self.new_pw_signal.emit()
         else:
             self.add_pw_signal.emit(action.text())
-
-    def new_col(self):
-        self.cols = self.cols + 1
-        self.table.setColumnCount(self.cols)
-        self.d.update({'data%i'%(self.cols-1) : (np.zeros(self.rows), str(chr(ord('A') + self.cols - 1)), 'Y', '')})
-        headers = [self.d[j][1] + '(' + self.d[j][2] + ')' for j in self.d.keys()]	
-        self.table.setHorizontalHeaderLabels(headers)
-        for i in range(self.rows):
-            cell = SpreadSheetItem(self.cells, 0)
-            self.cells[cellname(i, self.cols-1)] = cell
-            self.table.setItem(i, self.cols-1, cell)
 
     def closeEvent(self, event):
         close = QMessageBox()
@@ -937,6 +942,9 @@ class PlotWindow(QMainWindow):
         self._main = QtWidgets.QWidget()
         self.setCentralWidget(self._main)
         layout = QtWidgets.QVBoxLayout(self._main)
+        legendfontsize = 24
+        labelfontsize = 20
+        tickfontsize = 18
        
         if self.fig == None:
             self.fig = Figure(figsize=(15,9))
@@ -949,9 +957,11 @@ class PlotWindow(QMainWindow):
                     self.Spektrum.append(self.ax.errorbar(j[0], j[1], label = j[2], fmt = j[4], yerr = j[5], picker = 5)[0])
                 else:
                     self.Spektrum.append(self.ax.plot(j[0], j[1], j[4], label = j[2], picker = 5)[0])
-            legend = self.ax.legend(fontsize = 17)
-            self.ax.set_xlabel('Raman shift / cm⁻¹', fontsize = 17)
-            self.ax.set_ylabel('Intensity / cts/s', fontsize = 17)
+            legend = self.ax.legend(fontsize = legendfontsize)
+            self.ax.set_xlabel('Raman shift / cm⁻¹', fontsize = labelfontsize)
+            self.ax.set_ylabel('Intensity / cts/s', fontsize = labelfontsize)
+            self.ax.xaxis.set_tick_params(labelsize=tickfontsize)
+            self.ax.yaxis.set_tick_params(labelsize=tickfontsize)
         else:
             self.ax = self.fig.axes[0]
             self.Canvas = FigureCanvas(self.fig)
