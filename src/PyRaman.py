@@ -98,10 +98,10 @@ class MainWindow(QMainWindow):
         ss = [len(self.nop_ss)]
         p  = [len(self.nop_pw)]
 
-        for j in self.spreadsheet:
+        for j in self.spreadsheet.values():
             ss.append(j.d)
 
-        for j in self.plotwindow:
+        for j in self.plotwindow.values():
             p.append([j.data, j.fig])
 
         saveFileContent.update({'Spreadsheet' : ss})
@@ -188,6 +188,7 @@ class MainWindow(QMainWindow):
 
         self.updata_menu_signal.emit()
         self.plotwindow[pwtitle].close_p_signal.connect(lambda: self.closePlotWindow(b, pwtitle))
+        self.plotwindow[pwtitle].change_window_title_signal.connect(self.change_plotwindow_title)
 
     def addPlot(self, pw_name, plot_data):
         for j in plot_data:
@@ -202,7 +203,11 @@ class MainWindow(QMainWindow):
         # removes index b from closed Plot-Window and update menubar from spreadsheets 
         self.nop_pw.remove(b)
         del self.plotwindow[pwtitle]
-        self.updata_menu_signal.emit()      
+        self.updata_menu_signal.emit()  
+
+    def change_plotwindow_title(self, oldtitle, newtitle):
+        self.plotwindow[newtitle] = self.plotwindow.pop(oldtitle)
+        self.updata_menu_signal.emit() 
 
     def closeEvent(self, event):
         close = QMessageBox()
@@ -337,8 +342,9 @@ class SpreadSheet(QMainWindow):
 
         self.setCentralWidget(self.table)
 
-    ### Erstellen der Menu-Leiste ###
-    def create_menubar(self):               
+    
+    def create_menubar(self): 
+    # create the menubar               
         self.menubar = self.menuBar()
 
         ### 1. Menüpunkt: File ###
@@ -446,9 +452,9 @@ class SpreadSheet(QMainWindow):
             headers = [self.d[j][1] + '(' + self.d[j][2] + ')' for j in self.d.keys()]
             self.table.setHorizontalHeaderLabels(headers)
             
-    # A few shortcuts
-    # Enter: go to the next row
     def keyPressEvent(self, event):
+    # A few shortcuts
+    # Enter or Return: go to the next row
         key = event.key()
         if key == Qt.Key_Return or key == Qt.Key_Enter:
             for j in range(self.cols):
@@ -574,7 +580,14 @@ class SpreadSheet(QMainWindow):
         self.pHomeTxt = FileName[0]
 
     def change_window_title(self):
-        print('Hallo')
+        # Change title of the spreadsheet window
+        oldTitle = self.windowTitle()
+        newTitle, ok = QInputDialog.getText(self, 'Text Input Dialog', 'Enter the new Window Title:')
+        if ok:
+            self.setWindowTitle(newTitle)
+            self.mw.spreadsheet[newTitle] = self.mw.spreadsheet.pop(oldTitle)
+        else:
+            return
 
     def new_col(self):
         self.cols = self.cols + 1
@@ -809,12 +822,15 @@ class InsertText:
 
     def on_pick(self, event):
         if event.artist == self.texty and event.mouseevent.button == 1 and event.mouseevent.dblclick == True:
+            tbox=dict(boxstyle='Square', fc="w", ec="k")
+            self.texty.set_bbox(tbox) 
             self.cid4 = self.texty.figure.canvas.mpl_connect('key_press_event', self.text_input)
             self.fig.canvas.setFocusPolicy( QtCore.Qt.ClickFocus )
             self.fig.canvas.setFocus()
+            self.fig.canvas.draw()
         elif event.artist == self.texty and event.mouseevent.button == 1:
             self.pickedText = self.texty
-        elif self.cid4:
+        elif 'cid4' in locals():
             self.texty.figure.canvas.mpl_disconnect(self.cid4)
         else:
             return
@@ -840,6 +856,7 @@ class InsertText:
         if event.key == 'enter':
             self.texty.figure.canvas.mpl_disconnect(self.cid4)
             self.texty.set_text(self.newText)
+            self.texty.set_bbox(None)
             self.fig.canvas.draw()
             self.newText = None
             return
@@ -854,8 +871,9 @@ class InsertText:
         self.texty.set_text(self.newText)
         self.fig.canvas.draw()
 
-#Creates a yellow dot around a selected data point
+
 class DataPointPicker:
+#Creates a yellow dot around a selected data point
     def __init__(self, line, selected, a):
         self.xs = line.get_xdata()
         self.ys = line.get_ydata()
@@ -919,7 +937,8 @@ class MyCustomToolbar(NavigationToolbar):
         #figureoptions = toolitems[7]
 	
 class PlotWindow(QMainWindow):
-    close_p_signal = QtCore.pyqtSignal()
+    close_p_signal = QtCore.pyqtSignal()                # Signal in case plotwindow is closed
+    change_window_title_signal = QtCore.pyqtSignal(str, str)    # Signal in case plotwindow title is changed
     def __init__(self, plot_data, fig, parent):
         super(PlotWindow, self).__init__(parent)
         self.fig = fig
@@ -1070,6 +1089,7 @@ class PlotWindow(QMainWindow):
         ### 1. Menüpunkt: File ###
         fileMenu = menubar.addMenu('&File')
         fileMenu.addAction('Save to File', self.menu_save_to_file)
+        fileMenu.addAction('Change Name of Window', self.change_window_title)
 
         ### 2. Menüpunkt: Edit  ###
         editMenu = menubar.addMenu('&Edit')
@@ -1198,6 +1218,16 @@ class PlotWindow(QMainWindow):
             file = open(SaveFileName, 'w+')
             file.write(data)
             file.close()
+
+    def change_window_title(self):
+        # Change title of the plot window
+        oldTitle = self.windowTitle()
+        newTitle, ok = QInputDialog.getText(self, 'Text Input Dialog', 'Enter the new Window Title:')
+        if ok:
+            self.setWindowTitle(newTitle)
+            self.change_window_title_signal.emit(oldTitle, newTitle)
+        else:
+            return
 
     def delete_pixel(self):
         self.SelectDataset()
