@@ -720,6 +720,8 @@ class LineBuilder:
 
 #idea: https://github.com/yuma-m/matplotlib-draggable-plot
 class LineDrawer:
+    # Draws an arrow between to picked points
+    # line is used as invisible container of xy data
     def __init__(self, line):
         self.line = line
         self.pickedPoint = None
@@ -731,8 +733,12 @@ class LineDrawer:
          
     def startPlot(self):    
         self.selectedPoint, = self.ax.plot(self.xs[0], self.ys[0], 'o', ms=12, alpha=0.4, color='yellow', visible = False)
-        self.addArrow()
-        #self.line.set_visible(True)
+        self.arrow = self.ax.annotate('', xy=(self.xs[1], self.ys[1]),  
+            xytext=(self.xs[0], self.ys[0]), arrowprops=dict(arrowstyle='->', path = None))
+                #facecolor='black', headwidth=10, connectionstyle='arc3'))
+                #xycoords='data',
+        self.arrowP = self.arrow.arrow_patch
+        self.line.set_visible(True)
         self.line.figure.canvas.draw()
         self.cid1 = self.line.figure.canvas.mpl_connect('pick_event', self.pickpoint)
         self.cid2 = self.line.figure.canvas.mpl_connect('button_release_event', self.unpickpoint)
@@ -796,17 +802,26 @@ class LineDrawer:
         if self.pickedPoint == None:
             return
         else:
+            #print(self.xs, self.ys)
+            #print(self.xs[1])
+
+            # Warum funktioniert das nicht?
+            #print(self.arrow.arrow_patch.get_path())
+            posA = (self.xs[1], self.ys[1])
+            posB = (self.xs[0], self.ys[0])
+            #self.arrowP.set_positions(posA=posA, posB=posB)
+            #print(self.arrow.arrow_patch.get_path())
+            self.arrow = self.ax.annotate('', xy=posA,  
+                    xytext=posB, arrowprops=dict(self.arrowP))
             self.line.set_data(self.xs, self.ys)
-            self.arrow.set_positions((self.xs[0], self.ys[0]), (self.xs[1], self.ys[1]))
-            self.line.figure.canvas.draw()
             self.arrow.figure.canvas.draw()
 
     def line_options(self):
-        color = mcolors.to_hex(mcolors.to_rgba(self.arrow.get_edgecolor(), self.arrow.get_alpha()), keep_alpha=True)
+        color = mcolors.to_hex(mcolors.to_rgba(self.arrowP.get_facecolor(), self.arrowP.get_alpha()), keep_alpha=True)
         line_options_list = [
-            ('Width', self.arrow.get_linewidth()),
+            ('Width', self.arrowP.get_linewidth()),
             ('Arrow Style', [0, '<-', '->', '<->']),
-            ('Line style', [self.arrow.get_linestyle(), 
+            ('Line style', [self.arrowP.get_linestyle(), 
                 ('-', 'solid'),
                 ('--', 'dashed'),
                 ('-.', 'dashDot'),
@@ -826,18 +841,12 @@ class LineDrawer:
         self.line.set_linestyle(linestyle)
         self.line.set_color(color)
 
-        self.arrow.set_linewidth(width)
-        self.arrow.set_arrowstyle(arrowstyle)
-        self.arrow.set_linestyle(linestyle)
-        self.arrow.set_color(color)
+        self.arrowP.set_linewidth(width)
+        self.arrowP.set_arrowstyle(arrowstyle)
+        self.arrowP.set_linestyle(linestyle)
+        self.arrowP.set_color(color)
 
-        self.line.figure.canvas.draw()
-
-    def addArrow(self):
-        #self.arrow_style = mpatches.ArrowStyle("->", head_length=.6, head_width=.6)
-        self.arrow = mpatches.FancyArrowPatch((self.xs[1], self.ys[1]), (self.xs[0], self.ys[0]),
-                                 mutation_scale=10, arrowstyle='<-')
-        self.ax.add_patch(self.arrow)
+        self.arrow.figure.canvas.draw()
 
 class InsertText:
     def __init__(self, spot): 
