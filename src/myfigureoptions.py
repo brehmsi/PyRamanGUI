@@ -304,7 +304,6 @@ def figure_edit(axes, parent=None):
     data = formlayout.fedit(datalist, title="Figure options", parent=parent,
                             icon=get_icon('qt4_editor_options.svg'),
                             apply=apply_callback)
-    print(data)
 
     if data is not None:
         apply_callback(data)
