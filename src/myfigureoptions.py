@@ -61,14 +61,14 @@ def figure_edit(axes, parent=None):
                (None, "<b>X-Axis</b>"),
                ('Label', axes.get_xlabel()),
                ('Scale', [axes.get_xscale(), 'linear', 'log', 'logit']),
-               ('Upper Limit', axes.get_xlim()[0]),
-               ('Lower Limit', axes.get_xlim()[1]),
+               ('Lower Limit', axes.get_xlim()[0]),
+               ('Upper Limit', axes.get_xlim()[1]),
                sep,
                (None, "<b>Y-Axis</b>"),
                ('Label', axes.get_ylabel()),
                ('Scale', [axes.get_yscale(), 'linear', 'log', 'logit']),
-               ('Upper Limit', axes.get_ylim()[0]),
-               ('Lower Limit', axes.get_ylim()[1])
+               ('Lowet Limit', axes.get_ylim()[0]),
+               ('Upper Limit', axes.get_ylim()[1])
                ]
 
     if axes.legend_ is not None:
@@ -304,6 +304,7 @@ def figure_edit(axes, parent=None):
     data = formlayout.fedit(datalist, title="Figure options", parent=parent,
                             icon=get_icon('qt4_editor_options.svg'),
                             apply=apply_callback)
+    print(data)
 
     if data is not None:
         apply_callback(data)
