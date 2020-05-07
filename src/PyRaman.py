@@ -3,8 +3,6 @@ import math
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.widgets as mwidgets
-import matplotlib.colors as mcolors
-import matplotlib.backends.qt_editor._formlayout as formlayout
 import numpy as np
 import os
 import pandas as pd
@@ -23,6 +21,7 @@ from matplotlib.widgets import Slider, Button, RadioButtons
 from matplotlib.figure import Figure
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.backends.backend_qt5agg import (FigureCanvasQTAgg as FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
+#from matplotlib.backends.backend_qt5agg import (FigureCanvas)
 from matplotlib.backends.qt_compat import QtCore, QtWidgets
 from numpy import pi
 from numpy.fft import fft, fftshift
@@ -760,8 +759,6 @@ class LineDrawer:
             self.selectedPoint.set_data(self.pickedPoint)
             self.selectedPoint.set_visible(True)
             self.selectedPoint.figure.canvas.draw()
-        elif event.artist == self.line and event.mouseevent.button == 3:
-            self.line_options()
         else:
             self.selectedPoint.set_visible(False)
             self.selectedPoint.figure.canvas.draw()
@@ -816,6 +813,7 @@ class LineDrawer:
             self.line.set_data(self.xs, self.ys)
             self.arrow.figure.canvas.draw()
 
+<<<<<<< HEAD
     def line_options(self):
         color = mcolors.to_hex(mcolors.to_rgba(self.arrowP.get_facecolor(), self.arrowP.get_alpha()), keep_alpha=True)
         line_options_list = [
@@ -847,6 +845,13 @@ class LineDrawer:
         self.arrowP.set_color(color)
 
         self.arrow.figure.canvas.draw()
+=======
+    def addArrow(self):
+        arrow_style = mpatches.ArrowStyle("->", head_length=.6, head_width=.6)
+        self.arrow = mpatches.FancyArrowPatch((self.xs[1], self.ys[1]), (self.xs[0], self.ys[0]),
+                                 mutation_scale=10, arrowstyle=arrow_style)
+        self.ax.add_patch(self.arrow)
+>>>>>>> parent of 57128d0... Update PyRaman.py
 
 class InsertText:
     def __init__(self, spot): 
@@ -874,8 +879,6 @@ class InsertText:
             self.fig.canvas.draw()
         elif event.artist == self.texty and event.mouseevent.button == 1:
             self.pickedText = self.texty
-        elif event.artist == self.texty and event.mouseevent.button == 3:
-            self.text_options()
         elif 'cid4' in locals():
             self.texty.figure.canvas.mpl_disconnect(self.cid4)
         else:
@@ -917,26 +920,7 @@ class InsertText:
         self.texty.set_text(self.newText)
         self.fig.canvas.draw()
 
-    def text_options(self):
-        color = mcolors.to_hex(mcolors.to_rgba(self.texty.get_color(), self.texty.get_alpha()), keep_alpha=True)
-        text_options_list = [
-            ('Fontsize', self.texty.get_fontsize()),
-            ('Color', color),
-            ]
 
-        texty_option = formlayout.fedit(text_options_list, title="Text options")
-        if texty_option is not None:
-            self.apply_callback(texty_option)
-
-    def apply_callback(self, options):
-        (fontsize, color) = options
-
-        self.texty.set_fontsize(fontsize)
-        self.texty.set_color(color)
-
-        self.fig.canvas.draw()
-
-        
 class DataPointPicker:
 #Creates a yellow dot around a selected data point
     def __init__(self, line, selected, a):
