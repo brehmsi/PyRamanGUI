@@ -753,6 +753,8 @@ class LineDrawer:
             self.selectedPoint.set_data(self.pickedPoint)
             self.selectedPoint.set_visible(True)
             self.selectedPoint.figure.canvas.draw()
+        elif event.artist == self.line and event.mouseevent.button == 1:
+            self.line_options()
         else:
             self.selectedPoint.set_visible(False)
             self.selectedPoint.figure.canvas.draw()
@@ -798,8 +800,8 @@ class LineDrawer:
             self.line.figure.canvas.draw()
             self.arrow.figure.canvas.draw()
 
-<<<<<<< HEAD
     def line_options(self):
+        print('Hi')
         color = mcolors.to_hex(mcolors.to_rgba(self.arrow.get_edgecolor(), self.arrow.get_alpha()), keep_alpha=True)
         line_options_list = [
             ('Width', self.arrow.get_linewidth()),
@@ -831,22 +833,18 @@ class LineDrawer:
 
         self.line.figure.canvas.draw()
 
-<<<<<<< HEAD
-        self.arrow.figure.canvas.draw()
-=======
     def addArrow(self):
         arrow_style = mpatches.ArrowStyle("->", head_length=.6, head_width=.6)
         self.arrow = mpatches.FancyArrowPatch((self.xs[1], self.ys[1]), (self.xs[0], self.ys[0]),
                                  mutation_scale=10, arrowstyle=arrow_style)
         self.ax.add_patch(self.arrow)
->>>>>>> parent of 57128d0... Update PyRaman.py
-=======
+
     def addArrow(self):
         #self.arrow_style = mpatches.ArrowStyle("->", head_length=.6, head_width=.6)
         self.arrow = mpatches.FancyArrowPatch((self.xs[1], self.ys[1]), (self.xs[0], self.ys[0]),
                                  mutation_scale=10, arrowstyle='<-')
         self.ax.add_patch(self.arrow)
->>>>>>> parent of ee1fdb6... Update PyRaman.py
+
 
 class InsertText:
     def __init__(self, spot): 
