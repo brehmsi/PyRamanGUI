@@ -1,8 +1,10 @@
 # Autor: Simon Brehm
 import math
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
 import matplotlib.widgets as mwidgets
+import matplotlib.backends.qt_editor._formlayout as formlayout
 import numpy as np
 import os
 import pandas as pd
@@ -514,14 +516,14 @@ class SpreadSheet(QMainWindow):
         if any(self.d[j][3] != None for j in self.d.keys()):
             FrageErsetzen = QtWidgets.QMessageBox()
             FrageErsetzen.setIcon(QMessageBox.Question)
-            FrageErsetzen.setWindowTitle('Eine kurze Frage')
-            FrageErsetzen.setText('Es sind schon Daten geladen. Sollen diese Ersetzt werde?')
+            FrageErsetzen.setWindowTitle('Replace or Add?')
+            FrageErsetzen.setText('Data is already loaded. Shall these be replaced?')
             buttonY = FrageErsetzen.addButton(QMessageBox.Yes)
-            buttonY.setText('Ersetzen')
+            buttonY.setText('Replace')
             buttonN = FrageErsetzen.addButton(QMessageBox.No)
-            buttonN.setText('Hinzufügen')
+            buttonN.setText('Add')
             buttonC = FrageErsetzen.addButton(QMessageBox.Cancel)
-            buttonC.setText('Abbrechen')
+            buttonC.setText('Cancel')
             returnValue = FrageErsetzen.exec_()
             if returnValue == QMessageBox.Yes:      #Replace
                 self.d    = {} 
@@ -616,7 +618,7 @@ class SpreadSheet(QMainWindow):
 
         for j in selCol:
             if self.d['data%i'%j][2] != 'Y':
-                print('Bitte nur y-Werte auswählen!')
+                print('Please only select Y-columns!')
                 return
             else:
                 k = j-1
@@ -638,7 +640,7 @@ class SpreadSheet(QMainWindow):
                     else:
                         k = k-1
                 if k == -1:
-                    print('Mindestens ein Datensatz Y hat keinen zugeordneten X Datensatz.')
+                    print('At least one dataset Y has no assigned X dataset.')
                     return
                 else:
                     pass
@@ -685,7 +687,7 @@ class Functions:
     def BreitWignerFct(self, x, xc, h, b, Q):
         return h*(1+2*(x-xc)/(Q*b))**2/(1+(2*(x-xc)/b)**2)
 
-    ### Aufsummieren der FitFunktionen ###
+    ### Summing up the fit functions ###
     def FctSumme(self, x, *p):   
         a = self.pw.anzahl_Lorentz     #number of Lorentzians
         b = self.pw.anzahl_Gauss       #number of Gaussians
@@ -730,7 +732,9 @@ class LineDrawer:
          
     def startPlot(self):    
         self.selectedPoint, = self.ax.plot(self.xs[0], self.ys[0], 'o', ms=12, alpha=0.4, color='yellow', visible = False)
-        self.addArrow()
+        self.arrow = mpatches.FancyArrowPatch((self.xs[1], self.ys[1]), (self.xs[0], self.ys[0]),
+                                 mutation_scale=10, arrowstyle='-')
+        self.ax.add_patch(self.arrow)
         #self.line.set_visible(True)
         self.line.figure.canvas.draw()
         self.cid1 = self.line.figure.canvas.mpl_connect('pick_event', self.pickpoint)
@@ -753,8 +757,8 @@ class LineDrawer:
             self.selectedPoint.set_data(self.pickedPoint)
             self.selectedPoint.set_visible(True)
             self.selectedPoint.figure.canvas.draw()
-        elif event.artist == self.line and event.mouseevent.button == 1:
-            self.line_options()
+        elif event.artist == self.line and event.mouseevent.button == 3:
+            self.options()
         else:
             self.selectedPoint.set_visible(False)
             self.selectedPoint.figure.canvas.draw()
@@ -774,7 +778,8 @@ class LineDrawer:
         elif event.xdata is None or event.ydata is None:
             return
         else:
-            self.removePoint()
+            self.xs = self.removePoint(self.xs, 0)
+            self.ys = self.removePoint(self.ys, 1)
             self.addPoint(event)
             self.updatePlot()
 
@@ -787,9 +792,11 @@ class LineDrawer:
         else:
             return
 
-    def removePoint(self):
-        self.xs = self.xs[self.xs != self.pickedPoint[0]]
-        self.ys = self.ys[self.ys != self.pickedPoint[1]]
+    def removePoint(self, a, i):
+        for index, item in enumerate(a):
+            if item == self.pickedPoint[i]:
+                a = np.delete(a, index)
+                return a
 
     def updatePlot(self):
         if self.pickedPoint == None:
@@ -800,44 +807,76 @@ class LineDrawer:
             self.line.figure.canvas.draw()
             self.arrow.figure.canvas.draw()
 
-    def line_options(self):
-        print('Hi')
-        color = mcolors.to_hex(mcolors.to_rgba(self.arrow.get_edgecolor(), self.arrow.get_alpha()), keep_alpha=True)
-        line_options_list = [
+    def options(self):
+        color = mcolors.to_hex(mcolors.to_rgba(self.arrow.get_edgecolor(),  # get color of arrow
+            self.arrow.get_alpha()), keep_alpha=True)
+        arrowstyle = self.arrow.get_arrowstyle()                            # get arrow_style of arrow, returns object
+        arrowstyle_start = str(arrowstyle).split(' ', 1)[0]                 # get object name without adress x0....
+        list_of_styles = mpatches.ArrowStyle.get_styles()                   # get all possible arrowstyles, returns dictionnary
+        current_style = 0
+        for key, val in list_of_styles.items():                             # compare arrowstyle with arrowstyle list to 
+            if str(mpatches.ArrowStyle(key)).split(' ', 1)[0] == arrowstyle_start:   #in order to get arrowstyle name (e.g. '->')
+                current_style = key
+                
+        lineOptions = [
             ('Width', self.arrow.get_linewidth()),
-            ('Arrow Style', [0, '<-', '->', '<->']),
             ('Line style', [self.arrow.get_linestyle(), 
                 ('-', 'solid'),
                 ('--', 'dashed'),
                 ('-.', 'dashDot'),
                 (':', 'dotted'),
                 ('None', 'None')]),
-            ('Color', color),
+            ('Color', color)
+        ]
+        arrowOptions = [
+            ('Arrow Style', [current_style, '-', '<-', '->', '<->', '-|>']),
+            ('Head Length', arrowstyle.head_length),
+            ('Head Wdith', arrowstyle.head_width),
             ]
 
-        line_option = formlayout.fedit(line_options_list, title="Line options")
-        if line_option is not None:
-            self.apply_callback(line_option)
+        positionOptions = [
+            ('x Start', self.xs[0]),
+            ('y Start', self.ys[0]),
+            ('x End', self.xs[1]),
+            ('y End', self.ys[1]),
+        ]
 
-    def apply_callback(self, options):
-        (width, arrowstyle, linestyle, color) = options
+        optionsList = [(lineOptions, "Line", ""), (arrowOptions, "Arrow", ""), (positionOptions, 'Postion', '')]
+
+        selectedOptions = formlayout.fedit(optionsList, title="Line options")
+        if selectedOptions is not None:
+            self.apply_callback(selectedOptions)
+
+    def apply_callback(self, selectedOptions):
+        lineOptions = selectedOptions[0]
+        arrowOptions = selectedOptions[1]
+        positionOptions = selectedOptions[2]
+
+        (width, linestyle, color) = lineOptions
+        (arrowstyle, headlength, headwidth) = arrowOptions
+        (xStart, yStart, xEnd, yEnd) = positionOptions
 
         self.line.set_linewidth(width)
         self.line.set_linestyle(linestyle)
         self.line.set_color(color)
 
         self.arrow.set_linewidth(width)
-        self.arrow.set_arrowstyle(arrowstyle)
         self.arrow.set_linestyle(linestyle)
         self.arrow.set_color(color)
+        if arrowstyle != '-':
+            self.arrow.set_arrowstyle(arrowstyle, head_length = headlength, head_width = headwidth)
+        else:
+            self.arrow.set_arrowstyle(arrowstyle)
+
+        self.xs[0] = xStart
+        self.ys[0] = yStart
+        self.xs[1] = xEnd
+        self.ys[1] = yEnd
+
+        self.line.set_data(self.xs, self.ys)
+        self.arrow.set_positions((self.xs[0], self.ys[0]), (self.xs[1], self.ys[1]))
 
         self.line.figure.canvas.draw()
-
-    def addArrow(self):
-        arrow_style = mpatches.ArrowStyle("->", head_length=.6, head_width=.6)
-        self.arrow = mpatches.FancyArrowPatch((self.xs[1], self.ys[1]), (self.xs[0], self.ys[0]),
-                                 mutation_scale=10, arrowstyle=arrow_style)
-        self.ax.add_patch(self.arrow)
 
     def addArrow(self):
         #self.arrow_style = mpatches.ArrowStyle("->", head_length=.6, head_width=.6)
@@ -872,6 +911,8 @@ class InsertText:
             self.fig.canvas.draw()
         elif event.artist == self.texty and event.mouseevent.button == 1:
             self.pickedText = self.texty
+        elif event.artist == self.texty and event.mouseevent.button == 3:
+            self.text_options()
         elif 'cid4' in locals():
             self.texty.figure.canvas.mpl_disconnect(self.cid4)
         else:
@@ -911,6 +952,25 @@ class InsertText:
         else:
             self.newText = self.newText + insert
         self.texty.set_text(self.newText)
+        self.fig.canvas.draw()
+
+    def text_options(self):
+        color = mcolors.to_hex(mcolors.to_rgba(self.texty.get_color(), self.texty.get_alpha()), keep_alpha=True)
+        text_options_list = [
+            ('Fontsize', self.texty.get_fontsize()),
+            ('Color', color),
+            ]
+
+        texty_option = formlayout.fedit(text_options_list, title="Text options")
+        if texty_option is not None:
+            self.apply_callback(texty_option)
+
+    def apply_callback(self, options):
+        (fontsize, color) = options
+
+        self.texty.set_fontsize(fontsize)
+        self.texty.set_color(color)
+
         self.fig.canvas.draw()
 
 
@@ -1879,6 +1939,8 @@ class PlotWindow(QMainWindow):
     ########## Functions of toolbar ##########
     def scale_spectrum(self):
         self.SelectDataset()
+        if self.selectedData == []:
+            return
         xs = self.selectedData[0][0]
         ys = self.selectedData[0][1]
         ns = self.selectedDatasetNumber[0]
@@ -1907,6 +1969,8 @@ class PlotWindow(QMainWindow):
 
     def shift_spectrum(self):
         self.SelectDataset()
+        if self.selectedData == []:
+            return
         xs = self.selectedData[0][0]
         ys = self.selectedData[0][1]
         ns = self.selectedDatasetNumber[0]
@@ -1934,7 +1998,11 @@ class PlotWindow(QMainWindow):
             pass
 
     def draw_line(self):
-        pts = self.fig.ginput(2)
+        try:
+            pts = self.fig.ginput(2)
+        except RuntimeError:
+            return
+
         line, = self.ax.plot([pts[0][0], pts[1][0]], [pts[0][1], pts[1][1]], 'black', lw=2, picker=5)
         line.set_visible(False)
         self.drawedLine = LineDrawer(line)
@@ -1942,7 +2010,11 @@ class PlotWindow(QMainWindow):
         self.ax.figure.canvas.draw()
 
     def insert_text(self):
-        pt = self.fig.ginput(1)
+        try:
+            pt = self.fig.ginput(1)
+        except RuntimeError:
+            return
+
         textspot, = self.ax.plot([pt[0][0]], [pt[0][1]], 'black', lw=2, picker=5)
         textspot.set_visible(False)
         self.InsertedText.append(InsertText(textspot))
