@@ -9,6 +9,7 @@
 
 import os.path
 import re
+from BrokenAxes import brokenaxes
 
 import matplotlib
 from matplotlib import cm, colors as mcolors, markers, image as mimage
@@ -68,11 +69,20 @@ def figure_edit(axes, parent=None):
                ('Label', axes.get_ylabel()),
                ('Scale', [axes.get_yscale(), 'linear', 'log', 'logit']),
                ('Lowet Limit', axes.get_ylim()[0]),
-               ('Upper Limit', axes.get_ylim()[1])
+               ('Upper Limit', axes.get_ylim()[1]),
+               sep,
+               (None, "<b>Axis Break</b>"),
+               ('x-Axis Break', False),
+               ('start', 0.0),
+               ('end', 0.0),
+               ('x-Axis Break', False),
+               ('start', 0.0),
+               ('end', 0.0)
                ]
 
     if axes.legend_ is not None:
         old_legend = axes.get_legend()
+        _visible = old_legend._visible is not None
         _draggable = old_legend._draggable is not None
         _ncol = old_legend._ncol
         _fontsize = int(old_legend._fontsize)
@@ -82,6 +92,7 @@ def figure_edit(axes, parent=None):
         _framealpha = old_legend.get_frame().get_alpha()
         _picker = 5
     else:
+        _visible = True
         _draggable = False
         _ncol = 1
         _fontsize = 15
@@ -91,7 +102,8 @@ def figure_edit(axes, parent=None):
         _framealpha = 0.5
         _picker = 5
 
-    legend = [('Draggable', _draggable),
+    legend = [('Visible', _visible),
+              ('Draggable', _draggable),
               ('Columns', _ncol),
               ('Font Size', _fontsize),
               ('Frame', _frameon),
@@ -217,6 +229,8 @@ def figure_edit(axes, parent=None):
     def apply_callback(data):
         """This function will be called to apply changes"""
 
+        figure = axes.get_figure()
+
         general = data.pop(0)
         legend = data.pop(0)
         curves = data.pop(0) if has_curve else []
@@ -225,8 +239,25 @@ def figure_edit(axes, parent=None):
             raise ValueError("Unexpected field")
 
         # Set / General
-        (title, titlesize, labelsize, ticksize, grid, xlabel, xscale, xlim_left, xlim_right,
-         ylabel, yscale, ylim_left, ylim_right) = general
+        (title, titlesize, labelsize, ticksize, grid, xlabel, xscale, 
+         xlim_left, xlim_right, ylabel, yscale, ylim_left, ylim_right, 
+         xbreak, xbreak_start, xbreak_end, ybreak, ybreak_start, ybreak_end) = general
+
+        # baxes = figure.axes[0]
+        # for j in figure.axes:
+        #   j.remove()
+
+        # if xbreak == True and ybreak ==True:
+        #     baxes = brokenaxes(xlims=((xlim_left, xbreak_start), (xbreak_end, xlim_right)), 
+        #                       ylims=((ylim_left, ybreak_start), (ybreak_end, ylim_right)), 
+        #                       hspace=.05, fig=figure)
+        # elif xbreak == True:
+        #     baxes = brokenaxes(xlims=((xlim_left, xbreak_start), (xbreak_end, xlim_right)), fig=figure)
+        # elif ybreak ==True:
+        #     baxes = brokenaxes(ylims=((ylim_left, ybreak_start), (ybreak_end, ylim_right)), hspace=.05, fig=figure)
+        # else:
+        #     #baxes = figure.axes[0]
+        #     pass
 
         if axes.get_xscale() != xscale:
             axes.set_xscale(xscale)
@@ -246,7 +277,7 @@ def figure_edit(axes, parent=None):
         axes.yaxis.label.set_size(labelsize)
         axes.yaxis.set_tick_params(labelsize=ticksize)
 
-        axes.grid(grid)
+        #axes.grid(grid)
 
         # Restore the unit data
         axes.xaxis.converter = xconverter
@@ -257,7 +288,7 @@ def figure_edit(axes, parent=None):
         axes.yaxis._update_axisinfo()
 
         # Set / Legend
-        (leg_draggable, leg_ncol, leg_fontsize, leg_frameon, leg_shadow,
+        (leg_visible, leg_draggable, leg_ncol, leg_fontsize, leg_frameon, leg_shadow,
          leg_fancybox, leg_framealpha, leg_picker) = legend
 
         new_legend = axes.legend(ncol=leg_ncol,
@@ -267,6 +298,7 @@ def figure_edit(axes, parent=None):
                                  framealpha=leg_framealpha,
                                  fancybox=leg_fancybox)
 
+        new_legend.set_visible(leg_visible)
         new_legend.set_picker(leg_picker)
         new_legend.set_draggable(leg_draggable)
 
@@ -298,7 +330,6 @@ def figure_edit(axes, parent=None):
             image.set_interpolation(interpolation)
 
         # Redraw
-        figure = axes.get_figure()
         figure.canvas.draw()
 
     data = formlayout.fedit(datalist, title="Figure options", parent=parent,
