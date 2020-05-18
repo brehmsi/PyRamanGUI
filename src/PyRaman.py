@@ -81,7 +81,7 @@ class MainWindow(QMainWindow):
         
         FileSave = File.addAction('Save', self.filesave)
         FileLoad = File.addAction('Load', self.fileload)
-        newS = File.addAction('New spreadsheet', lambda: self.newSpreadsheet(None))     # Argument is 'None', because no data
+        newS = File.addAction('New spreadsheet', lambda: self.newSpreadsheet(None, None))     # Argument is 'None', because no data
 
         medit = menu.addMenu('Edit')
         medit.addAction('Cascade')
@@ -89,6 +89,7 @@ class MainWindow(QMainWindow):
         medit.triggered[QAction].connect(self.edit)
 
     def filesave(self):
+        # function to save complete project in rmn-File with pickle
         fileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Save as', self.pHomeRmn, 'All Files (*);;Raman Files (*.rmn)')
 
         if fileName[0] != '':
@@ -96,16 +97,15 @@ class MainWindow(QMainWindow):
         else:
             return
 
-        saveFileContent = {}
-        ss = [len(self.nop_ss)]
-        p  = [len(self.nop_pw)]
+        ss = {}                                         # creating new dictionary for spreadsheet containing 
+        for key, val in self.spreadsheet.items():       # only data and name from spreadsheet,
+            ss.update({key : val.d})                    # because spreadsheet cannot saved with pickle
 
-        for j in self.spreadsheet.values():
-            ss.append(j.d)
+        p  = {}                                         # creating new dictionary for plotwindow
+        for key, val in self.plotwindow.items():
+            p.update({key : (val.data, val.fig)})
 
-        for j in self.plotwindow.values():
-            p.append([j.data, j.fig])
-
+        saveFileContent = {}                            # dictionary containing ss and p 
         saveFileContent.update({'Spreadsheet' : ss})
         saveFileContent.update({'Plot-Window' : p})
 
@@ -114,6 +114,8 @@ class MainWindow(QMainWindow):
         file.close()  
 
     def fileload(self):
+        # Load complete project from rmn file with pickle
+
         # question = QMessageBox()
         # question.setWindowTitle('Load')
         # question.setText("The current windows will be closed. You sure?")
@@ -142,14 +144,15 @@ class MainWindow(QMainWindow):
         file = open(self.pHomeRmn, 'rb') 
         v = pickle.load(file)          
         file.close()  
-        
-        for j in range(v['Spreadsheet'][0]):
-            self.newSpreadsheet(v['Spreadsheet'][j+1])
 
-        for j in range(v['Plot-Window'][0]):
-            fig = v['Plot-Window'][j+1][1]
-            plot_data = v['Plot-Window'][j+1][0]
-            self.newPlot(plot_data, fig)      
+        for key, val in v['Spreadsheet'].items():
+            self.newSpreadsheet(val, key)
+
+        for key, val in v['Plot-Window'].items():
+            plot_data = val[0]
+            fig = val[1]
+            pwtitle = key
+            self.newPlot(plot_data, fig, pwtitle)       
     
     def edit(self, q):
         if q.text() == "cascade":
@@ -158,31 +161,41 @@ class MainWindow(QMainWindow):
         if q.text() == "Tiled":
             self.mdi.tileSubWindows()
 
-    def newSpreadsheet(self, ssd):
+    def newSpreadsheet(self, ssd, title):
         self.count_ss = self.count_ss+1
         a = self.count_ss -1
         self.nop_ss.append(a)
+        sstitle = title
+
+        if sstitle == None:
+            sstitle = 'Spreadsheet-Window ' + str(self.count_ss)
+        else:
+            pass
 
         if ssd == None:
             ssd = {'data0' : (np.zeros(1000),'A', 'X', None), 'data1' : (np.zeros(1000),'B', 'Y', None)}  #Spreadsheet- Data (for start only zeros)
         else:
             pass
-        sstitle = 'Spreadsheet-Window '+str(self.count_ss)
+
         self.spreadsheet[sstitle] = SpreadSheet(self, ssd)
-        self.spreadsheet[sstitle].setWindowTitle('Spreadsheet-Window '+str(self.count_ss))
+        self.spreadsheet[sstitle].setWindowTitle(sstitle)
         self.mdi.addSubWindow(self.spreadsheet[sstitle])
         self.spreadsheet[sstitle].show()
 
-        self.spreadsheet[sstitle].new_pw_signal.connect(lambda: self.newPlot(self.spreadsheet[sstitle].plot_data, None))
+        self.spreadsheet[sstitle].new_pw_signal.connect(lambda: self.newPlot(self.spreadsheet[sstitle].plot_data, None, None))
         self.spreadsheet[sstitle].add_pw_signal.connect(lambda pw_name: self.addPlot(pw_name, self.spreadsheet[sstitle].plot_data))
         self.spreadsheet[sstitle].close_ss_signal.connect(lambda: self.closeSpreadsheetWindow(a))
 
-    def newPlot(self, plot_data, fig):
+    def newPlot(self, plot_data, fig, title):
         b = self.count_p
         self.count_p = self.count_p + 1
         self.nop_pw.append(b)
 
-        pwtitle = 'Plot-Window '+ str(self.count_p)
+        pwtitle = title
+        if pwtitle == None:
+            pwtitle = 'Plot-Window '+ str(self.count_p)
+        else:
+            pass
         self.plotwindow[pwtitle] = PlotWindow(plot_data, fig, self)
         self.plotwindow[pwtitle].setWindowTitle(pwtitle)
         self.mdi.addSubWindow(self.plotwindow[pwtitle])
@@ -1253,7 +1266,7 @@ class PlotWindow(QMainWindow):
         TextAct = QAction(QIcon.fromTheme(''), 'Text', self)
         TextAct.setStatusTip('Insert Text')
         TextAct.triggered.connect(self.insert_text)
-        toolbar.addAction(TextAct)        
+        toolbar.addAction(TextAct) 
  
         self.show()
 
@@ -2018,7 +2031,7 @@ class PlotWindow(QMainWindow):
         textspot, = self.ax.plot([pt[0][0]], [pt[0][1]], 'black', lw=2, picker=5)
         textspot.set_visible(False)
         self.InsertedText.append(InsertText(textspot))
-        self.ax.figure.canvas.draw()
+        self.fig.canvas.draw()
 
     def closeEvent(self, event):
         close = QMessageBox()
