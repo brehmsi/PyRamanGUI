@@ -82,7 +82,7 @@ def figure_edit(axes, parent=None):
 
     if axes.legend_ is not None:
         old_legend = axes.get_legend()
-        _visible = old_legend._visible is not None
+        _visible = old_legend._visible
         _draggable = old_legend._draggable is not None
         _ncol = old_legend._ncol
         _fontsize = int(old_legend._fontsize)
