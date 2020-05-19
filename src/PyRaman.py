@@ -76,44 +76,22 @@ class MainWindow(QMainWindow):
         self.create_menubar()
 
     def create_menubar(self):
+        # create a menubar
         menu = self.menuBar()
+
         File = menu.addMenu('File')
-        
-        FileSave = File.addAction('Save', self.filesave)
-        FileLoad = File.addAction('Load', self.fileload)
-        newS = File.addAction('New spreadsheet', lambda: self.newSpreadsheet(None, None))     # Argument is 'None', because no data
+        FileNew = File.addMenu('New')
+        newSpreadSheet = FileNew.addAction('Spreadsheet', lambda: self.newSpreadsheet(None, None))
+        FileLoad = File.addAction('Open Project', self.load)        
+        FileSaveAs = File.addAction('Save Project As ...', self.save_as)
+        FileSave = File.addAction('Save Project', self.save)
 
         medit = menu.addMenu('Edit')
         medit.addAction('Cascade')
         medit.addAction('Tiled')
         medit.triggered[QAction].connect(self.edit)
 
-    def filesave(self):
-        # function to save complete project in rmn-File with pickle
-        fileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Save as', self.pHomeRmn, 'All Files (*);;Raman Files (*.rmn)')
-
-        if fileName[0] != '':
-            fileName = fileName[0]
-        else:
-            return
-
-        ss = {}                                         # creating new dictionary for spreadsheet containing 
-        for key, val in self.spreadsheet.items():       # only data and name from spreadsheet,
-            ss.update({key : val.d})                    # because spreadsheet cannot saved with pickle
-
-        p  = {}                                         # creating new dictionary for plotwindow
-        for key, val in self.plotwindow.items():
-            p.update({key : (val.data, val.fig)})
-
-        saveFileContent = {}                            # dictionary containing ss and p 
-        saveFileContent.update({'Spreadsheet' : ss})
-        saveFileContent.update({'Plot-Window' : p})
-
-        file = open(fileName,'wb') 
-        pickle.dump(saveFileContent, file)         
-        file.close()  
-
-    def fileload(self):
+    def load(self):
         # Load complete project from rmn file with pickle
 
         # question = QMessageBox()
@@ -152,8 +130,46 @@ class MainWindow(QMainWindow):
             plot_data = val[0]
             fig = val[1]
             pwtitle = key
-            self.newPlot(plot_data, fig, pwtitle)       
-    
+            self.newPlot(plot_data, fig, pwtitle)  
+
+    def save(self):
+        # function to save complete project in rmn-File with pickle
+        if self.pHomeRmn == None:
+            fileName = self.save_as()
+            if fileName[0] != '':
+                self.pHomeRmn = fileName[0]
+            else:
+                return
+        else:
+            pass
+
+        ss = {}                                         # creating new dictionary for spreadsheet containing 
+        for key, val in self.spreadsheet.items():       # only data and name from spreadsheet,
+            ss.update({key : val.d})                    # because spreadsheet cannot saved with pickle
+
+        p  = {}                                         # creating new dictionary for plotwindow
+        for key, val in self.plotwindow.items():
+            p.update({key : (val.data, val.fig)})
+
+        saveFileContent = {}                            # dictionary containing ss and p 
+        saveFileContent.update({'Spreadsheet' : ss})
+        saveFileContent.update({'Plot-Window' : p})
+
+        file = open(self.pHomeRmn,'wb') 
+        pickle.dump(saveFileContent, file)         
+        file.close() 
+
+    def save_as(self):
+        # Ask for directory 
+        fileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Save as', self.pHomeRmn, 
+            'All Files (*);;Raman Files (*.rmn)')
+
+        return fileName
+
+
+
+        self.save() 
+   
     def edit(self, q):
         if q.text() == "cascade":
             self.mdi.cascadeSubWindows()
