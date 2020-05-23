@@ -82,43 +82,34 @@ class MainWindow(QMainWindow):
         File = menu.addMenu('File')
         FileNew = File.addMenu('New')
         newSpreadSheet = FileNew.addAction('Spreadsheet', lambda: self.newSpreadsheet(None, None))
-        FileLoad = File.addAction('Open Project', self.load)        
-        FileSaveAs = File.addAction('Save Project As ...', self.save_as)
-        FileSave = File.addAction('Save Project', self.save)
+        FileLoad = File.addAction('Open Project', self.open)        
+        FileSaveAs = File.addAction('Save Project As ...', lambda: self.save('Save As'))
+        FileSave = File.addAction('Save Project', lambda: self.save('Save'))
+
 
         medit = menu.addMenu('Edit')
         medit.addAction('Cascade')
         medit.addAction('Tiled')
         medit.triggered[QAction].connect(self.edit)
 
+    def open(self):
+        # Load project in new MainWindow or in existing MW, if empty
+        if self.spreadsheet == {} and self.plotwindow == {}:
+            self.load()
+        else:
+            new_MainWindow()
+
     def load(self):
-        # Load complete project from rmn file with pickle
-
-        # question = QMessageBox()
-        # question.setWindowTitle('Load')
-        # question.setText("The current windows will be closed. You sure?")
-        # question.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        # answer = question.exec()
-
-        # if answer == QMessageBox.Yes:
-        #     pass
-        # else:
-        #     return
+        # Load project from rmn file with pickle
 
         fileName = QtWidgets.QFileDialog.getOpenFileName(self, 'Save as', self.pHomeRmn, 'All Files (*);;Raman Files (*.rmn)')
 
         if fileName[0] != '':
             self.pHomeRmn = fileName[0]
         else:
+            self.close()
             return
 
-        self.mdi.closeAllSubWindows()
-        
-        self.spreadsheet = {}
-        self.plotwindow  = {}
-
-        self.count_ss = 0
-        self.count_p = 0
         file = open(self.pHomeRmn, 'rb') 
         v = pickle.load(file)          
         file.close()  
@@ -132,10 +123,13 @@ class MainWindow(QMainWindow):
             pwtitle = key
             self.newPlot(plot_data, fig, pwtitle)  
 
-    def save(self):
+    def save(self, q):
         # function to save complete project in rmn-File with pickle
-        if self.pHomeRmn == None:
-            fileName = self.save_as()
+
+        # Ask for directory, if none is deposite or 'Save Project As' was pressed
+        if self.pHomeRmn == None or q == 'Save As':
+            fileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Save as', self.pHomeRmn, 
+                'All Files (*);;Raman Files (*.rmn)')
             if fileName[0] != '':
                 self.pHomeRmn = fileName[0]
             else:
@@ -158,17 +152,6 @@ class MainWindow(QMainWindow):
         file = open(self.pHomeRmn,'wb') 
         pickle.dump(saveFileContent, file)         
         file.close() 
-
-    def save_as(self):
-        # Ask for directory 
-        fileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Save as', self.pHomeRmn, 
-            'All Files (*);;Raman Files (*.rmn)')
-
-        return fileName
-
-
-
-        self.save() 
    
     def edit(self, q):
         if q.text() == "cascade":
@@ -2061,6 +2044,11 @@ class PlotWindow(QMainWindow):
             event.accept()
         else:
             event.ignore()
+
+def new_MainWindow():
+    MW = MainWindow()
+    MW.showMaximized()
+    MW.load()   
 
 def main():
     app = QApplication(sys.argv)
