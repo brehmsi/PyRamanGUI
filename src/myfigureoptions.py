@@ -127,14 +127,23 @@ def figure_edit(axes, parent=None):
         else:
             return label, 0
 
-    # Get / Curves
+    # Get / Curves / Errorbars
+    par = 0
     linedict = {}
+    errorbardict = {}
     for line in axes.get_lines():
         label = line.get_label()
         if label == '_nolegend_':
             continue
+        elif label.split(' ', 1)[0] == '_Hidden':     # Errorbars
+            rest = label.split('_Hidden ', 1)[1]
+            errorbardict[rest] = line
+            continue
+        else:
+            pass
         linedict[label] = line
     curves = []
+    errorbars = []
 
     def prepare_data(d, init):
         """Prepare entry for FormLayout.
@@ -161,6 +170,7 @@ def figure_edit(axes, parent=None):
         return ([canonical_init] +
                 sorted(short2name.items(),
                        key=lambda short_and_name: short_and_name[1]))
+
 
     curvelabels = sorted(linedict, key=cmp_key)
     for label in curvelabels:
@@ -191,6 +201,19 @@ def figure_edit(axes, parent=None):
         curves.append([curvedata, label, ""])
     # Is there a curve displayed?
     has_curve = bool(curves)
+
+    errorbarlabels = sorted(errorbardict, key=cmp_key)
+    for label in errorbarlabels:
+        line = errorbardict[label]
+        ec = mcolors.to_hex(
+            mcolors.to_rgba(line.get_markeredgecolor(), line.get_alpha()),
+            keep_alpha=True)
+        errorbardata = [
+              ('Cap Size', line.get_markersize()),
+              ('Edge color (RGBA)', ec)]
+        errorbars.append([errorbardata, label, ""])
+    # Is there a curve displayed?
+    has_errorbars = bool(errorbars)
 
     # Get / Images
     imagedict = {}
@@ -225,6 +248,8 @@ def figure_edit(axes, parent=None):
         datalist.append((curves, "Curves", ""))
     if images:
         datalist.append((images, "Images", ""))
+    if errorbars:
+        datalist.append((errorbars, "Errorbars", ""))
 
     def apply_callback(data):
         """This function will be called to apply changes"""
@@ -235,6 +260,7 @@ def figure_edit(axes, parent=None):
         legend = data.pop(0)
         curves = data.pop(0) if has_curve else []
         images = data.pop(0) if has_image else []
+        errorbars = data.pop(0) if has_errorbars else []
         if data:
             raise ValueError("Unexpected field")
 
@@ -319,6 +345,14 @@ def figure_edit(axes, parent=None):
                 line.set_markersize(markersize)
                 line.set_markerfacecolor(markerfacecolor)
                 line.set_markeredgecolor(markeredgecolor)
+
+        # Set / Errorbars
+        for index, errorbar in enumerate(errorbars):
+            line = errorbardict[errorbarlabels[index]]
+            (markersize, markeredgecolor) = errorbar
+            line.set_markersize(markersize)
+            line.set_markerfacecolor(markerfacecolor)
+            line.set_markeredgecolor(markeredgecolor)
 
         # Set / Images
         for index, image_settings in enumerate(images):
