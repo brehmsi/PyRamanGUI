@@ -310,7 +310,11 @@ class SpreadSheetItem(QTableWidgetItem):
         # Build an environment with these values and basic math functions
         environment = ChainMap(math.__dict__, reqvalues)
         # Note that eval is DANGEROUS and should not be used in production
-        self.value = eval(formula, {}, environment)
+        try:
+            self.value = eval(formula, {}, environment)
+        except NameError:
+            print('Bitte keine Buchstaben eingeben')
+            self.value = str(0.0)
 
         self.reqs = currentreqs
 
@@ -1059,6 +1063,7 @@ class PlotWindow(QMainWindow):
         self.data = plot_data
         self.backup_data = plot_data
         self.Spektrum = []
+        self.ErrorBar = []
         self.functions = Functions(self)
         self.InsertedText = []                          # Storage for text inserted in the plot
 
@@ -1087,9 +1092,19 @@ class PlotWindow(QMainWindow):
             self.addToolBar(MyCustomToolbar(self.Canvas))
             for j in self.data:
                 if isinstance(j[5], (np.ndarray, np.generic)):
-                    self.Spektrum.append(self.ax.errorbar(j[0], j[1], label = j[2], fmt = j[4], yerr = j[5], picker = 5)[0])
+                    erbar = self.ax.errorbar(j[0], j[1], fmt=j[4], yerr=j[5], 
+                        picker=5, capsize=3)
+                    self.Spektrum.append(erbar[0])
+                    erbar[0].set_label(j[2])
+                    erbar[1][0].set_label('_Hidden capline bottom ' + j[2])
+                    erbar[1][1].set_label('_Hidden capline top ' + j[2])
+                    erbar[2][0].set_label('_Hidden barlinecol ' + j[2])
+                    # self.ErrorBar.append(self.ax.errorbar(j[0], j[1], label=j[2], fmt=j[4], yerr=j[5], 
+                    #     picker=5, capsize=3)[0])
+                    # self.Spektrum.append(self.ErrorBar[0])
                 else:
                     self.Spektrum.append(self.ax.plot(j[0], j[1], j[4], label = j[2], picker = 5)[0])
+
             legend = self.ax.legend(fontsize = legendfontsize)
             self.ax.set_xlabel('Raman shift / cm⁻¹', fontsize = labelfontsize)
             self.ax.set_ylabel('Intensity / cts/s', fontsize = labelfontsize)
