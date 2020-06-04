@@ -64,8 +64,6 @@ class MainWindow(QMainWindow):
         self.plotwindow = {}                         # dictionary with plotwindows
         self.count_ss = 0                            # number of spreadsheet windows (closed ones are included)
         self.count_p  = 0                            # number of plot windows (closed ones are included)
-        self.nop_ss  = []                            # list of numbers of open spreadsheet windows
-        self.nop_pw   = []                           # list of numbers of open plot windows
         self.FileName = os.path.dirname(__file__)    # path of this python file
         self.pHomeRmn = None                         # path of Raman File
 
@@ -163,7 +161,6 @@ class MainWindow(QMainWindow):
     def newSpreadsheet(self, ssd, title):
         self.count_ss = self.count_ss+1
         a = self.count_ss -1
-        self.nop_ss.append(a)
         sstitle = title
 
         if sstitle == None:
@@ -183,45 +180,44 @@ class MainWindow(QMainWindow):
 
         self.spreadsheet[sstitle].new_pw_signal.connect(lambda: self.newPlot(self.spreadsheet[sstitle].plot_data, None, None))
         self.spreadsheet[sstitle].add_pw_signal.connect(lambda pw_name: self.addPlot(pw_name, self.spreadsheet[sstitle].plot_data))
-        self.spreadsheet[sstitle].close_ss_signal.connect(lambda: self.closeSpreadsheetWindow(a))
+        self.spreadsheet[sstitle].close_ss_signal.connect(self.close_spreadsheet_window)
 
-    def newPlot(self, plot_data, fig, title):
+    def newPlot(self, plotData, fig, title):
         b = self.count_p
         self.count_p = self.count_p + 1
-        self.nop_pw.append(b)
 
         pwtitle = title
         if pwtitle == None:
             pwtitle = 'Plot-Window '+ str(self.count_p)
         else:
             pass
-        self.plotwindow[pwtitle] = PlotWindow(plot_data, fig, self)
+        self.plotwindow[pwtitle] = PlotWindow(plotData, fig, self)
         self.plotwindow[pwtitle].setWindowTitle(pwtitle)
         self.mdi.addSubWindow(self.plotwindow[pwtitle])
         self.plotwindow[pwtitle].show()
 
         self.updata_menu_signal.emit()
-        self.plotwindow[pwtitle].close_p_signal.connect(lambda: self.closePlotWindow(b, pwtitle))
         self.plotwindow[pwtitle].change_window_title_signal.connect(self.change_plotwindow_title)
+        self.plotwindow[pwtitle].close_p_signal.connect(self.close_plot_window)
 
-    def addPlot(self, pw_name, plot_data):
-        for j in plot_data:
+    def addPlot(self, pw_name, plotData):
+        for j in plotData:
             j[4] = self.plotwindow[pw_name].Spektrum[0].get_linestyle()
-        self.plotwindow[pw_name].add_plot(plot_data)
+        self.plotwindow[pw_name].add_plot(plotData)
 
-    def closeSpreadsheetWindow(self, a):
-        # removes index a from closed Spreadsheet-Window
-        self.nop_ss.remove(a)
-
-    def closePlotWindow(self, b, pwtitle):
-        # removes index b from closed Plot-Window and update menubar from spreadsheets 
-        self.nop_pw.remove(b)
+    def close_plot_window(self, pwtitle):
+        # delete plotwindow and update menubar from spreadsheets after closing a plotwindow
         del self.plotwindow[pwtitle]
         self.updata_menu_signal.emit()  
 
+    def close_spreadsheet_window(self, sstitle):
+        # delete spreadsheet window
+        del self.spreadsheet[sstitle]
+
     def change_plotwindow_title(self, oldtitle, newtitle):
+        # update menubar from spreadsheets after changing name of a plotwindow
         self.plotwindow[newtitle] = self.plotwindow.pop(oldtitle)
-        self.updata_menu_signal.emit() 
+        self.updata_menu_signal.emit()
 
     def closeEvent(self, event):
         close = QMessageBox()
@@ -332,7 +328,7 @@ class SpreadSheet(QMainWindow):
 
     new_pw_signal   = QtCore.pyqtSignal()
     add_pw_signal   = QtCore.pyqtSignal(str)
-    close_ss_signal = QtCore.pyqtSignal()
+    close_ss_signal = QtCore.pyqtSignal(str)
 
     def __init__(self, mainwindow, data, parent = None):
         super(SpreadSheet, self).__init__(parent)
@@ -619,11 +615,13 @@ class SpreadSheet(QMainWindow):
             self.table.setItem(i, self.cols-1, cell)
                         
     def get_plot_data(self):
-        self.plot_data = []
+        # get data from selected columns and prepares data for plot
+
+        self.plot_data = []    
 
         selCol = sorted(set(index.column() for index in self.table.selectedIndexes()))  #selected Columns
 
-        # Decides if line of       
+        # Decides if line or dot plot       
         action = self.sender()
         if action.text() == 'Line Plot':
             plot_type = '-'
@@ -674,7 +672,7 @@ class SpreadSheet(QMainWindow):
         close = close.exec()
 
         if close == QMessageBox.Yes:
-            self.close_ss_signal.emit()
+            self.close_ss_signal.emit(self.windowTitle())
             event.accept()
         else:
             event.ignore()
@@ -1055,7 +1053,7 @@ class MyCustomToolbar(NavigationToolbar):
         #figureoptions = toolitems[7]
 	
 class PlotWindow(QMainWindow):
-    close_p_signal = QtCore.pyqtSignal()                # Signal in case plotwindow is closed
+    close_p_signal = QtCore.pyqtSignal(str)                     # Signal in case plotwindow is closed
     change_window_title_signal = QtCore.pyqtSignal(str, str)    # Signal in case plotwindow title is changed
     def __init__(self, plot_data, fig, parent):
         super(PlotWindow, self).__init__(parent)
@@ -1092,16 +1090,13 @@ class PlotWindow(QMainWindow):
             self.addToolBar(MyCustomToolbar(self.Canvas))
             for j in self.data:
                 if isinstance(j[5], (np.ndarray, np.generic)):
-                    erbar = self.ax.errorbar(j[0], j[1], fmt=j[4], yerr=j[5], 
+                    (spect, capline, barlinecol) = self.ax.errorbar(j[0], j[1], fmt=j[4], yerr=j[5], 
                         picker=5, capsize=3)
-                    self.Spektrum.append(erbar[0])
-                    erbar[0].set_label(j[2])
-                    erbar[1][0].set_label('_Hidden capline bottom ' + j[2])
-                    erbar[1][1].set_label('_Hidden capline top ' + j[2])
-                    erbar[2][0].set_label('_Hidden barlinecol ' + j[2])
-                    # self.ErrorBar.append(self.ax.errorbar(j[0], j[1], label=j[2], fmt=j[4], yerr=j[5], 
-                    #     picker=5, capsize=3)[0])
-                    # self.Spektrum.append(self.ErrorBar[0])
+                    self.Spektrum.append(spect)
+                    spect.set_label(j[2])
+                    capline[0].set_label('_Hidden capline bottom ' + j[2])
+                    capline[1].set_label('_Hidden capline top ' + j[2])
+                    barlinecol[0].set_label('_Hidden barlinecol ' + j[2])
                 else:
                     self.Spektrum.append(self.ax.plot(j[0], j[1], j[4], label = j[2], picker = 5)[0])
 
@@ -2055,7 +2050,7 @@ class PlotWindow(QMainWindow):
         close = close.exec()
 
         if close == QMessageBox.Yes:
-            self.close_p_signal.emit()
+            self.close_p_signal.emit(self.windowTitle())
             event.accept()
         else:
             event.ignore()
