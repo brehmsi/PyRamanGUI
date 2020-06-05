@@ -174,13 +174,14 @@ class MainWindow(QMainWindow):
             pass
 
         self.spreadsheet[sstitle] = SpreadSheet(self, ssd)
-        self.spreadsheet[sstitle].setWindowTitle(sstitle)
-        self.mdi.addSubWindow(self.spreadsheet[sstitle])
-        self.spreadsheet[sstitle].show()
+        newSS = self.spreadsheet[sstitle]
+        newSS.setWindowTitle(sstitle)
+        self.mdi.addSubWindow(newSS)
+        newSS.show()
 
-        self.spreadsheet[sstitle].new_pw_signal.connect(lambda: self.newPlot(self.spreadsheet[sstitle].plot_data, None, None))
-        self.spreadsheet[sstitle].add_pw_signal.connect(lambda pw_name: self.addPlot(pw_name, self.spreadsheet[sstitle].plot_data))
-        self.spreadsheet[sstitle].close_ss_signal.connect(self.close_spreadsheet_window)
+        newSS.new_pw_signal.connect(lambda: self.newPlot(newSS.plot_data, None, None))
+        newSS.add_pw_signal.connect(lambda pw_name: self.addPlot(pw_name, newSS.plot_data))
+        newSS.close_ss_signal.connect(self.close_spreadsheet_window)
 
     def newPlot(self, plotData, fig, title):
         b = self.count_p
