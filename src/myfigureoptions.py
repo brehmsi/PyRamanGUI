@@ -9,6 +9,8 @@
 
 import os.path
 import re
+import numpy as np
+import math
 from BrokenAxes import brokenaxes
 
 import matplotlib
@@ -46,6 +48,8 @@ def figure_edit(axes, parent=None):
     # Cast to builtin floats as they have nicer reprs.
     xmin, xmax = map(float, axes.get_xlim())
     ymin, ymax = map(float, axes.get_ylim())
+    xtickspace = axes.get_xticks()[1] - axes.get_xticks()[0]
+    ytickspace = axes.get_yticks()[1] - axes.get_yticks()[0]
     if 'labelsize' in axes.xaxis._major_tick_kw:
         _ticksize = int(axes.xaxis._major_tick_kw['labelsize'])
     else:
@@ -64,18 +68,20 @@ def figure_edit(axes, parent=None):
                ('Scale', [axes.get_xscale(), 'linear', 'log', 'logit']),
                ('Lower Limit', axes.get_xlim()[0]),
                ('Upper Limit', axes.get_xlim()[1]),
+               ('Tick Step Size', xtickspace),
                sep,
                (None, "<b>Y-Axis</b>"),
                ('Label', axes.get_ylabel()),
                ('Scale', [axes.get_yscale(), 'linear', 'log', 'logit']),
                ('Lowet Limit', axes.get_ylim()[0]),
                ('Upper Limit', axes.get_ylim()[1]),
+               ('Tick Step Size', ytickspace),
                sep,
                (None, "<b>Axis Break</b>"),
                ('x-Axis Break', False),
                ('start', 0.0),
                ('end', 0.0),
-               ('x-Axis Break', False),
+               ('y-Axis Break', False),
                ('start', 0.0),
                ('end', 0.0)
                ]
@@ -298,12 +304,8 @@ def figure_edit(axes, parent=None):
 
         # Set / General
         (title, titlesize, labelsize, ticksize, grid, xlabel, xscale, 
-         xlim_left, xlim_right, ylabel, yscale, ylim_left, ylim_right, 
+         xlim_left, xlim_right, xtickspace, ylabel, yscale, ylim_left, ylim_right, ytickspace, 
          xbreak, xbreak_start, xbreak_end, ybreak, ybreak_start, ybreak_end) = general
-
-        # baxes = figure.axes[0]
-        # for j in figure.axes:
-        #   j.remove()
 
         # if xbreak == True and ybreak ==True:
         #     baxes = brokenaxes(xlims=((xlim_left, xbreak_start), (xbreak_end, xlim_right)), 
@@ -311,10 +313,9 @@ def figure_edit(axes, parent=None):
         #                       hspace=.05, fig=figure)
         # elif xbreak == True:
         #     baxes = brokenaxes(xlims=((xlim_left, xbreak_start), (xbreak_end, xlim_right)), fig=figure)
-        # elif ybreak ==True:
+        # elif ybreak == True:
         #     baxes = brokenaxes(ylims=((ylim_left, ybreak_start), (ybreak_end, ylim_right)), hspace=.05, fig=figure)
         # else:
-        #     #baxes = figure.axes[0]
         #     pass
 
         if axes.get_xscale() != xscale:
@@ -326,11 +327,15 @@ def figure_edit(axes, parent=None):
         axes.title.set_fontsize(titlesize)
 
         axes.set_xlabel(xlabel)
+        xtick_space_start =  math.ceil(xlim_left / xtickspace) * xtickspace
+        axes.xaxis.set_ticks(np.arange(xtick_space_start, xlim_right, xtickspace))
         axes.set_xlim(xlim_left, xlim_right)
         axes.xaxis.label.set_size(labelsize)
         axes.xaxis.set_tick_params(labelsize=ticksize)
 
         axes.set_ylabel(ylabel)
+        ytick_space_start =  math.ceil(ylim_left / ytickspace) * ytickspace
+        axes.yaxis.set_ticks(np.arange(ytick_space_start, ylim_right, ytickspace))
         axes.set_ylim(ylim_left, ylim_right)
         axes.yaxis.label.set_size(labelsize)
         axes.yaxis.set_tick_params(labelsize=ticksize)
@@ -344,6 +349,18 @@ def figure_edit(axes, parent=None):
         axes.yaxis.set_units(yunits)
         axes.xaxis._update_axisinfo()
         axes.yaxis._update_axisinfo()
+
+        if xbreak == True and ybreak ==True:
+            baxes = brokenaxes(xlims=((xlim_left, xbreak_start), (xbreak_end, xlim_right)), 
+                              ylims=((ylim_left, ybreak_start), (ybreak_end, ylim_right)), 
+                              hspace=.05, fig=figure)
+        elif xbreak == True:
+            baxes = brokenaxes(xlims=((xlim_left, xbreak_start), (xbreak_end, xlim_right)), fig=figure)
+        elif ybreak == True:
+            baxes = brokenaxes(ylims=((ylim_left, ybreak_start), (ybreak_end, ylim_right)), hspace=.05, fig=figure)
+        else:
+            pass
+
 
         # Set / Legend
         (leg_visible, leg_draggable, leg_ncol, leg_fontsize, leg_frameon, leg_shadow,
