@@ -101,13 +101,20 @@ class BrokenAxes:
 
         kwargs.update(ncols=ncols, nrows=nrows, height_ratios=height_ratios,
                       width_ratios=width_ratios)
-        if subplot_spec:
-            gs = gridspec.GridSpecFromSubplotSpec(subplot_spec=subplot_spec,
-                                                  *args, **kwargs)
-            self.big_ax = plt.Subplot(self.fig, subplot_spec)
-        else:
-            gs = gridspec.GridSpec(*args, **kwargs)
-            self.big_ax = plt.Subplot(self.fig, gridspec.GridSpec(1, 1)[0])
+        # if subplot_spec:
+        #     gs = gridspec.GridSpecFromSubplotSpec(subplot_spec=subplot_spec,
+        #                                           *args, **kwargs)
+        #     self.big_ax = plt.Subplot(self.fig, subplot_spec)
+        # else:
+        #      gs = gridspec.GridSpec(*args, **kwargs)
+        #     self.big_ax = plt.Subplot(self.fig, gridspec.GridSpec(1, 1)[0])
+
+        gs = gridspec.GridSpec(*args, **kwargs)
+        self.big_ax = self.fig.gca() 
+
+        old_lines = self.fig.axes[0].get_lines()
+
+        self.big_ax.clear()
 
         [sp.set_visible(False) for sp in self.big_ax.spines.values()]
         self.big_ax.set_xticks([])
@@ -119,7 +126,6 @@ class BrokenAxes:
             ax = plt.Subplot(self.fig, igs)
             self.fig.add_subplot(ax)
             self.axs.append(ax)
-        self.fig.add_subplot(self.big_ax)
 
         # get last axs row and first col
         self.last_row = []
@@ -144,6 +150,10 @@ class BrokenAxes:
             self.draw_diags()
         if despine:
             self.set_spines()
+
+        for ax in self.axs:
+            for line in old_lines:
+                ax.plot(line.get_xdata(), line.get_ydata())
 
     @staticmethod
     def draw_diag(ax, xpos, xlen, ypos, ylen, **kwargs):
@@ -304,11 +314,11 @@ class BrokenAxes:
 
         return result
 
-    def set_xlabel(self, label, labelpad=15, **kwargs):
+    def set_xlabel(self, label, labelpad=100, **kwargs):
         return self.big_ax.set_xlabel(label, labelpad=labelpad, **kwargs)
 
-    def set_ylabel(self, label, labelpad=30, **kwargs):
-        self.big_ax.xaxis.labelpad = labelpad
+    def set_ylabel(self, label, labelpad=100, **kwargs):
+        #self.big_ax.xaxis.labelpad = labelpad
         return self.big_ax.set_ylabel(label, labelpad=labelpad, **kwargs)
 
     # def set_xlim(self, *args, **kwargs):
