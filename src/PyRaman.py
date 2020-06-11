@@ -109,7 +109,7 @@ class MainWindow(QMainWindow):
             return
 
         file = open(self.pHomeRmn, 'rb') 
-        v = pickle.load(file)          
+        v = pickle.load(file)         
         file.close()  
 
         for key, val in v['Spreadsheet'].items():
@@ -147,8 +147,11 @@ class MainWindow(QMainWindow):
         saveFileContent.update({'Spreadsheet' : ss})
         saveFileContent.update({'Plot-Window' : p})
 
-        file = open(self.pHomeRmn,'wb') 
-        pickle.dump(saveFileContent, file)         
+        file = open(self.pHomeRmn,'wb')
+        try: 
+            pickle.dump(saveFileContent, file)
+        except TypeError:
+            print('TypeError \n Try again. The file is not saved')       
         file.close() 
    
     def edit(self, q):
