@@ -12,7 +12,7 @@ __author__ = 'Ben Dichter'
 
 
 class BrokenAxes:
-    def __init__(self, xlims=None, ylims=None, d=.015, tilt=45,
+    def __init__(self, xlims=None, ylims=None, d=.01, tilt=45,
                  subplot_spec=None, fig=None, despine=True,
                  xscale=None, yscale=None, diag_color='k',
                  height_ratios=None, width_ratios=None,
@@ -153,11 +153,12 @@ class BrokenAxes:
 
         for ax in self.axs:
             for line in old_lines:
-                ax.plot(line.get_xdata(), line.get_ydata())
+                ax.plot(line.get_xdata(), line.get_ydata(), lw=line.get_lw(), ls=line.get_ls(), 
+                    c=line.get_c(), label= line.get_label())
 
     @staticmethod
     def draw_diag(ax, xpos, xlen, ypos, ylen, **kwargs):
-        return ax.plot((xpos - xlen, xpos + xlen), (ypos - ylen, ypos + ylen),
+        return ax.plot((xpos - xlen, xpos + xlen), (ypos - ylen, ypos + ylen), label = '_nolegend_',
                        **kwargs)
 
     def draw_diags(self):
