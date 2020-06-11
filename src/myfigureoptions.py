@@ -48,8 +48,17 @@ def figure_edit(axes, parent=None):
     # Cast to builtin floats as they have nicer reprs.
     xmin, xmax = map(float, axes.get_xlim())
     ymin, ymax = map(float, axes.get_ylim())
-    xtickspace = axes.get_xticks()[1] - axes.get_xticks()[0]
-    ytickspace = axes.get_yticks()[1] - axes.get_yticks()[0]
+    xticks = axes.get_xticks()
+    yticks = axes.get_yticks()
+    if xticks != []:
+        xtickspace = xticks[1] - xticks[0]
+    else:
+        xtickspace = None
+    if yticks != []:
+        ytickspace = yticks[1] - yticks[0]
+    else:
+        ytickspace = None
+
     if 'labelsize' in axes.xaxis._major_tick_kw:
         _ticksize = int(axes.xaxis._major_tick_kw['labelsize'])
     else:
@@ -217,7 +226,10 @@ def figure_edit(axes, parent=None):
             ('Style', prepare_data(MARKERS, line.get_marker())),
             ('Size', line.get_markersize()),
             ('Face color (RGBA)', fc),
-            ('Edge color (RGBA)', ec)]
+            ('Edge color (RGBA)', ec),
+            sep,
+            sep,
+            ('Remove Line', False)]
         curves.append([curvedata, label, ""])
     # Is there a curve displayed?
     has_curve = bool(curves)
@@ -307,17 +319,6 @@ def figure_edit(axes, parent=None):
          xlim_left, xlim_right, xtickspace, ylabel, yscale, ylim_left, ylim_right, ytickspace, 
          xbreak, xbreak_start, xbreak_end, ybreak, ybreak_start, ybreak_end) = general
 
-        # if xbreak == True and ybreak ==True:
-        #     baxes = brokenaxes(xlims=((xlim_left, xbreak_start), (xbreak_end, xlim_right)), 
-        #                       ylims=((ylim_left, ybreak_start), (ybreak_end, ylim_right)), 
-        #                       hspace=.05, fig=figure)
-        # elif xbreak == True:
-        #     baxes = brokenaxes(xlims=((xlim_left, xbreak_start), (xbreak_end, xlim_right)), fig=figure)
-        # elif ybreak == True:
-        #     baxes = brokenaxes(ylims=((ylim_left, ybreak_start), (ybreak_end, ylim_right)), hspace=.05, fig=figure)
-        # else:
-        #     pass
-
         if axes.get_xscale() != xscale:
             axes.set_xscale(xscale)
         if axes.get_yscale() != yscale:
@@ -327,20 +328,22 @@ def figure_edit(axes, parent=None):
         axes.title.set_fontsize(titlesize)
 
         axes.set_xlabel(xlabel)
-        xtick_space_start =  math.ceil(xlim_left / xtickspace) * xtickspace
-        axes.xaxis.set_ticks(np.arange(xtick_space_start, xlim_right, xtickspace))
+        if xtickspace != None:
+            xtick_space_start =  math.ceil(xlim_left / xtickspace) * xtickspace
+            axes.xaxis.set_ticks(np.arange(xtick_space_start, xlim_right, xtickspace))
         axes.set_xlim(xlim_left, xlim_right)
         axes.xaxis.label.set_size(labelsize)
         axes.xaxis.set_tick_params(labelsize=ticksize)
 
         axes.set_ylabel(ylabel)
-        ytick_space_start =  math.ceil(ylim_left / ytickspace) * ytickspace
-        axes.yaxis.set_ticks(np.arange(ytick_space_start, ylim_right, ytickspace))
+        if ytickspace != None:
+            ytick_space_start =  math.ceil(ylim_left / ytickspace) * ytickspace
+            axes.yaxis.set_ticks(np.arange(ytick_space_start, ylim_right, ytickspace))
         axes.set_ylim(ylim_left, ylim_right)
         axes.yaxis.label.set_size(labelsize)
         axes.yaxis.set_tick_params(labelsize=ticksize)
 
-        #axes.grid(grid)
+        axes.grid(grid)
 
         # Restore the unit data
         axes.xaxis.converter = xconverter
@@ -381,7 +384,7 @@ def figure_edit(axes, parent=None):
         for index, curve in enumerate(curves):
             line = linedict[curvelabels[index]]
             (label, linestyle, drawstyle, linewidth, color, marker, markersize,
-             markerfacecolor, markeredgecolor) = curve
+             markerfacecolor, markeredgecolor, removeLine) = curve
             line.set_label(label)
             line.set_linestyle(linestyle)
             line.set_drawstyle(drawstyle)
@@ -394,6 +397,8 @@ def figure_edit(axes, parent=None):
                 line.set_markersize(markersize)
                 line.set_markerfacecolor(markerfacecolor)
                 line.set_markeredgecolor(markeredgecolor)
+            if removeLine == True:
+                line.remove()
 
         # Set / Errorbar Caplines
         for index, capline in enumerate(ebcaplines):
