@@ -68,9 +68,10 @@ class MainWindow(QMainWindow):
         self.pHomeRmn = None                         # path of Raman File
 
     def create_mainwindow(self):
-        self.setWindowTitle('PyRaman')
-        self.mdi = QtWidgets.QMdiArea()
-        self.setCentralWidget(self.mdi)
+        #Create the main window
+        self.setWindowTitle('PyRaman')          # set window title
+        self.mdi = QtWidgets.QMdiArea()         # widget for multi document interface area
+        self.setCentralWidget(self.mdi)         # set mdi-widget as central widget
         self.create_menubar()
 
     def create_menubar(self):
@@ -84,11 +85,10 @@ class MainWindow(QMainWindow):
         FileSaveAs = File.addAction('Save Project As ...', lambda: self.save('Save As'))
         FileSave = File.addAction('Save Project', lambda: self.save('Save'))
 
-
         medit = menu.addMenu('Edit')
         medit.addAction('Cascade')
         medit.addAction('Tiled')
-        medit.triggered[QAction].connect(self.edit)
+        medit.triggered[QAction].connect(self.rearange)
 
     def open(self):
         # Load project in new MainWindow or in existing MW, if empty
@@ -100,22 +100,23 @@ class MainWindow(QMainWindow):
     def load(self):
         # Load project from rmn file with pickle
 
-        fileName = QtWidgets.QFileDialog.getOpenFileName(self, 'Save as', self.pHomeRmn, 'All Files (*);;Raman Files (*.rmn)')
+        fileName = QtWidgets.QFileDialog.getOpenFileName(self, 'Load',       # get file name
+                    self.pHomeRmn, 'All Files (*);;Raman Files (*.rmn)')
 
-        if fileName[0] != '':
+        if fileName[0] != '':                       # if fileName is not empty save in pHomeRmn
             self.pHomeRmn = fileName[0]
         else:
             self.close()
             return
 
-        file = open(self.pHomeRmn, 'rb') 
+        file = open(self.pHomeRmn, 'rb')            # open file and save content in variable 'v' with pickle 
         v = pickle.load(file)         
         file.close()  
 
-        for key, val in v['Spreadsheet'].items():
+        for key, val in v['Spreadsheet'].items():   # open all saved spreadsheets
             self.newSpreadsheet(val, key)
 
-        for key, val in v['Plot-Window'].items():
+        for key, val in v['Plot-Window'].items():   # open all saved plotwindows
             plot_data = val[0]
             fig = val[1]
             pwtitle = key
@@ -154,7 +155,8 @@ class MainWindow(QMainWindow):
             print('TypeError \n Try again. The file is not saved')       
         file.close() 
    
-    def edit(self, q):
+    def rearange(elf, q):
+        # rearange open windows
         if q.text() == "cascade":
             self.mdi.cascadeSubWindows()
 
@@ -162,6 +164,11 @@ class MainWindow(QMainWindow):
             self.mdi.tileSubWindows()
 
     def newSpreadsheet(self, ssd, title):
+        ''' open new spreadsheet window 
+        parameterr:
+        ssd : data opened in spreadsheet
+        title: window-title'''
+
         self.count_ss = self.count_ss+1
         a = self.count_ss -1
         sstitle = title
@@ -187,6 +194,12 @@ class MainWindow(QMainWindow):
         newSS.close_ss_signal.connect(self.close_spreadsheet_window)
 
     def newPlot(self, plotData, fig, title):
+        ''' Open new Plotwindow
+        parameter:
+        plotData: data, plotted in the new window
+        fig: matplotlib.figure if already existing, otherwise None
+        title: title of plotwindow
+        '''
         b = self.count_p
         self.count_p = self.count_p + 1
 
@@ -205,6 +218,7 @@ class MainWindow(QMainWindow):
         self.plotwindow[pwtitle].close_p_signal.connect(self.close_plot_window)
 
     def addPlot(self, pw_name, plotData):
+        # add spectrum to existing plotwindow
         for j in plotData:
             j[4] = self.plotwindow[pw_name].Spektrum[0].get_linestyle()
         self.plotwindow[pw_name].add_plot(plotData)
@@ -224,6 +238,7 @@ class MainWindow(QMainWindow):
         self.updata_menu_signal.emit()
 
     def closeEvent(self, event):
+        # close mainwindow
         close = QMessageBox()
         close.setWindowTitle('Quit')
         close.setText("You sure?")
