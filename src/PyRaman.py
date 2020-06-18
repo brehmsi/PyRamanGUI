@@ -148,12 +148,27 @@ class MainWindow(QMainWindow):
         saveFileContent.update({'Spreadsheet' : ss})
         saveFileContent.update({'Plot-Window' : p})
 
-        file = open(self.pHomeRmn,'wb')
+        # Test if file can be saved
+        saveControllParam = 0
+        file = open(self.pHomeRmn + 'Test', 'wb')
         try: 
             pickle.dump(saveFileContent, file)
         except TypeError:
-            print('TypeError \n Try again. The file is not saved')       
+            print('TypeError \n Someting went wrong. The file is not saved') 
+            saveControllParam = 1      
         file.close() 
+
+        if saveControllParam == 0:
+            file = open(self.pHomeRmn,'wb')
+            try: 
+                pickle.dump(saveFileContent, file)
+            except TypeError:
+                print('TypeError \n Try again. The file is not saved')       
+            file.close()
+            os.remove(self.pHomeRmn + 'Test') 
+        else:
+            saveControllParam = 0
+            pass
    
     def rearange(elf, q):
         # rearange open windows
@@ -1098,7 +1113,7 @@ class PlotWindow(QMainWindow):
         self.setCentralWidget(self._main)
         layout = QtWidgets.QVBoxLayout(self._main)
         legendfontsize = 24
-        labelfontsize = 20
+        labelfontsize = 24
         tickfontsize = 18
        
         if self.fig == None:
