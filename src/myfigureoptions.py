@@ -74,6 +74,7 @@ def figure_edit(axes, parent=None):
                sep,
                (None, "<b>X-Axis</b>"),
                ('Label', axes.get_xlabel()),
+               ('Label Pad', axes.xaxis.labelpad),
                ('Scale', [axes.get_xscale(), 'linear', 'log', 'logit']),
                ('Lower Limit', axes.get_xlim()[0]),
                ('Upper Limit', axes.get_xlim()[1]),
@@ -81,6 +82,7 @@ def figure_edit(axes, parent=None):
                sep,
                (None, "<b>Y-Axis</b>"),
                ('Label', axes.get_ylabel()),
+               ('Label Pad', axes.yaxis.labelpad),
                ('Scale', [axes.get_yscale(), 'linear', 'log', 'logit']),
                ('Lowet Limit', axes.get_ylim()[0]),
                ('Upper Limit', axes.get_ylim()[1]),
@@ -315,8 +317,8 @@ def figure_edit(axes, parent=None):
             raise ValueError("Unexpected field")
 
         # Set / General
-        (title, titlesize, labelsize, ticksize, grid, xlabel, xscale, 
-         xlim_left, xlim_right, xtickspace, ylabel, yscale, ylim_left, ylim_right, ytickspace, 
+        (title, titlesize, labelsize, ticksize, grid, xlabel, xlabelpad, xscale, 
+         xlim_left, xlim_right, xtickspace, ylabel, ylabelpad, yscale, ylim_left, ylim_right, ytickspace, 
          xbreak, xbreak_start, xbreak_end, ybreak, ybreak_start, ybreak_end) = general
 
         if axes.get_xscale() != xscale:
@@ -328,6 +330,7 @@ def figure_edit(axes, parent=None):
         axes.title.set_fontsize(titlesize)
 
         axes.set_xlabel(xlabel)
+        axes.xaxis.labelpad = xlabelpad
         if xtickspace != None:
             xtick_space_start =  math.ceil(xlim_left / xtickspace) * xtickspace
             axes.xaxis.set_ticks(np.arange(xtick_space_start, xlim_right, xtickspace))
@@ -336,6 +339,7 @@ def figure_edit(axes, parent=None):
         axes.xaxis.set_tick_params(labelsize=ticksize)
 
         axes.set_ylabel(ylabel)
+        axes.yaxis.labelpad = ylabelpad
         if ytickspace != None:
             ytick_space_start =  math.ceil(ylim_left / ytickspace) * ytickspace
             axes.yaxis.set_ticks(np.arange(ytick_space_start, ylim_right, ytickspace))
