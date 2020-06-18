@@ -114,11 +114,19 @@ class BrokenAxes:
 
         old_lines = self.fig.axes[0].get_lines()
 
+        xlabel = self.big_ax.get_xlabel()
+        ylabel = self.big_ax.get_ylabel()
+        xlabelsize = self.big_ax.xaxis.label.get_size()
+
         self.big_ax.clear()
 
         [sp.set_visible(False) for sp in self.big_ax.spines.values()]
         self.big_ax.set_xticks([])
         self.big_ax.set_yticks([])
+        self.big_ax.set_xlabel(xlabel)
+        self.big_ax.set_ylabel(ylabel)
+        self.big_ax.xaxis.label.set_size(xlabelsize)
+        self.big_ax.yaxis.label.set_size(xlabelsize)
         self.big_ax.patch.set_facecolor('none')
 
         self.axs = []
@@ -126,6 +134,8 @@ class BrokenAxes:
             ax = plt.Subplot(self.fig, igs)
             self.fig.add_subplot(ax)
             self.axs.append(ax)
+
+        self.fig.subplots_adjust(wspace=0.1)
 
         # get last axs row and first col
         self.last_row = []
