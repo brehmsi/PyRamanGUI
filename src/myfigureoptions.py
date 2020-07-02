@@ -19,6 +19,8 @@ import matplotlib.backends.qt_editor._formlayout as formlayout
 from matplotlib.backends.qt_compat import QtGui
 
 
+number_of_axis = 0
+
 def get_icon(name):
     basedir = os.path.join(matplotlib.rcParams['datapath'], 'images')
     return QtGui.QIcon(os.path.join(basedir, name))
