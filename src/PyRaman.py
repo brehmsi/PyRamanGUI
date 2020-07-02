@@ -150,11 +150,12 @@ class MainWindow(QMainWindow):
 
         # Test if file can be saved
         saveControllParam = 0
-        file = open(self.pHomeRmn + 'Test', 'wb')
+        file = open(os.path.splitext(self.pHomeRmn)[0] + '_test' + 
+                                    os.path.splitext(self.pHomeRmn)[1], 'wb')
         try: 
             pickle.dump(saveFileContent, file)
-        except TypeError:
-            print('TypeError \n Someting went wrong. The file is not saved') 
+        except TypeError as e:
+            print('TypeError \n Someting went wrong. The file is not saved \n' + str(e)) 
             saveControllParam = 1      
         file.close() 
 
@@ -162,10 +163,11 @@ class MainWindow(QMainWindow):
             file = open(self.pHomeRmn,'wb')
             try: 
                 pickle.dump(saveFileContent, file)
-            except TypeError:
-                print('TypeError \n Try again. The file is not saved')       
+            except TypeError as e:
+                print('TypeError \n Someting went wrong. The file is not saved \n' + str(e))       
             file.close()
-            os.remove(self.pHomeRmn + 'Test') 
+            os.remove(os.path.splitext(self.pHomeRmn)[0] + '_test' + 
+                                    os.path.splitext(self.pHomeRmn)[1]) 
         else:
             saveControllParam = 0
             pass
