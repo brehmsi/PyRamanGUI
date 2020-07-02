@@ -117,6 +117,9 @@ class BrokenAxes:
         xlabel = self.big_ax.get_xlabel()
         ylabel = self.big_ax.get_ylabel()
         xlabelsize = self.big_ax.xaxis.label.get_size()
+        ticksize = 18
+        yticks = self.big_ax.get_yticks()
+        ymin, ymax = map(float, self.big_ax.get_ylim())
 
         self.big_ax.clear()
 
@@ -127,15 +130,19 @@ class BrokenAxes:
         self.big_ax.set_ylabel(ylabel)
         self.big_ax.xaxis.label.set_size(xlabelsize)
         self.big_ax.yaxis.label.set_size(xlabelsize)
+        self.big_ax.xaxis.labelpad = 30
+        self.big_ax.yaxis.labelpad = 45
         self.big_ax.patch.set_facecolor('none')
 
         self.axs = []
         for igs in gs:
             ax = plt.Subplot(self.fig, igs)
+            ax.xaxis.set_tick_params(labelsize=ticksize)
+            ax.yaxis.set_tick_params(labelsize=ticksize)
             self.fig.add_subplot(ax)
             self.axs.append(ax)
 
-        self.fig.subplots_adjust(wspace=0.1)
+        self.fig.subplots_adjust(wspace=0.075)
 
         # get last axs row and first col
         self.last_row = []
@@ -155,6 +162,8 @@ class BrokenAxes:
             if xlims is not None:
                 ax.set_xlim(xlims[i % ncols])
                 ax.get_shared_x_axes().join(ax, self.last_row[i % ncols])
+                ax.set_yticks(yticks)
+                ax.set_ylim(ymin, ymax)
         self.standardize_ticks()
         if d:
             self.draw_diags()
