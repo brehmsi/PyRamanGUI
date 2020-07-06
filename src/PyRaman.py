@@ -46,8 +46,9 @@ import myfigureoptions  #see file 'myfigureoptions.py'
 
 # This file essentially consists of three parts:
 # 1. Main Window
-# 2. Spreadsheet
-# 3. Plot
+# 2. Text Window
+# 3. Spreadsheet
+# 4. Plot
 
 #####################################################################################################################################################
 ### 1. Main window
@@ -62,8 +63,10 @@ class MainWindow(QMainWindow):
 
         self.spreadsheet = {}                        # dictionary with spreadsheets
         self.plotwindow = {}                         # dictionary with plotwindows
+        self.textwindow = {}                         # dictionary with textwindows
         self.count_ss = 0                            # number of spreadsheet windows (closed ones are included)
         self.count_p  = 0                            # number of plot windows (closed ones are included)
+        self.count_t  = 0                            # number of text windows (closed ones are included)
         self.FileName = os.path.dirname(__file__)    # path of this python file
         self.pHomeRmn = None                         # path of Raman File
 
@@ -81,6 +84,7 @@ class MainWindow(QMainWindow):
         File = menu.addMenu('File')
         FileNew = File.addMenu('New')
         newSpreadSheet = FileNew.addAction('Spreadsheet', lambda: self.newSpreadsheet(None, None))
+        newText = FileNew.addAction('Text', lambda: self.newTextWindow('', None))
         FileLoad = File.addAction('Open Project', self.open)        
         FileSaveAs = File.addAction('Save Project As ...', lambda: self.save('Save As'))
         FileSave = File.addAction('Save Project', lambda: self.save('Save'))
@@ -122,6 +126,12 @@ class MainWindow(QMainWindow):
             pwtitle = key
             self.newPlot(plot_data, fig, pwtitle)  
 
+        if 'Text-Window' in v.keys():
+            for key, val in v['Text-Window'].items():
+                self.newTextWindow(val, key)
+        else:
+            pass
+
     def save(self, q):
         # function to save complete project in rmn-File with pickle
 
@@ -144,9 +154,14 @@ class MainWindow(QMainWindow):
         for key, val in self.plotwindow.items():
             p.update({key : (val.data, val.fig)})
 
+        t  = {}                                         # creating new dictionary for plotwindow
+        for key, val in self.textwindow.items():
+            t.update({key : (val.text)})
+
         saveFileContent = {}                            # dictionary containing ss and p 
         saveFileContent.update({'Spreadsheet' : ss})
         saveFileContent.update({'Plot-Window' : p})
+        saveFileContent.update({'Text-Window' : t})
 
         # Test if file can be saved
         saveControllParam = 0
@@ -172,13 +187,27 @@ class MainWindow(QMainWindow):
             saveControllParam = 0
             pass
    
-    def rearange(elf, q):
+    def rearange(self, q):
         # rearange open windows
         if q.text() == "cascade":
             self.mdi.cascadeSubWindows()
 
         if q.text() == "Tiled":
             self.mdi.tileSubWindows()
+
+    def newTextWindow(self, txt, title):
+        self.count_t = self.count_t+1
+        a = self.count_t -1
+        txttitle = title
+        if txttitle == None:
+            txttitle = 'Text-Window ' + str(self.count_t)
+
+        self.textwindow[txttitle] = TextWindow(self, txt)
+        newTxt = self.textwindow[txttitle]
+        newTxt.setWindowTitle(txttitle)
+        self.mdi.addSubWindow(newTxt)
+        newTxt.show()
+        newTxt.close_txt_signal.connect(self.close_text_window)
 
     def newSpreadsheet(self, ssd, title):
         ''' open new spreadsheet window 
@@ -249,6 +278,10 @@ class MainWindow(QMainWindow):
         # delete spreadsheet window
         del self.spreadsheet[sstitle]
 
+    def close_text_window(self, txttitle):
+        # delete spreadsheet window
+        del self.textwindow[txttitle]
+
     def change_plotwindow_title(self, oldtitle, newtitle):
         # update menubar from spreadsheets after changing name of a plotwindow
         self.plotwindow[newtitle] = self.plotwindow.pop(oldtitle)
@@ -268,13 +301,103 @@ class MainWindow(QMainWindow):
             event.ignore()
 
 #####################################################################################################################################################
-### 2. Spreadsheet
+### 2. Text - Window
 #####################################################################################################################################################
-cellre = re.compile(r'\b[A-Z][0-9]\b')
 
+class TextWindow(QMainWindow):
+    close_txt_signal = QtCore.pyqtSignal(str)
+    def __init__(self, mainwindow, text, parent = None):
+        super(TextWindow, self).__init__(parent)
+        self.text = text
+        self.mw = mainwindow
+
+        self.create_textwidget()
+        self.create_menubar()
+
+    def create_textwidget(self):        
+        self.textfield = QtWidgets.QPlainTextEdit()
+        self.textfield.setPlainText(self.text)
+        self.textfield.createStandardContextMenu()
+        self.setCentralWidget(self.textfield)
+        self.textfield.textChanged.connect(self.text_change)
+
+    def create_menubar(self): 
+        # create the menubar               
+        self.menubar = self.menuBar()
+
+        ### 1. Menüpunkt: File ###
+        fileMenu = self.menubar.addMenu('&File')
+        fileMenu.addAction('Save Text', self.file_save)
+        fileMenu.addAction('Load Text', self.load_file)
+
+        ### 2. Menüpunkt: Edit
+        editMenu = self.menubar.addMenu('&Edit')
+        editMenu.addAction('Change Window Title', self.change_window_title)        
+
+        self.show()
+
+    def text_change(self):
+        self.text = self.textfield.toPlainText()        
+
+    def change_window_title(self):
+        # Change title of the text window
+        oldTitle = self.windowTitle()
+        newTitle, ok = QInputDialog.getText(self, 'Text Input Dialog', 'Enter the new Window Title:')
+        if ok:
+            self.setWindowTitle(newTitle)
+            self.mw.textwindow[newTitle] = self.mw.textwindow.pop(oldTitle)
+        else:
+            return
+
+    def file_save(self):
+        fileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Load', filter = 'All Files (*);; Txt Files (*.txt)')
+
+        if fileName[0] != '':                       
+            fileName = fileName[0]
+        else:
+            return
+
+        file = open(fileName, 'w')            
+        file.write(self.text)    
+        file.close() 
+
+    def load_file(self):
+        fileName = QtWidgets.QFileDialog.getOpenFileName(self, 'Load', filter = 'All Files (*);; Txt Files (*.txt)')
+
+        if fileName[0] != '':                       
+            fileName = fileName[0]
+        else:
+            return
+
+        file = open(fileName, 'rb')            
+        bintext = file.read()    
+        file.close() 
+
+        self.text = bintext.decode("utf-8")
+        self.textfield.setPlainText(self.text)
+
+    def closeEvent(self, event):
+        close = QMessageBox()
+        close.setWindowTitle('Quit')
+        close.setText("You sure?")
+        close.setStandardButtons(QMessageBox.Yes | QMessageBox.Cancel)
+        close = close.exec()
+
+        if close == QMessageBox.Yes:
+            self.close_txt_signal.emit(self.windowTitle())
+            event.accept()
+        else:
+            event.ignore()
+
+
+#####################################################################################################################################################
+### 3. Spreadsheet
+#####################################################################################################################################################
 
 # teilweise (Class SpreadSheetDelegate and class SpreadSheetItem) geklaut von: 
 # http://negfeedback.blogspot.com/2017/12/a-simple-gui-spreadsheet-in-less-than.html 
+cellre = re.compile(r'\b[A-Z][0-9]\b')
+
 def cellname(i, j):
     return f'{chr(ord("A")+j)}{i+1}'
 
@@ -714,7 +837,7 @@ class SpreadSheet(QMainWindow):
             event.ignore()
 
 #####################################################################################################################################################
-### 3. Plot
+### 4. Plot
 #####################################################################################################################################################
 class Functions:
     def __init__(self, pw):
