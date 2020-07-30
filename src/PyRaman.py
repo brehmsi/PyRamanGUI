@@ -500,7 +500,9 @@ class SpreadSheet(QMainWindow):
 
         self.create_tablewidgets()
         self.create_menubar()
-        self.create_header()
+        self.create_col_header()
+        self.create_row_header()
+
         self.mw.updata_menu_signal.connect(self.update_menubar)
 
     def create_tablewidgets(self):        
@@ -545,7 +547,7 @@ class SpreadSheet(QMainWindow):
         self.menubar.clear()
         self.create_menubar()
 
-    def create_header(self):
+    def create_col_header(self):
         headers = [self.d[j][1] + '(' + self.d[j][2] + ')' for j in self.d.keys()]
         self.table.setHorizontalHeaderLabels(headers)
 
@@ -624,6 +626,30 @@ class SpreadSheet(QMainWindow):
             self.d.update({'data%i'%selected_column : (data_zs[0], data_zs[1], 'Yerr', data_zs[3])})
             headers = [self.d[j][1] + '(' + self.d[j][2] + ')' for j in self.d.keys()]
             self.table.setHorizontalHeaderLabels(headers)
+
+    def create_row_header(self):
+         ### bei Rechts-Klick auf Header wird header_menu geöffnet ###
+        self.row_headers = self.table.verticalHeader()
+        self.row_headers.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.row_headers.customContextMenuRequested.connect(self.row_options)
+        self.row_headers.setSelectionMode(QAbstractItemView.SingleSelection)
+
+    def row_options(self, position):
+        selected_row = self.row_headers.logicalIndexAt(position)
+        header_menu = QMenu()
+        delete_row = header_menu.addAction('Delete this row?')
+        ac = header_menu.exec_(self.table.mapToGlobal(position))
+        # Delete selected colums
+        if ac == delete_row:
+            # Get the index of all selected rows in reverse order, so that last row is deleted first
+            selRow = sorted(set(index.row() for index in self.table.selectedIndexes()), reverse = True)      
+            for j in range(self.cols):
+                for k in selRow:
+                    del self.d['data%i'%j][0][k]                                            # Delete data
+              
+            for k in selRow:
+                self.table.removeRow(k)                                                  # Delete row
+                self.rows = self.rows - 1
             
     def keyPressEvent(self, event):
     # A few shortcuts
@@ -649,6 +675,10 @@ class SpreadSheet(QMainWindow):
                 pass
             ti = self.table.item(cr+1, cc)
             self.table.setCurrentItem(ti)
+        if key == Qt.Key_Delete:
+            selItem = [[index.row(), index.column()] for index in self.table.selectedIndexes()]
+            for j in selItem:
+                self.table.takeItem(j[0], j[1])
         else:
             super(SpreadSheet, self).keyPressEvent(event)   
 
