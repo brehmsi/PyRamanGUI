@@ -1803,22 +1803,24 @@ class PlotWindow(QMainWindow):
         self.blcSpektrum, = self.ax.plot(xb, yb, 'c-', label = 'baseline-corrected '+ self.selectedData[0][2])
         self.ax.figure.canvas.draw()
 
-        okbutton = QPushButton('Ok', self)
-        okbutton.setToolTip('Do you want to try the fit parameters? \n Lets do it!')
-        okbutton.clicked.connect(lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text())))
-        layout.addWidget(okbutton, 2, 0)
 
-        self.finishbutton = QPushButton('Finish', self)       
+
+        self.finishbutton = QPushButton('Ok', self)       
         self.finishbutton.setCheckable(True)
         self.finishbutton.setToolTip('Are you happy with the start parameters? \n Close the dialog window and save the baseline!')
         self.finishbutton.clicked.connect(lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text())))
-        layout.addWidget(self.finishbutton, 2, 1)
+        layout.addWidget(self.finishbutton, 2, 0)
 
         self.closebutton = QPushButton('Close', self)
         self.closebutton.setCheckable(True)
         self.closebutton.setToolTip('Closes the dialog window and baseline is not saved.')
         self.closebutton.clicked.connect(lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text())))
-        layout.addWidget(self.closebutton, 2, 2)
+        layout.addWidget(self.closebutton, 2, 1)
+
+        applybutton = QPushButton('Apply', self)
+        applybutton.setToolTip('Do you want to try the fit parameters? \n Lets do it!')
+        applybutton.clicked.connect(lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text())))
+        layout.addWidget(applybutton, 2, 2)
 
         self.Dialog_BaselineParameter.setLayout(layout)
         self.Dialog_BaselineParameter.setWindowTitle("Baseline Parameter")
