@@ -22,8 +22,7 @@ from matplotlib import *
 from matplotlib.widgets import Slider, Button, RadioButtons
 from matplotlib.figure import Figure
 from matplotlib.backend_bases import MouseEvent
-from matplotlib.backends.backend_qt5agg import (FigureCanvasQTAgg as FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
-#from matplotlib.backends.backend_qt5agg import (FigureCanvas)
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.backends.qt_compat import QtCore, QtWidgets
 from numpy import pi
 from numpy.fft import fft, fftshift
@@ -43,6 +42,7 @@ from sympy.utilities.lambdify import lambdify, implemented_function
 from tabulate import tabulate
 
 import myfigureoptions  #see file 'myfigureoptions.py'
+import mytoolbar
 
 # This file essentially consists of three parts:
 # 1. Main Window
@@ -1235,10 +1235,10 @@ class DataPointPicker:
         self.selected.set_data(self.xs[self.lastind], self.ys[self.lastind])
         self.selected.figure.canvas.draw()
 
-class MyCustomToolbar(NavigationToolbar): 
+class MyCustomToolbar(NavigationToolbar2QT): 
     def __init__(self, plotCanvas):
-        NavigationToolbar.__init__(self, plotCanvas, parent=None)
-        toolitems = [t for t in NavigationToolbar.toolitems]
+        NavigationToolbar2QT.__init__(self, plotCanvas, parent=None)
+        toolitems = [t for t in NavigationToolbar2QT.toolitems]
         #figureoptions = toolitems[7]
 	
 class PlotWindow(QMainWindow):
@@ -1274,7 +1274,7 @@ class PlotWindow(QMainWindow):
         if self.fig == None:
             self.fig = Figure(figsize=(15,9))
             self.ax = self.fig.add_subplot()
-            self.Canvas = FigureCanvas(self.fig)
+            self.Canvas = FigureCanvasQTAgg(self.fig)
             layout.addWidget(self.Canvas)
             self.addToolBar(MyCustomToolbar(self.Canvas))
             for j in self.data:
@@ -1296,9 +1296,9 @@ class PlotWindow(QMainWindow):
             self.ax.yaxis.set_tick_params(labelsize=tickfontsize)
         else:
             self.ax = self.fig.axes[0]
-            self.Canvas = FigureCanvas(self.fig)
+            self.Canvas = FigureCanvasQTAgg(self.fig)
             layout.addWidget(self.Canvas)
-            self.addToolBar(NavigationToolbar(self.Canvas, self))
+            self.addToolBar(NavigationToolbar2QT(self.Canvas, self))
             for j in self.ax.lines:
                 self.Spektrum.append(j)
             self.ax.get_legend()
