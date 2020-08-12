@@ -33,7 +33,7 @@ class BrokenAxes:
         fig: (optional) None or Figure
             If no figure is defined, `plt.gcf()` is used
         despine: (optional) bool
-            Get rid of right and top spines. Default: True
+            Get rid of inner spines. Default: True
         wspace, hspace: (optional) bool
             Change the size of the horizontal or vertical gaps
         xscale, yscale: (optional) None | str
@@ -134,6 +134,7 @@ class BrokenAxes:
         self.big_ax.yaxis.labelpad = 45
         self.big_ax.patch.set_facecolor('none')
 
+
         self.axs = []
         for igs in gs:
             ax = plt.Subplot(self.fig, igs)
@@ -174,6 +175,34 @@ class BrokenAxes:
             for line in old_lines:
                 ax.plot(line.get_xdata(), line.get_ydata(), lw=line.get_lw(), ls=line.get_ls(), 
                     c=line.get_c(), label= line.get_label())
+
+        if self.axs[0].get_legend() is not None:
+            old_legend = self.axs[0].get_legend()
+            leg_draggable = old_legend._draggable is not None
+            leg_ncol = old_legend._ncol
+            leg_fontsize = int(old_legend._fontsize)
+            leg_frameon = old_legend._drawFrame
+            leg_shadow = old_legend.shadow
+            leg_fancybox = type(old_legend.legendPatch.get_boxstyle())
+            leg_framealpha = old_legend.get_frame().get_alpha()
+            leg_picker = old_legend.get_picker()
+        else:
+            leg_draggable = False
+            leg_ncol = 1
+            leg_fontsize = 15
+            leg_frameon = True
+            leg_shadow = True
+            leg_fancybox = True
+            leg_framealpha = 0.5
+            leg_picker = 5
+
+        new_legend = self.axs[0].legend(
+                                ncol=leg_ncol,
+                                fontsize=float(leg_fontsize),
+                                frameon=leg_frameon,
+                                shadow=leg_shadow,
+                                framealpha=leg_framealpha,
+                                fancybox=leg_fancybox)
 
     @staticmethod
     def draw_diag(ax, xpos, xlen, ypos, ylen, **kwargs):
@@ -257,14 +286,14 @@ class BrokenAxes:
                 plt.setp(ax.xaxis.get_majorticklabels(), visible=False)
                 plt.setp(ax.xaxis.get_majorticklines(), visible=False)
             if self.despine or not ax.is_first_row():
-                ax.spines['top'].set_visible(False)
+                ax.spines['top'].set_visible(True)
             if not ax.is_first_col():
                 ax.spines['left'].set_visible(False)
                 plt.setp(ax.yaxis.get_minorticklabels(), visible=False)
                 plt.setp(ax.yaxis.get_minorticklines(), visible=False)
                 plt.setp(ax.yaxis.get_majorticklabels(), visible=False)
                 plt.setp(ax.yaxis.get_majorticklines(), visible=False)
-            if self.despine or not ax.is_last_col():
+            if not ax.is_last_col():
                 ax.spines['right'].set_visible(False)
 
     def standardize_ticks(self, xbase=None, ybase=None):
