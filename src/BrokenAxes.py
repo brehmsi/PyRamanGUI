@@ -121,6 +121,26 @@ class BrokenAxes:
         yticks = self.big_ax.get_yticks()
         ymin, ymax = map(float, self.big_ax.get_ylim())
 
+        if self.big_ax.get_legend() is not None:
+            old_legend = self.big_ax.get_legend()
+            leg_draggable = old_legend._draggable is not None
+            leg_ncol = old_legend._ncol
+            leg_fontsize = int(old_legend._fontsize)
+            leg_frameon = old_legend._drawFrame
+            leg_shadow = old_legend.shadow
+            leg_fancybox = type(old_legend.legendPatch.get_boxstyle())
+            leg_framealpha = old_legend.get_frame().get_alpha()
+            leg_picker = old_legend.get_picker()
+        else:
+            leg_draggable = False
+            leg_ncol = 1
+            leg_fontsize = 15
+            leg_frameon = True
+            leg_shadow = True
+            leg_fancybox = True
+            leg_framealpha = 0.5
+            leg_picker = 5
+
         self.big_ax.clear()
 
         [sp.set_visible(False) for sp in self.big_ax.spines.values()]
@@ -176,27 +196,9 @@ class BrokenAxes:
                 ax.plot(line.get_xdata(), line.get_ydata(), lw=line.get_lw(), ls=line.get_ls(), 
                     c=line.get_c(), label= line.get_label())
 
-        if self.axs[0].get_legend() is not None:
-            old_legend = self.axs[0].get_legend()
-            leg_draggable = old_legend._draggable is not None
-            leg_ncol = old_legend._ncol
-            leg_fontsize = int(old_legend._fontsize)
-            leg_frameon = old_legend._drawFrame
-            leg_shadow = old_legend.shadow
-            leg_fancybox = type(old_legend.legendPatch.get_boxstyle())
-            leg_framealpha = old_legend.get_frame().get_alpha()
-            leg_picker = old_legend.get_picker()
-        else:
-            leg_draggable = False
-            leg_ncol = 1
-            leg_fontsize = 15
-            leg_frameon = True
-            leg_shadow = True
-            leg_fancybox = True
-            leg_framealpha = 0.5
-            leg_picker = 5
 
-        new_legend = self.axs[0].legend(
+
+        new_legend = self.axs[1].legend(
                                 ncol=leg_ncol,
                                 fontsize=float(leg_fontsize),
                                 frameon=leg_frameon,
