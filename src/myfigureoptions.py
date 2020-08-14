@@ -522,8 +522,8 @@ def figure_edit_brokenaxis(axes, parent = None):
         axis_options.insert(5+idx*3, ('Upper Limit', itm.get_xlim()[1]))
 
 
-    if axes[1].legend_ is not None:
-        old_legend = axes[1].get_legend()
+    if axes[2].legend_ is not None:
+        old_legend = axes[2].get_legend()
         _visible = old_legend._visible
         _draggable = old_legend._draggable is not None
         _ncol = old_legend._ncol
@@ -818,7 +818,7 @@ def figure_edit_brokenaxis(axes, parent = None):
         (leg_visible, leg_draggable, leg_ncol, leg_fontsize, leg_frameon, leg_shadow,
          leg_fancybox, leg_framealpha, leg_picker) = legend
 
-        new_legend = axes[1].legend(ncol=leg_ncol,
+        new_legend = axes[2].legend(ncol=leg_ncol,
                                  fontsize=float(leg_fontsize),
                                  frameon=leg_frameon,
                                  shadow=leg_shadow,
