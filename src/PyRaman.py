@@ -1257,7 +1257,7 @@ class PlotWindow(QMainWindow):
         self.plot()
         self.create_statusbar()
         self.create_menubar()	
-        self.create_toolbar()
+        self.create_sidetoolbar()
 
         #self.cid1 = self.fig.canvas.mpl_connect('button_press_event', self.mousePressEvent)
         self.cid2 = self.fig.canvas.mpl_connect('key_press_event', self.keyPressEvent)
@@ -1276,7 +1276,7 @@ class PlotWindow(QMainWindow):
             self.ax = self.fig.add_subplot()
             self.Canvas = FigureCanvasQTAgg(self.fig)
             layout.addWidget(self.Canvas)
-            self.addToolBar(MyCustomToolbar(self.Canvas))
+
             for j in self.data:
                 if isinstance(j[5], (np.ndarray, np.generic)):
                     (spect, capline, barlinecol) = self.ax.errorbar(j[0], j[1], fmt=j[4], yerr=j[5], 
@@ -1288,7 +1288,6 @@ class PlotWindow(QMainWindow):
                     barlinecol[0].set_label('_Hidden barlinecol ' + j[2])
                 else:
                     self.Spektrum.append(self.ax.plot(j[0], j[1], j[4], label = j[2], picker = 5)[0])
-
             legend = self.ax.legend(fontsize = legendfontsize)
             self.ax.set_xlabel('Raman shift / cm⁻¹', fontsize = labelfontsize)
             self.ax.set_ylabel('Intensity / cts/s', fontsize = labelfontsize)
@@ -1298,10 +1297,10 @@ class PlotWindow(QMainWindow):
             self.ax = self.fig.axes[0]
             self.Canvas = FigureCanvasQTAgg(self.fig)
             layout.addWidget(self.Canvas)
-            self.addToolBar(NavigationToolbar2QT(self.Canvas, self))
             for j in self.ax.lines:
                 self.Spektrum.append(j)
             self.ax.get_legend()
+        self.addToolBar(MyCustomToolbar(self.Canvas))
 
         self.ax.get_legend().set_picker(5)
 
@@ -1438,7 +1437,7 @@ class PlotWindow(QMainWindow):
         self.setStatusBar(self.statusBar)
         self.show()
 
-    def create_toolbar(self):
+    def create_sidetoolbar(self):
         toolbar = QtWidgets.QToolBar(self)
         self.addToolBar(QtCore.Qt.LeftToolBarArea, toolbar)
         
@@ -1477,9 +1476,13 @@ class PlotWindow(QMainWindow):
         self.Dialog_SelDataSet = QDialog()
         layout = QtWidgets.QGridLayout()
         self.CheckDataset = []
-        for j in range(len(self.data)):
-            self.CheckDataset.append(QCheckBox(self.data[j][2], self))
-            layout.addWidget(self.CheckDataset[j], j, 0)
+        # for j in range(len(self.data)):
+        #     self.CheckDataset.append(QCheckBox(self.data[j][2], self))
+        #     layout.addWidget(self.CheckDataset[j], j, 0)
+        for idx, line in enumerate(self.ax.get_lines()):
+            self.CheckDataset.append(QCheckBox(line.get_label(), self))
+            layout.addWidget(self.CheckDataset[idx], idx, 0)
+
         ok_button = QPushButton("ok", self.Dialog_SelDataSet)
         layout.addWidget(ok_button, len(self.data), 0)
         ok_button.clicked.connect(self.Ok_button)
@@ -1490,10 +1493,10 @@ class PlotWindow(QMainWindow):
 
     def Ok_button(self):
         # OK Button for function SecetedDataset
-        for j in range(len(self.CheckDataset)):
-            if self.CheckDataset[j].isChecked():
-                self.selectedDatasetNumber.append(j)
-                self.selectedData.append(self.data[j])
+        for idx, d in enumerate(self.CheckDataset):
+            if d.isChecked():
+                self.selectedDatasetNumber.append(idx)
+                self.selectedData.append(self.data[idx])
             else:
                 pass
         self.Dialog_SelDataSet.close()
@@ -2150,7 +2153,30 @@ class PlotWindow(QMainWindow):
         self.save_to_file('Save background-corrected data in file', startFileName, save_data)
 
     ########## Functions of toolbar ##########
+    def check_if_line_was_removed(self):
+        lines = self.ax.get_lines()
+        if len(lines) != len(self.data):
+            line_ydata = []
+            not_deleted = []
+            for line in lines:
+                line_ydata.append(line.get_ydata())
+            for d in self.data:
+                for lydata in line_ydata:
+                    if (lydata == d[1]).all():
+                        not_deleted.append(d[2])
+
+            for j in range(len(self.data)):
+                if self.data[j][2] in not_deleted:
+                    pass
+                else:
+                    self.data.pop(j)
+                    self.Spektrum.pop(j)
+                    return
+        else:
+            return
+
     def scale_spectrum(self):
+        self.check_if_line_was_removed()
         self.SelectDataset()
         if self.selectedData == []:
             return
@@ -2181,6 +2207,7 @@ class PlotWindow(QMainWindow):
             pass
 
     def shift_spectrum(self):
+        self.check_if_line_was_removed()
         self.SelectDataset()
         if self.selectedData == []:
             return
