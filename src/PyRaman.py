@@ -1236,11 +1236,23 @@ class DataPointPicker:
         self.selected.figure.canvas.draw()
 
 class MyCustomToolbar(NavigationToolbar2QT): 
+    toolitems = [t for t in NavigationToolbar2QT.toolitems]
+    # Add new toolitem at last position
+    toolitems.append(
+        ("Layers", "manage layers and layer contents",
+        "", "layer_content"))
+
     def __init__(self, plotCanvas):
         NavigationToolbar2QT.__init__(self, plotCanvas, parent=None)
-        toolitems = [t for t in NavigationToolbar2QT.toolitems]
-        #figureoptions = toolitems[7]
-	
+
+    def layer_content(self):
+        Layer_Legend = QDialog()
+        layout = QtWidgets.QGridLayout()
+        Layer_Legend.setLayout(layout)
+        Layer_Legend.setWindowTitle("Layer Content")
+        Layer_Legend.setWindowModality(Qt.ApplicationModal)
+        Layer_Legend.exec_()
+
 class PlotWindow(QMainWindow):
     close_p_signal = QtCore.pyqtSignal(str)                     # Signal in case plotwindow is closed
     change_window_title_signal = QtCore.pyqtSignal(str, str)    # Signal in case plotwindow title is changed
