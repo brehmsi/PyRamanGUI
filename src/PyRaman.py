@@ -1098,8 +1098,9 @@ class InsertText:
         self.create_textbox()
 
     def create_textbox(self):
-        self.texty = self.ax.annotate('*', self.textpt, picker = 5)
-
+        self.texty = self.ax.annotate(r'''*''', self.textpt, picker = 5)
+        self.ax.add_artist(self.texty)
+        
         self.cid1 = self.texty.figure.canvas.mpl_connect('pick_event', self.on_pick)
         self.cid2 = self.texty.figure.canvas.mpl_connect('button_release_event', self.on_release)
         self.cid3 = self.texty.figure.canvas.mpl_connect('motion_notify_event', self.on_motion)
@@ -1148,6 +1149,11 @@ class InsertText:
             return
         elif insert == 'shift':
             pass
+        elif insert == 'ctrl+alt' or insert == 'control':
+            pass
+        elif insert[:-2] == 'ctrl+alt':
+            insert = insert[9]
+            self.newText = self.newText + insert
         elif insert == 'backspace':
             self.newText = self.newText[:-1]
         elif self.newText == None:
