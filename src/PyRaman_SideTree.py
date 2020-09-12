@@ -30,8 +30,9 @@ from os.path import join as pjoin
 from PyQt5 import QtGui, QtCore 
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, pyqtSlot, QObject
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QTableWidget, QVBoxLayout, QSizePolicy, QMessageBox, QPushButton, QCheckBox,
-	QTableWidgetItem, QItemDelegate, QLineEdit, QPushButton, QWidget, QMenu, QAction, QDialog, QFileDialog, QInputDialog, QAbstractItemView)
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QTableWidget, QVBoxLayout, QSizePolicy, 
+    QMessageBox, QPushButton, QCheckBox, QTreeWidgetItem, QTableWidgetItem, QItemDelegate, 
+    QLineEdit, QPushButton, QWidget, QMenu, QAction, QDialog, QFileDialog, QInputDialog, QAbstractItemView)
 from scipy import sparse, fftpack
 from scipy.optimize import curve_fit
 from scipy.sparse import csr_matrix
@@ -53,28 +54,88 @@ import mytoolbar
 #####################################################################################################################################################
 ### 1. Main window
 #####################################################################################################################################################
+class RamanTreeWidget(QtWidgets.QTreeWidget):
+    """
+    A reimplementation of the PyQt QTreeWidget.
+    """
+    itemDoubleClicked = QtCore.pyqtSignal(str)
+    itemClicked = QtCore.pyqtSignal(object, object)
+    def mouseDoubleClickEvent(self, event):
+        """   
+        Parameters
+        ----------
+        event : QMouseEvent            #The mouse event.
+        """
+        item = self.itemAt(event.pos())
+        if item != None:
+            text = item.text(0)
+            self.itemDoubleClicked.emit(text)
+        else:
+            return
+
+    def mousePressEvent(self, event):
+        """       
+        Parameters
+        ----------
+        event : QMouseEvent           #The mouse event.
+        """
+        item = self.itemAt(event.pos())
+        if item != None:
+            self.setCurrentItem(item)
+        else:
+            pass
+        self.itemClicked.emit(event, item)
+
 class MainWindow(QMainWindow):
     ''' Creating the main window '''
-    updata_menu_signal = QtCore.pyqtSignal()
-
     def __init__(self, parent = None):
         super(MainWindow, self).__init__(parent)
-        self.create_mainwindow()
+        self.windowtypes = ['Spreadsheet', 'Plotwindow', 'Textwindow']
+        self.window = {}                               #dictionary with windows
+        self.windowNames = {}
+        self.windowNumber = {}                         # number of windows (closed ones are included)
+        self.windowWidget = {}
+        for j in self.windowtypes:
+            self.window[j] = {}
+            self.windowNames[j] = []
+            self.windowNumber[j] = 0
+            self.windowWidget[j] = {}
 
-        self.spreadsheet = {}                        # dictionary with spreadsheets
-        self.plotwindow = {}                         # dictionary with plotwindows
-        self.textwindow = {}                         # dictionary with textwindows
-        self.count_ss = 0                            # number of spreadsheet windows (closed ones are included)
-        self.count_p  = 0                            # number of plot windows (closed ones are included)
-        self.count_t  = 0                            # number of text windows (closed ones are included)
         self.FileName = os.path.dirname(__file__)    # path of this python file
         self.pHomeRmn = None                         # path of Raman File
 
+        self.create_mainwindow()
+
     def create_mainwindow(self):
         #Create the main window
-        self.setWindowTitle('PyRaman')          # set window title
-        self.mdi = QtWidgets.QMdiArea()         # widget for multi document interface area
-        self.setCentralWidget(self.mdi)         # set mdi-widget as central widget
+        self.mainWidget = QtWidgets.QSplitter(self)
+        self.setCentralWidget(self.mainWidget)
+        self.mainWidget.setHandleWidth(10)
+        self.gridWidget = QtWidgets.QWidget(self)
+        self.mainFrame = QtWidgets.QGridLayout(self.gridWidget)
+        self.treeWidget = RamanTreeWidget(self)
+        self.treeWidget.itemDoubleClicked.connect(self.activate_window)
+        self.treeWidget.itemClicked.connect(self.tree_window_options)
+        self.treeWidget.setHeaderHidden(True)
+        self.treeWidget.setDragEnabled(True)
+        self.treeWidget.setAcceptDrops(True)
+        self.treeWidget.setDragEnabled(True)
+        self.treeWidget.setDropIndicatorShown(True)
+        self.treeWidget.setDragDropMode(QAbstractItemView.DragDrop)
+        self.treeWidget.setSelectionMode(QAbstractItemView.SingleSelection)
+
+        self.folder1 = QTreeWidgetItem(["String A"])
+        self.folder1.setIcon(0, QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/folder.png"))
+        self.treeWidget.addTopLevelItem(self.folder1)
+        self.treeWidget.expandItem(self.folder1)
+        self.mdiWidget = QtWidgets.QMdiArea(self)                 # widget for multi document interface area
+        self.mainWidget.addWidget(self.treeWidget)
+        self.mainWidget.addWidget(self.mdiWidget)
+        self.mainWidget.addWidget(self.gridWidget)
+        # self.logo = QtWidgets.QLabel(self)
+        # self.logo.setPixmap(QtGui.QPixmap(os.path.dirname(os.path.realpath(__file__)) + "/Icons/PyRaman_logo.png"))
+        
+        self.setWindowTitle('PyRaman')                  # set window title
         self.create_menubar()
 
     def create_menubar(self):
@@ -83,8 +144,8 @@ class MainWindow(QMainWindow):
 
         File = menu.addMenu('File')
         FileNew = File.addMenu('New')
-        newSpreadSheet = FileNew.addAction('Spreadsheet', lambda: self.newSpreadsheet(None, None))
-        newText = FileNew.addAction('Text', lambda: self.newTextWindow('', None))
+        newSpreadSheet = FileNew.addAction('Spreadsheet', lambda: self.newWindow('Spreadsheet', None, None))
+        newText = FileNew.addAction('Text', lambda: self.newWindow('Textwindow','', None))
         FileLoad = File.addAction('Open Project', self.open)        
         FileSaveAs = File.addAction('Save Project As ...', lambda: self.save('Save As'))
         FileSave = File.addAction('Save Project', lambda: self.save('Save'))
@@ -96,7 +157,7 @@ class MainWindow(QMainWindow):
 
     def open(self):
         # Load project in new MainWindow or in existing MW, if empty
-        if self.spreadsheet == {} and self.plotwindow == {}:
+        if self.window['Spreadsheet'] == {} and self.window['Plotwindow'] == {}:
             self.load()
         else:
             new_MainWindow()
@@ -118,17 +179,17 @@ class MainWindow(QMainWindow):
         file.close()  
 
         for key, val in v['Spreadsheet'].items():   # open all saved spreadsheets
-            self.newSpreadsheet(val, key)
+            self.newWindow('Spreadsheet', val, key)
 
         for key, val in v['Plot-Window'].items():   # open all saved plotwindows
             plot_data = val[0]
             fig = val[1]
             pwtitle = key
-            self.newPlot(plot_data, fig, pwtitle)  
+            self.newWindow('Plotwindow', [plot_data, fig], pwtitle)  
 
         if 'Text-Window' in v.keys():
             for key, val in v['Text-Window'].items():
-                self.newTextWindow(val, key)
+                self.newWindow('Textwindow', val, key)
         else:
             pass
 
@@ -147,15 +208,15 @@ class MainWindow(QMainWindow):
             pass
 
         ss = {}                                         # creating new dictionary for spreadsheet containing 
-        for key, val in self.spreadsheet.items():       # only data and name from spreadsheet,
+        for key, val in self.window['Spreadsheet'].items():       # only data and name from spreadsheet,
             ss.update({key : val.d})                    # because spreadsheet cannot saved with pickle
 
         p  = {}                                         # creating new dictionary for plotwindow
-        for key, val in self.plotwindow.items():
+        for key, val in self.window['Plotwindow'].items():
             p.update({key : (val.data, val.fig)})
 
         t  = {}                                         # creating new dictionary for plotwindow
-        for key, val in self.textwindow.items():
+        for key, val in self.window['Textwindow'].items():
             t.update({key : (val.text)})
 
         saveFileContent = {}                            # dictionary containing ss and p 
@@ -186,106 +247,143 @@ class MainWindow(QMainWindow):
         else:
             saveControllParam = 0
             pass
-   
+
+    def activate_window(self, text):
+        if text in self.windowWidget['Spreadsheet']:
+            win = self.windowWidget['Spreadsheet'][text]
+        elif text in self.windowWidget['Plotwindow']:
+            win = self.windowWidget['Plotwindow'][text]
+        elif text in self.windowWidget['Textwindow']:
+            win = self.windowWidget['Textwindow'][text]
+        else:
+            win = None
+        self.mdiWidget.setActiveSubWindow(win)
+
+    def tree_window_options(self, event, item):
+        if item != None:
+            if event.button() == QtCore.Qt.RightButton:
+                text = item.text(0)
+                TreeItemMenu = QMenu()
+                ActRename = TreeItemMenu.addAction('Rename')
+                ac = TreeItemMenu.exec_(self.treeWidget.mapToGlobal(event.pos()))
+                # Rename
+                if ac == ActRename:
+                    self.treeWidget.editItem(item)
+                    self.treeWidget.itemChanged.connect(lambda item, column: self.rename_window(item, column, text))
+        else:
+            if event.button() == QtCore.Qt.RightButton:
+                TreeItemMenu = QMenu()
+                MenuNew = TreeItemMenu.addMenu('&New')
+                ActNewFolder = MenuNew.addAction('Folder')
+                ActNewSpreadsheet = MenuNew.addAction('Spreadsheet')
+                ActNewText = MenuNew.addAction('Text window')
+                ac = TreeItemMenu.exec_(self.treeWidget.mapToGlobal(event.pos()))
+                # Rename
+                if ac == ActNewFolder:
+                    self.new_Folder()
+                elif ac == ActNewSpreadsheet:
+                    self.newWindow('Spreadsheet', None, None)
+                elif ac == ActNewText:
+                    self.newWindow('Textwindow', '', None)
+                else:
+                    pass
+
+    def rename_window(self, item, column, old_text):
+        new_text = item.text(column)
+
+        if old_text in self.windowWidget['Spreadsheet']:
+            win = self.windowWidget['Spreadsheet'][old_text]
+            windowtype = 'Spreadsheet'
+        elif old_text in self.windowWidget['Plotwindow']:
+            win = self.windowWidget['Plotwindow'][old_text]
+            windowtype = 'Plotwindow'
+        elif old_text in self.windowWidget['Textwindow']:
+            win = self.windowWidget['Textwindow'][old_text]
+            windowtype = 'Textwindow'
+        else:
+            win = None
+
+        if win != None:
+            win.setWindowTitle(new_text)
+            self.window[windowtype][new_text] = self.window[windowtype].pop(old_text)
+            self.windowWidget[windowtype][new_text] = self.windowWidget[windowtype].pop(old_text)
+            index = self.windowNames[windowtype].index(old_text)
+            self.windowNames[windowtype][index] = new_text
+            self.update_spreadsheet_menubar()
+        else:
+            return
+                  
     def rearange(self, q):
         # rearange open windows
         if q.text() == "cascade":
-            self.mdi.cascadeSubWindows()
+            self.mdiWidget.cascadeSubWindows()
 
         if q.text() == "Tiled":
-            self.mdi.tileSubWindows()
+            self.mdiWidget.tileSubWindows()
 
-    def newTextWindow(self, txt, title):
-        self.count_t = self.count_t+1
-        a = self.count_t -1
-        txttitle = title
-        if txttitle == None:
-            txttitle = 'Text-Window ' + str(self.count_t)
-
-        self.textwindow[txttitle] = TextWindow(self, txt)
-        newTxt = self.textwindow[txttitle]
-        newTxt.setWindowTitle(txttitle)
-        self.mdi.addSubWindow(newTxt)
-        newTxt.show()
-        newTxt.close_txt_signal.connect(self.close_text_window)
-
-    def newSpreadsheet(self, ssd, title):
-        ''' open new spreadsheet window 
-        parameterr:
-        ssd : data opened in spreadsheet
-        title: window-title'''
-
-        self.count_ss = self.count_ss+1
-        a = self.count_ss -1
-        sstitle = title
-
-        if sstitle == None:
-            sstitle = 'Spreadsheet-Window ' + str(self.count_ss)
+    def newWindow(self, windowtype, windowcontent, title):
+        self.windowNumber[windowtype] += 1
+        if title == None:
+            title = windowtype + ' ' + str(self.windowNumber[windowtype])
         else:
             pass
 
-        if ssd == None:
-            ssd = {'data0' : (np.zeros(1000),'A', 'X', None), 'data1' : (np.zeros(1000),'B', 'Y', None)}  #Spreadsheet- Data (for start only zeros)
+        if windowtype == 'Spreadsheet':
+            ssd = windowcontent
+            if ssd == None:
+                ssd = {'data0' : (np.zeros(1000),'A', 'X', None), 'data1' : (np.zeros(1000),'B', 'Y', None)}  #Spreadsheet- Data (for start only zeros)
+            else:
+                pass
+            self.window[windowtype][title] = SpreadSheet(self, ssd)
+            newSS = self.window[windowtype][title]
+            newSS.new_pw_signal.connect(lambda: self.newWindow('Plotwindow', [newSS.plot_data, None], None))
+            newSS.add_pw_signal.connect(lambda pw_name: self.add_Plot(pw_name, newSS.plot_data))
+            icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/table.png")
+        elif windowtype == 'Plotwindow':
+            plotData, fig = windowcontent
+            self.window[windowtype][title] = PlotWindow(plotData, fig, self)
+            self.update_spreadsheet_menubar()
+            icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/PlotWindow.png")
+        elif windowtype == 'Textwindow':
+            txt = windowcontent
+            self.window[windowtype][title] = TextWindow(self, txt)
+            newTxt = self.window[windowtype][title]
+            icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/TextWindow.png")
         else:
-            pass
+            return
 
-        self.spreadsheet[sstitle] = SpreadSheet(self, ssd)
-        newSS = self.spreadsheet[sstitle]
-        newSS.setWindowTitle(sstitle)
-        self.mdi.addSubWindow(newSS)
-        newSS.show()
+        self.windowWidget[windowtype][title] = self.mdiWidget.addSubWindow(self.window[windowtype][title])
+        self.window[windowtype][title].setWindowTitle(title)
+        self.window[windowtype][title].show()
+        self.windowNames[windowtype].append(title)
+        item = QtWidgets.QTreeWidgetItem([title])
+        item.setIcon(0, icon)
+        item.setFlags(item.flags() | Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable | 
+                                     Qt.ItemIsDragEnabled | Qt.ItemIsDropEnabled)
+        self.folder1.addChild(item)
+        #self.treeWidget.addTopLevelItem(item)
+        self.window[windowtype][title].closeWindowSignal.connect(self.close_window)
 
-        newSS.new_pw_signal.connect(lambda: self.newPlot(newSS.plot_data, None, None))
-        newSS.add_pw_signal.connect(lambda pw_name: self.addPlot(pw_name, newSS.plot_data))
-        newSS.close_ss_signal.connect(self.close_spreadsheet_window)
+    def new_Folder(self):
+        print('Wird noch eingerichtet')
 
-    def newPlot(self, plotData, fig, title):
-        ''' Open new Plotwindow
-        parameter:
-        plotData: data, plotted in the new window
-        fig: matplotlib.figure if already existing, otherwise None
-        title: title of plotwindow
-        '''
-        b = self.count_p
-        self.count_p = self.count_p + 1
-
-        pwtitle = title
-        if pwtitle == None:
-            pwtitle = 'Plot-Window '+ str(self.count_p)
-        else:
-            pass
-        self.plotwindow[pwtitle] = PlotWindow(plotData, fig, self)
-        self.plotwindow[pwtitle].setWindowTitle(pwtitle)
-        self.mdi.addSubWindow(self.plotwindow[pwtitle])
-        self.plotwindow[pwtitle].show()
-
-        self.updata_menu_signal.emit()
-        self.plotwindow[pwtitle].change_window_title_signal.connect(self.change_plotwindow_title)
-        self.plotwindow[pwtitle].close_p_signal.connect(self.close_plot_window)
-
-    def addPlot(self, pw_name, plotData):
+    def add_Plot(self, pw_name, plotData):
         # add spectrum to existing plotwindow
         for j in plotData:
-            j[4] = self.plotwindow[pw_name].Spektrum[0].get_linestyle()
-        self.plotwindow[pw_name].add_plot(plotData)
+            j[4] = self.window['Plotwindow'][pw_name].Spektrum[0].get_linestyle()
+        self.window['Plotwindow'][pw_name].add_plot(plotData)
 
-    def close_plot_window(self, pwtitle):
-        # delete plotwindow and update menubar from spreadsheets after closing a plotwindow
-        del self.plotwindow[pwtitle]
-        self.updata_menu_signal.emit()  
+    def close_window(self, windowtype, title):
+        del self.window[windowtype][title]
+        del self.windowWidget[windowtype][title] 
+        self.windowNames[windowtype].remove(title)
+        items = self.treeWidget.findItems(title, Qt.MatchFixedString | Qt.MatchRecursive)
+        self.folder1.removeChild(items[0])
+        self.update_spreadsheet_menubar()
 
-    def close_spreadsheet_window(self, sstitle):
-        # delete spreadsheet window
-        del self.spreadsheet[sstitle]
-
-    def close_text_window(self, txttitle):
-        # delete spreadsheet window
-        del self.textwindow[txttitle]
-
-    def change_plotwindow_title(self, oldtitle, newtitle):
-        # update menubar from spreadsheets after changing name of a plotwindow
-        self.plotwindow[newtitle] = self.plotwindow.pop(oldtitle)
-        self.updata_menu_signal.emit()
+    def update_spreadsheet_menubar(self):
+        for j in self.window['Spreadsheet'].values():
+            j.update_menubar()
 
     def closeEvent(self, event):
         # close mainwindow
@@ -305,7 +403,7 @@ class MainWindow(QMainWindow):
 #####################################################################################################################################################
 
 class TextWindow(QMainWindow):
-    close_txt_signal = QtCore.pyqtSignal(str)
+    closeWindowSignal = QtCore.pyqtSignal(str, str)
     def __init__(self, mainwindow, text, parent = None):
         super(TextWindow, self).__init__(parent)
         self.text = text
@@ -331,23 +429,12 @@ class TextWindow(QMainWindow):
         fileMenu.addAction('Load Text', self.load_file)
 
         ### 2. Menüpunkt: Edit
-        editMenu = self.menubar.addMenu('&Edit')
-        editMenu.addAction('Change Window Title', self.change_window_title)        
+        editMenu = self.menubar.addMenu('&Edit')       
 
         self.show()
 
     def text_change(self):
         self.text = self.textfield.toPlainText()        
-
-    def change_window_title(self):
-        # Change title of the text window
-        oldTitle = self.windowTitle()
-        newTitle, ok = QInputDialog.getText(self, 'Text Input Dialog', 'Enter the new Window Title:')
-        if ok:
-            self.setWindowTitle(newTitle)
-            self.mw.textwindow[newTitle] = self.mw.textwindow.pop(oldTitle)
-        else:
-            return
 
     def file_save(self):
         fileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Load', filter = 'All Files (*);; Txt Files (*.txt)')
@@ -384,7 +471,7 @@ class TextWindow(QMainWindow):
         close = close.exec()
 
         if close == QMessageBox.Yes:
-            self.close_txt_signal.emit(self.windowTitle())
+            self.closeWindowSignal.emit('Textwindow', self.windowTitle())
             event.accept()
         else:
             event.ignore()
@@ -487,7 +574,7 @@ class SpreadSheet(QMainWindow):
 
     new_pw_signal   = QtCore.pyqtSignal()
     add_pw_signal   = QtCore.pyqtSignal(str)
-    close_ss_signal = QtCore.pyqtSignal(str)
+    closeWindowSignal = QtCore.pyqtSignal(str, str)
 
     def __init__(self, mainwindow, data, parent = None):
         super(SpreadSheet, self).__init__(parent)
@@ -502,8 +589,6 @@ class SpreadSheet(QMainWindow):
         self.create_menubar()
         self.create_col_header()
         self.create_row_header()
-
-        self.mw.updata_menu_signal.connect(self.update_menubar)
 
     def create_tablewidgets(self):        
         self.table = QTableWidget(self.rows, self.cols, self)
@@ -529,7 +614,6 @@ class SpreadSheet(QMainWindow):
 
         ### 2. Menüpunkt: Edit
         editMenu = self.menubar.addMenu('&Edit')
-        editMenu.addAction('Change Window Title', self.change_window_title)
         editMenu.addAction('New Column', self.new_col)
 
         ### 3. Menüpunkt: Plot
@@ -538,7 +622,7 @@ class SpreadSheet(QMainWindow):
         plotNew.addAction('Line Plot', self.get_plot_data)
         plotNew.addAction('Dot Plot', self.get_plot_data)
         plotAdd = plotMenu.addMenu('&Add to')
-        for j in self.mw.plotwindow.keys():
+        for j in self.mw.window['Plotwindow'].keys():
             plotAdd.addAction(j, self.get_plot_data)
 
         self.show()
@@ -782,16 +866,6 @@ class SpreadSheet(QMainWindow):
 
         self.pHomeTxt = FileName[0]
 
-    def change_window_title(self):
-        # Change title of the spreadsheet window
-        oldTitle = self.windowTitle()
-        newTitle, ok = QInputDialog.getText(self, 'Text Input Dialog', 'Enter the new Window Title:')
-        if ok:
-            self.setWindowTitle(newTitle)
-            self.mw.spreadsheet[newTitle] = self.mw.spreadsheet.pop(oldTitle)
-        else:
-            return
-
     def new_col(self):
         self.cols = self.cols + 1
         self.table.setColumnCount(self.cols)
@@ -861,7 +935,7 @@ class SpreadSheet(QMainWindow):
         close = close.exec()
 
         if close == QMessageBox.Yes:
-            self.close_ss_signal.emit(self.windowTitle())
+            self.closeWindowSignal.emit('Spreadsheet', self.windowTitle())
             event.accept()
         else:
             event.ignore()
@@ -1260,8 +1334,7 @@ class MyCustomToolbar(NavigationToolbar2QT):
         Layer_Legend.exec_()
 
 class PlotWindow(QMainWindow):
-    close_p_signal = QtCore.pyqtSignal(str)                     # Signal in case plotwindow is closed
-    change_window_title_signal = QtCore.pyqtSignal(str, str)    # Signal in case plotwindow title is changed
+    closeWindowSignal = QtCore.pyqtSignal(str, str)                     # Signal in case plotwindow is closed
     def __init__(self, plot_data, fig, parent):
         super(PlotWindow, self).__init__(parent)
         self.fig = fig
@@ -1419,7 +1492,6 @@ class PlotWindow(QMainWindow):
         ### 1. Menüpunkt: File ###
         fileMenu = menubar.addMenu('&File')
         fileMenu.addAction('Save to File', self.menu_save_to_file)
-        fileMenu.addAction('Change Name of Window', self.change_window_title)
 
         ### 2. Menüpunkt: Edit  ###
         editMenu = menubar.addMenu('&Edit')
@@ -1552,16 +1624,6 @@ class PlotWindow(QMainWindow):
             file = open(SaveFileName, 'w+')
             file.write(data)
             file.close()
-
-    def change_window_title(self):
-        # Change title of the plot window
-        oldTitle = self.windowTitle()
-        newTitle, ok = QInputDialog.getText(self, 'Text Input Dialog', 'Enter the new Window Title:')
-        if ok:
-            self.setWindowTitle(newTitle)
-            self.change_window_title_signal.emit(oldTitle, newTitle)
-        else:
-            return
 
     def delete_pixel(self):
         self.SelectDataset()
@@ -2286,7 +2348,7 @@ class PlotWindow(QMainWindow):
         close = close.exec()
 
         if close == QMessageBox.Yes:
-            self.close_p_signal.emit(self.windowTitle())
+            self.closeWindowSignal.emit('Plotwindow', self.windowTitle())
             event.accept()
         else:
             event.ignore()
