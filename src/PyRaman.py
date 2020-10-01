@@ -1,8 +1,8 @@
 # Autor: Simon Brehm
 import math
+import matplotlib
 import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
-import matplotlib.widgets as mwidgets
 import matplotlib.backends.qt_editor._formlayout as formlayout
 import numpy as np
 import os
@@ -98,11 +98,16 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
         # keep the default behaviour
         super(RamanTreeWidget, self).mousePressEvent(event)
 
+    def startDrag(self, action):
+        self.dragged_item = self.selectedItems()[0]
+
+        # keep the default behaviour
+        super(RamanTreeWidget, self).startDrag(action)
+
     def dropEvent(self, event):
         itemAtDropLocation = self.itemAt(event.pos())
-        droppedItem = event.source()
-        if itemAtDropLocation != None:
-            self.itemDropped.emit(droppedItem, itemAtDropLocation)
+        if itemAtDropLocation != None and itemAtDropLocation.type() == 0:
+            self.itemDropped.emit(self.dragged_item, itemAtDropLocation)
         else:
             return
 
@@ -136,12 +141,13 @@ class MainWindow(QMainWindow):
         self.create_mainwindow()
 
     def create_mainwindow(self):
-        #Create the main window
+        """Create the main window"""
         self.setWindowIcon(self.PyramanIcon)
         self.setWindowTitle('PyRaman')                  # set window title
 
         self.mainWidget = QtWidgets.QSplitter(self)               #  lets the user control the size of child widgets by dragging the boundary between them
         self.mainWidget.setHandleWidth(10)
+
 
         self.tabWidget = QtWidgets.QTabWidget()
         self.treeWidget = RamanTreeWidget(self)                    # Qtreewidget, to controll open windows
@@ -275,11 +281,10 @@ class MainWindow(QMainWindow):
             self.tabWidget.setCurrentWidget(self.folder[text][1])           
         else:
             windowtype = self.windowtypes[winTypInt]
-
             win = self.windowWidget[windowtype][text]
-            currentFolder = item.parent()
-            self.tabWidget.setCurrentWidget(self.folder[currentFolder.text(0)][1])
-            self.folder[currentFolder.text(0)][1].setActiveSubWindow(win)
+            currentFolder = item.parent().text(0)
+            self.tabWidget.setCurrentWidget(self.folder[currentFolder][1])
+            self.folder[currentFolder][1].setActiveSubWindow(win)
             win.showMaximized()
 
     def tree_window_options(self, event, item):
@@ -312,10 +317,27 @@ class MainWindow(QMainWindow):
                     pass
 
     def change_folder(self, droppedItem, itemAtDropLocation):
+        foldername = itemAtDropLocation.text(0)
+        windowtyp = droppedItem.type()
+        windowname = droppedItem.text(0)
+        previous_folder = droppedItem.parent().text(0)
         if itemAtDropLocation.type() == 0:            # dropevent in folder
-            print('Hallo')
+            self.tabWidget.setCurrentWidget(self.folder[previous_folder][1])
+            wind = self.window[self.windowtypes[windowtyp]][windowname]
+            mdi = self.folder[foldername][1]
+            newWindow = mdi.addSubWindow(wind)
+            previous_mdi = self.folder[previous_folder][1]
+            previous_mdi.removeSubWindow(wind)
+            self.windowWidget[self.windowtypes[windowtyp]][windowname] = newWindow
+            self.delete_empty_subwindows(previous_mdi)
         else:
             return
+
+    def delete_empty_subwindows(self, mdi):
+        sub_win_list = mdi.subWindowList()
+        for j in sub_win_list:
+            if j.widget() == None:
+                mdi.removeSubWindow(j)
 
     def rename_window(self, item, column, old_text):
         new_text = item.text(column)
@@ -375,8 +397,6 @@ class MainWindow(QMainWindow):
             icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/TextWindow.png")
         else:
             return
-
-
 
         self.windowWidget[windowtype][title] = self.tabWidget.currentWidget().addSubWindow(self.window[windowtype][title])
         self.window[windowtype][title].setWindowTitle(title)
@@ -1439,7 +1459,13 @@ class PlotWindow(QMainWindow):
         for j in new_data:
             self.data.append(j)
             if isinstance(j[5], (np.ndarray, np.generic)):
-                self.Spektrum.append(self.ax.errorbar(j[0], j[1], label = j[2], fmt = j[4], yerr = j[5], picker = 5)[0])
+                (spect, capline, barlinecol) = self.ax.errorbar(j[0], j[1], fmt = j[4],
+                                                               yerr = j[5], picker = 5, capsize = 3)
+                self.Spektrum.append(spect)
+                spect.set_label(j[2])
+                capline[0].set_label('_Hidden capline bottom ' + j[2])
+                capline[1].set_label('_Hidden capline top ' + j[2])
+                barlinecol[0].set_label('_Hidden barlinecol ' + j[2])
             else:
                 self.Spektrum.append(self.ax.plot(j[0], j[1], j[4], label = j[2], picker = 5)[0])
         handles, labels = self.ax.get_legend_handles_labels()
@@ -1873,7 +1899,7 @@ class PlotWindow(QMainWindow):
         ys = self.selectedData[0][1]
         x,y = self.SelectArea(xs, ys)
         self.data.append([x, y, self.selectedData[0][2]+'_cut', self.selectedData[0][3]])
-        self.Spektrum.append(self.ax.plot(x, y, label = self.selectedData[0][2]+'_cut', picker=5))
+        self.Spektrum.append(self.ax.plot(x, y, label = self.selectedData[0][2]+'_cut', picker = 5))
 
     def SelectArea(self, x, y):
         line1, = self.ax.plot([min(x), min(x)], [min(y), max(y)], 'r-', lw=1)
@@ -2363,7 +2389,7 @@ class PlotWindow(QMainWindow):
         except RuntimeError:
             return
 
-        line, = self.ax.plot([pts[0][0], pts[1][0]], [pts[0][1], pts[1][1]], 'black', lw=2, picker=5)
+        line, = self.ax.plot([pts[0][0], pts[1][0]], [pts[0][1], pts[1][1]], 'black', lw=2, picker = 5)
         line.set_visible(False)
         self.drawedLine = LineDrawer(line)
         canvas = self.Canvas
@@ -2375,7 +2401,7 @@ class PlotWindow(QMainWindow):
         except RuntimeError:
             return
 
-        textspot, = self.ax.plot([pt[0][0]], [pt[0][1]], 'black', lw=2, picker=5)
+        textspot, = self.ax.plot([pt[0][0]], [pt[0][1]], 'black', lw=2, picker = 5)
         textspot.set_visible(False)
         self.InsertedText.append(InsertText(textspot))
         self.fig.canvas.draw()
