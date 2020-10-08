@@ -15,6 +15,7 @@ import scipy
 import sympy as syp
 import sys
 import time
+from datetime import datetime
 
 from collections import ChainMap
 from matplotlib import *
@@ -114,6 +115,10 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
         # keep the default behaviour
         super(RamanTreeWidget, self).dropEvent(event)
 
+    #def editItem(self, item):
+    #    # keep the default behaviour
+    #    super(RamanTreeWidget, self).editItem(item)
+
 class MainWindow(QMainWindow):
     '''
     Creating the main window
@@ -123,20 +128,15 @@ class MainWindow(QMainWindow):
         self.windowtypes = ['Folder', 'Spreadsheet', 'Plotwindow', 'Textwindow']
         self.window = {}                               # dictionary with windows
         self.windowNames = {}
-        self.windowNumber = {}                         # number of windows (closed ones are included)
         self.windowWidget = {}
         for j in self.windowtypes:
             self.window[j] = {}
             self.windowNames[j] = []
-            self.windowNumber[j] = 0
             self.windowWidget[j] = {}
-
         self.folder = {}                              # key = foldername, value = [Qtreewidgetitem, QmdiArea]
-        self.folderNumber = 0
-
-        self.FileName = os.path.dirname(__file__)    # path of this python file
+        self.FileName = os.path.dirname(__file__)     # path of this python file
         self.PyramanIcon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/PyRaman_logo.png")
-        self.pHomeRmn = None                         # path of Raman File
+        self.pHomeRmn = None                         # path of Raman File associated to the open project
 
         self.create_mainwindow()
 
@@ -145,31 +145,33 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(self.PyramanIcon)
         self.setWindowTitle('PyRaman')                  # set window title
 
-        self.mainWidget = QtWidgets.QSplitter(self)               #  lets the user control the size of child widgets by dragging the boundary between them
+        self.mainWidget = QtWidgets.QSplitter(self)     # lets the user control the size of child widgets by dragging the boundary between them
         self.mainWidget.setHandleWidth(10)
-
 
         self.tabWidget = QtWidgets.QTabWidget()
         self.treeWidget = RamanTreeWidget(self)                    # Qtreewidget, to controll open windows
         self.treeWidget.itemDoubleClicked.connect(self.activate_window)
         self.treeWidget.itemClicked.connect(self.tree_window_options)
         self.treeWidget.itemDropped.connect(self.change_folder)
-        self.new_Folder()
+        self.new_Folder(None)
 
         self.mainWidget.addWidget(self.treeWidget)
         self.mainWidget.addWidget(self.tabWidget)
         self.setCentralWidget(self.mainWidget)
+
+        self.statusBar = QtWidgets.QStatusBar()
+        self.setStatusBar(self.statusBar)
+        self.show_statusbar_message('Welcome to PyRaman', 3000)
 
         self.create_menubar()
 
     def create_menubar(self):
         # create a menubar
         menu = self.menuBar()
-
         File = menu.addMenu('File')
         FileNew = File.addMenu('New')
-        newSpreadSheet = FileNew.addAction('Spreadsheet', lambda: self.newWindow('Spreadsheet', None, None))
-        newText = FileNew.addAction('Textwindow', lambda: self.newWindow('Textwindow','', None))
+        newSpreadSheet = FileNew.addAction('Spreadsheet', lambda: self.newWindow(None, 'Spreadsheet', None, None))
+        newText = FileNew.addAction('Textwindow', lambda: self.newWindow(None, 'Textwindow','', None))
         newFolder = FileNew.addAction('Folder', self.new_Folder)
         FileLoad = File.addAction('Open Project', self.open)        
         FileSaveAs = File.addAction('Save Project As ...', lambda: self.save('Save As'))
@@ -180,6 +182,9 @@ class MainWindow(QMainWindow):
         medit.addAction('Tiled')
         medit.triggered[QAction].connect(self.rearange)
 
+    def show_statusbar_message(self, message, time):
+        self.statusBar.showMessage(message, time)
+
     def open(self):
         # Load project in new MainWindow or in existing MW, if empty
         if self.window['Spreadsheet'] == {} and self.window['Plotwindow'] == {}:
@@ -189,7 +194,6 @@ class MainWindow(QMainWindow):
 
     def load(self):
         # Load project from rmn file with pickle
-
         fileName = QtWidgets.QFileDialog.getOpenFileName(self, 'Load',       # get file name
                     self.pHomeRmn, 'All Files (*);;Raman Files (*.rmn)')
 
@@ -199,24 +203,35 @@ class MainWindow(QMainWindow):
             self.close()
             return
 
-        file = open(self.pHomeRmn, 'rb')            # open file and save content in variable 'v' with pickle 
+        date_of_file = time.strftime('%Y-%m-%d', time.localtime(os.path.getmtime(self.pHomeRmn)))
+        datetime_of_file = datetime.strptime(date_of_file, '%Y-%m-%d')
+
+        file = open(self.pHomeRmn, 'rb')            # open file and save content in variable 'v' with pickle
         v = pickle.load(file)         
-        file.close()  
+        file.close()
 
-        for key, val in v['Spreadsheet'].items():   # open all saved spreadsheets
-            self.newWindow('Spreadsheet', val, key)
+        datetime_of_save_change = datetime(2020, 10, 2)
+        if datetime_of_file < datetime_of_save_change:
+            for key, val in v['Spreadsheet'].items():   # open all saved spreadsheets
+                self.newWindow(None, 'Spreadsheet', val, key)
 
-        for key, val in v['Plot-Window'].items():   # open all saved plotwindows
-            plot_data = val[0]
-            fig = val[1]
-            pwtitle = key
-            self.newWindow('Plotwindow', [plot_data, fig], pwtitle)  
+            for key, val in v['Plot-Window'].items():   # open all saved plotwindows
+                plot_data = val[0]
+                fig = val[1]
+                pwtitle = key
+                self.newWindow(None, 'Plotwindow', [plot_data, fig], pwtitle)
 
-        if 'Text-Window' in v.keys():
-            for key, val in v['Text-Window'].items():
-                self.newWindow('Textwindow', val, key)
+            if 'Text-Window' in v.keys():
+                for key, val in v['Text-Window'].items():
+                    self.newWindow(None, 'Textwindow', val, key)
         else:
-            pass
+            self.treeWidget.clear()
+            self.tabWidget.clear()
+            self.folder = {}
+            for foldername, foldercontent  in v.items():
+                self.new_Folder(foldername)
+                for key, val in foldercontent.items():
+                    self.newWindow(foldername, val[0], val[1], key)
 
     def save(self, q):
         # function to save complete project in rmn-File with pickle
@@ -232,46 +247,51 @@ class MainWindow(QMainWindow):
         else:
             pass
 
-        ss = {}                                         # creating new dictionary for spreadsheet containing 
-        for key, val in self.window['Spreadsheet'].items():       # only data and name from spreadsheet,
-            ss.update({key : val.d})                    # because spreadsheet cannot saved with pickle
-
-        p  = {}                                         # creating new dictionary for plotwindow
-        for key, val in self.window['Plotwindow'].items():
-            p.update({key : (val.data, val.fig)})
-
-        t  = {}                                         # creating new dictionary for plotwindow
-        for key, val in self.window['Textwindow'].items():
-            t.update({key : (val.text)})
-
-        saveFileContent = {}                            # dictionary containing ss and p 
-        saveFileContent.update({'Spreadsheet' : ss})
-        saveFileContent.update({'Plot-Window' : p})
-        saveFileContent.update({'Text-Window' : t})
+        save_dict = {}
+        for key, val in self.folder.items():
+            save_dict[key] = {}
+            for j in range(val[0].childCount()):
+                win_name = val[0].child(j).text(0)
+                win_type = self.windowtypes[val[0].child(j).type()]
+                window = self.window[win_type][win_name]
+                if win_type == 'Spreadsheet':
+                    save_dict[key][win_name] = [win_type, window.d]
+                elif win_type == 'Plotwindow':
+                    save_dict[key][win_name] = [win_type, [window.data, window.fig]]
+                elif win_type == 'Textwindow':
+                    save_dict[key][win_name] = [win_type, window.text]
+                else:
+                    pass
 
         # Test if file can be saved
         saveControllParam = 0
         file = open(os.path.splitext(self.pHomeRmn)[0] + '_test' + 
                                     os.path.splitext(self.pHomeRmn)[1], 'wb')
         try: 
-            pickle.dump(saveFileContent, file)
+            pickle.dump(save_dict, file)
         except TypeError as e:
-            print('TypeError \n Someting went wrong. The file is not saved \n' + str(e)) 
+            self.show_statusbar_message('TypeError \n Someting went wrong. The file is not saved \n' + str(e), 4000)
             saveControllParam = 1      
         file.close() 
 
         if saveControllParam == 0:
             file = open(self.pHomeRmn,'wb')
             try: 
-                pickle.dump(saveFileContent, file)
+                pickle.dump(save_dict, file)
             except TypeError as e:
-                print('TypeError \n Someting went wrong. The file is not saved \n' + str(e))       
+                self.show_statusbar_message('TypeError \n Someting went wrong. The file is not saved \n' + str(e), 4000)
             file.close()
             os.remove(os.path.splitext(self.pHomeRmn)[0] + '_test' + 
                                     os.path.splitext(self.pHomeRmn)[1]) 
         else:
             saveControllParam = 0
             pass
+
+    def create_sidetree_structure(self, structure):
+        self.treeWidget.clear()
+        for key, val in structure.items():
+            self.new_Folder(key)
+
 
     def activate_window(self, item):
         text = item.text(0)
@@ -308,11 +328,11 @@ class MainWindow(QMainWindow):
                 ac = TreeItemMenu.exec_(self.treeWidget.mapToGlobal(event.pos()))
                 # Rename
                 if ac == ActNewFolder:
-                    self.new_Folder()
+                    self.new_Folder(None)
                 elif ac == ActNewSpreadsheet:
-                    self.newWindow('Spreadsheet', None, None)
+                    self.newWindow(None, 'Spreadsheet', None, None)
                 elif ac == ActNewText:
-                    self.newWindow('Textwindow', '', None)
+                    self.newWindow(None, 'Textwindow', '', None)
                 else:
                     pass
 
@@ -325,10 +345,10 @@ class MainWindow(QMainWindow):
             self.tabWidget.setCurrentWidget(self.folder[previous_folder][1])
             wind = self.window[self.windowtypes[windowtyp]][windowname]
             mdi = self.folder[foldername][1]
-            newWindow = mdi.addSubWindow(wind)
+            new_Window = mdi.addSubWindow(wind)
             previous_mdi = self.folder[previous_folder][1]
             previous_mdi.removeSubWindow(wind)
-            self.windowWidget[self.windowtypes[windowtyp]][windowname] = newWindow
+            self.windowWidget[self.windowtypes[windowtyp]][windowname] = new_Window
             self.delete_empty_subwindows(previous_mdi)
         else:
             return
@@ -343,19 +363,25 @@ class MainWindow(QMainWindow):
         new_text = item.text(column)
         windowtype = self.windowtypes[item.type()]
 
-        if windowtype == 'Folder':
-            self.folder[new_text] = self.folder.pop(old_text)
-            index = self.tabWidget.indexOf(self.folder[new_text][1])
-            self.tabWidget.setTabText(index, new_text)
+        if new_text in self.windowNames[windowtype]:                # in case name is already assigned
+            self.treeWidget.itemChanged.disconnect()
+            item.setText(0, old_text)
+            self.show_statusbar_message('Name is already assigned', 4000)
         else:
-            win = self.windowWidget[windowtype][old_text]
-            win.setWindowTitle(new_text)
-            self.window[windowtype][new_text] = self.window[windowtype].pop(old_text)
-            self.windowWidget[windowtype][new_text] = self.windowWidget[windowtype].pop(old_text)
-            index = self.windowNames[windowtype].index(old_text)
+            if windowtype == 'Folder':
+                self.folder[new_text] = self.folder.pop(old_text)
+                index = self.tabWidget.indexOf(self.folder[new_text][1])
+                self.tabWidget.setTabText(index, new_text)
+            else:
+                win = self.windowWidget[windowtype][old_text]
+                win.setWindowTitle(new_text)
+                self.window[windowtype][new_text] = self.window[windowtype].pop(old_text)
+                self.windowWidget[windowtype][new_text] = self.windowWidget[windowtype].pop(old_text)
+                index = self.windowNames[windowtype].index(old_text)
+                self.update_spreadsheet_menubar()
             self.windowNames[windowtype][index] = new_text
-            self.update_spreadsheet_menubar()
-                  
+            self.treeWidget.itemChanged.disconnect()
+
     def rearange(self, q):
         #rearange open windows
         if q.text() == "Cascade":
@@ -364,23 +390,33 @@ class MainWindow(QMainWindow):
         if q.text() == "Tiled":
             self.tabWidget.currentWidget().tileSubWindows()
 
-    def newWindow(self, windowtype, windowcontent, title):
-        self.windowNumber[windowtype] += 1
+    def newWindow(self, foldername, windowtype, windowcontent, title):
+        if foldername == None:
+            foldername = self.tabWidget.tabText(self.tabWidget.currentIndex())
+        else:
+            foldername = foldername
+
         if title == None:
-            title = windowtype + ' ' + str(self.windowNumber[windowtype])
+            i = 1
+            while i <= 100:
+                title = windowtype + ' ' + str(i)
+                if title in self.windowNames[windowtype]:
+                    i +=1
+                else:
+                    break
         else:
             pass
 
         if windowtype == 'Spreadsheet':
             ssd = windowcontent
             if ssd == None:
-                ssd = {'data0' : (np.zeros(1000),'A', 'X', None), 'data1' : (np.zeros(1000),'B', 'Y', None)}  #Spreadsheet- Data (for start only zeros)
+                ssd = {'data0' : (np.full(9, np.nan),'A', 'X', None), 'data1' : (np.full(9, np.nan),'B', 'Y', None)}  #Spreadsheet- Data (for start only zeros)
             else:
                 pass
             windowtypeInt = 1
             self.window[windowtype][title] = SpreadSheet(self, ssd)
             newSS = self.window[windowtype][title]
-            newSS.new_pw_signal.connect(lambda: self.newWindow('Plotwindow', [newSS.plot_data, None], None))
+            newSS.new_pw_signal.connect(lambda: self.newWindow(None, 'Plotwindow', [newSS.plot_data, None], None))
             newSS.add_pw_signal.connect(lambda pw_name: self.add_Plot(pw_name, newSS.plot_data))
             icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/table.png")
         elif windowtype == 'Plotwindow':
@@ -398,7 +434,7 @@ class MainWindow(QMainWindow):
         else:
             return
 
-        self.windowWidget[windowtype][title] = self.tabWidget.currentWidget().addSubWindow(self.window[windowtype][title])
+        self.windowWidget[windowtype][title] = self.folder[foldername][1].addSubWindow(self.window[windowtype][title])
         self.window[windowtype][title].setWindowTitle(title)
         self.window[windowtype][title].show()
         self.windowNames[windowtype].append(title)
@@ -408,23 +444,31 @@ class MainWindow(QMainWindow):
         item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable | Qt.ItemIsDragEnabled |
                                          Qt.ItemIsUserCheckable | Qt.ItemNeverHasChildren)
 
-        self.folder[self.tabWidget.tabText(self.tabWidget.currentIndex())][0].addChild(item)
+        self.folder[foldername][0].addChild(item)
         self.window[windowtype][title].closeWindowSignal.connect(self.close_window)
 
-    def new_Folder(self):
-        self.folderNumber += 1
-        folderName = 'Folder ' + str(self.folderNumber)
+    def new_Folder(self, title):
+        if title == None:
+            i = 1
+            while i <= 100:
+                title = 'Folder ' + str(i)
+                if title in self.folder.keys():
+                    i +=1
+                else:
+                    break
+        else:
+            pass
 
-        self.folder[folderName] = []                    # first entry contains QTreeWidgetItem (Folder), second contains QMdiArea
-        self.folder[folderName].append(QTreeWidgetItem([folderName]))
-        self.folder[folderName][0].setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable | 
+        self.folder[title] = []                    # first entry contains QTreeWidgetItem (Folder), second contains QMdiArea
+        self.folder[title].append(QTreeWidgetItem([title]))
+        self.folder[title][0].setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable |
                                      Qt.ItemIsDropEnabled)
-        self.folder[folderName][0].setIcon(0, QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/folder.png"))
-        self.treeWidget.addTopLevelItem(self.folder[folderName][0])
-        self.treeWidget.expandItem(self.folder[folderName][0])
-
-        self.folder[folderName].append(QtWidgets.QMdiArea(self))               # widget for multi document interface area
-        self.tabWidget.addTab(self.folder[folderName][1], self.PyramanIcon, folderName)
+        self.folder[title][0].setIcon(0, QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/folder.png"))
+        self.treeWidget.addTopLevelItem(self.folder[title][0])
+        self.treeWidget.expandItem(self.folder[title][0])
+        self.windowNames['Folder'].append(title)
+        self.folder[title].append(QtWidgets.QMdiArea(self))               # widget for multi document interface area
+        self.tabWidget.addTab(self.folder[title][1], self.PyramanIcon, title)
 
     def add_Plot(self, pw_name, plotData):
         # add spectrum to existing plotwindow
@@ -573,7 +617,7 @@ class SpreadSheetItem(QTableWidgetItem):
     def __init__(self, siblings, wert):
         super(SpreadSheetItem, self).__init__()
         self.siblings = siblings
-        self.value = 0 
+        self.value = np.nan
         self.deps = set()
         self.reqs = set()
         self.wert = wert
@@ -591,10 +635,12 @@ class SpreadSheetItem(QTableWidgetItem):
 
     def calculate(self):
         formula = self.formula()
-
         if (formula is None or formula == ''):
-            self.value = self.wert 
+            self.value = self.wert
             return
+        #elif formula == 'nan':
+        #    self.value = ''
+        #    return
 
         currentreqs = set(cellre.findall(formula))
 
@@ -616,7 +662,7 @@ class SpreadSheetItem(QTableWidgetItem):
             self.value = eval(formula, {}, environment)
         except NameError:
             print('Bitte keine Buchstaben eingeben')
-            self.value = str(0.0)
+            self.value = self.wert
 
         self.reqs = currentreqs
 
@@ -643,7 +689,7 @@ class SpreadSheet(QMainWindow):
         self.mw = mainwindow
         self.cols = len(self.d)	                                        # number of columns
         self.rows = max([len(self.d[j][0]) for j in self.d.keys()])     # number of rows
-        self.pHomeTxt = None                                            # path of Txt-File 
+        self.pHomeTxt = None                                            # path of Txt-File
 
         self.create_tablewidgets()
         self.create_menubar()
@@ -800,14 +846,17 @@ class SpreadSheet(QMainWindow):
     # Enter or Return: go to the next row
         key = event.key()
         if key == Qt.Key_Return or key == Qt.Key_Enter:
-            for j in range(self.cols):
-                data_zs = []
-                for k in range(self.rows):
-                    ti = float(self.table.item(k, j).text())
-                    data_zs.append(ti)
-                zs = self.d['data%i'%j]
-                self.d.update({'data%i'%j : (data_zs, zs[1], zs[2], zs[3])})
-            
+            # save new value in data (self.d)
+            selItem = [[index.row(), index.column()] for index in self.table.selectedIndexes()][0]
+            new_cell_content = self.table.item(selItem[0], selItem[1]).text()
+            #print(new_cell_content)
+            if new_cell_content == '':
+                self.table.takeItem(selItem[0], selItem[1])
+                self.d['data%i' % selItem[1]][0][selItem[0]]= np.nan
+            else:
+                self.d['data%i' % selItem[1]][0][selItem[0]] = new_cell_content
+
+            # go to next row
             cr = self.table.currentRow()
             cc = self.table.currentColumn()
             if cr == (self.rows-1):
@@ -823,8 +872,9 @@ class SpreadSheet(QMainWindow):
             selItem = [[index.row(), index.column()] for index in self.table.selectedIndexes()]
             for j in selItem:
                 self.table.takeItem(j[0], j[1])
+                self.d['data%i' % j[1]][0][j[0]] = np.nan
         else:
-            super(SpreadSheet, self).keyPressEvent(event)   
+            super(SpreadSheet, self).keyPressEvent(event)
 
     def file_save(self):
         formattyp = '%.3f' 
@@ -1430,7 +1480,7 @@ class PlotWindow(QMainWindow):
 
             for j in self.data:
                 if isinstance(j[5], (np.ndarray, np.generic)):
-                    (spect, capline, barlinecol) = self.ax.errorbar(j[0], j[1], fmt=j[4], yerr=j[5], 
+                    (spect, capline, barlinecol) = self.ax.errorbar(j[0], j[1], yerr=j[5], fmt=j[4],
                         picker=5, capsize=3)
                     self.Spektrum.append(spect)
                     spect.set_label(j[2])
@@ -1456,18 +1506,22 @@ class PlotWindow(QMainWindow):
         self.ax.get_legend().set_picker(5)
 
     def add_plot(self, new_data):
+        ls = self.Spektrum[0].get_linestyle()
+        ma = self.Spektrum[0].get_marker()
         for j in new_data:
             self.data.append(j)
             if isinstance(j[5], (np.ndarray, np.generic)):
-                (spect, capline, barlinecol) = self.ax.errorbar(j[0], j[1], fmt = j[4],
-                                                               yerr = j[5], picker = 5, capsize = 3)
+                (spect, capline, barlinecol) = self.ax.errorbar(j[0], j[1], yerr=j[5], picker=5, capsize=3)
                 self.Spektrum.append(spect)
                 spect.set_label(j[2])
                 capline[0].set_label('_Hidden capline bottom ' + j[2])
                 capline[1].set_label('_Hidden capline top ' + j[2])
                 barlinecol[0].set_label('_Hidden barlinecol ' + j[2])
             else:
-                self.Spektrum.append(self.ax.plot(j[0], j[1], j[4], label = j[2], picker = 5)[0])
+                spect = self.ax.plot(j[0], j[1], label = j[2], picker = 5)[0]
+                self.Spektrum.append(spect)
+            spect.set_linestyle(ls)
+            spect.set_marker(ma)
         handles, labels = self.ax.get_legend_handles_labels()
         self.update_legend(handles, labels)
         self.ax.figure.canvas.draw()
