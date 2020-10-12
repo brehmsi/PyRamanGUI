@@ -1465,9 +1465,9 @@ class PlotWindow(QMainWindow):
         self.cid3 = self.fig.canvas.mpl_connect('pick_event', self.pickEvent)
 
     def plot(self):
-        self._main = QtWidgets.QWidget()
-        self.setCentralWidget(self._main)
-        layout = QtWidgets.QVBoxLayout(self._main)
+        self.main_widget = QtWidgets.QWidget()
+        self.setCentralWidget(self.main_widget)
+        layout = QtWidgets.QVBoxLayout(self.main_widget)
         legendfontsize = 24
         labelfontsize = 24
         tickfontsize = 18
@@ -1573,6 +1573,13 @@ class PlotWindow(QMainWindow):
 
             self.update_legend(new_handles, new_labels)
             self.ax.figure.canvas.draw()
+        elif event.artist in self.Spektrum and event.mouseevent.button == 3:
+            self.lineDialog = QMenu()
+            gotoSS_action = self.lineDialog.addAction("Go to Spreadsheet",lambda: self.go_to_spreadsheet(event.artist))
+            point = self.mapToGlobal(QtCore.QPoint(event.mouseevent.x, self.frameGeometry().height() - event.mouseevent.y))
+            action = self.lineDialog.exec_(point)
+        else:
+            pass
 
     def update_legend(self, leg_handles, leg_labels):
         if self.ax.get_legend() is not None:
@@ -1677,7 +1684,12 @@ class PlotWindow(QMainWindow):
  
         self.show()
 
+
     ########## Functions and other stuff ##########
+    def go_to_spreadsheet(self, line):
+        line_index = self.Spektrum.index(line)
+        print(self.data[line_index])
+
 
     def SelectDataset(self):
         # Select one or several datasets  
@@ -2005,8 +2017,6 @@ class PlotWindow(QMainWindow):
         self.baseline,    = self.ax.plot(xb, zb, 'c--', label = 'baseline (' + self.selectedData[0][2] + ')')
         self.blcSpektrum, = self.ax.plot(xb, yb, 'c-', label = 'baseline-corrected '+ self.selectedData[0][2])
         self.ax.figure.canvas.draw()
-
-
 
         self.finishbutton = QPushButton('Ok', self)       
         self.finishbutton.setCheckable(True)
