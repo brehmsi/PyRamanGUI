@@ -170,12 +170,12 @@ class MainWindow(QMainWindow):
         menu = self.menuBar()
         File = menu.addMenu('File')
         FileNew = File.addMenu('New')
-        newSpreadSheet = FileNew.addAction('Spreadsheet', lambda: self.newWindow(None, 'Spreadsheet', None, None))
-        newText = FileNew.addAction('Textwindow', lambda: self.newWindow(None, 'Textwindow','', None))
-        newFolder = FileNew.addAction('Folder', self.new_Folder)
-        FileLoad = File.addAction('Open Project', self.open)        
-        FileSaveAs = File.addAction('Save Project As ...', lambda: self.save('Save As'))
-        FileSave = File.addAction('Save Project', lambda: self.save('Save'))
+        FileNew.addAction('Spreadsheet', lambda: self.newWindow(None, 'Spreadsheet', None, None))
+        FileNew.addAction('Textwindow', lambda: self.newWindow(None, 'Textwindow','', None))
+        FileNew.addAction('Folder', self.new_Folder)
+        File.addAction('Open Project', self.open)
+        File.addAction('Save Project As ...', lambda: self.save('Save As'))
+        File.addAction('Save Project', lambda: self.save('Save'))
 
         medit = menu.addMenu('Edit')
         medit.addAction('Cascade')
@@ -849,7 +849,6 @@ class SpreadSheet(QMainWindow):
             # save new value in data (self.d)
             selItem = [[index.row(), index.column()] for index in self.table.selectedIndexes()][0]
             new_cell_content = self.table.item(selItem[0], selItem[1]).text()
-            #print(new_cell_content)
             if new_cell_content == '':
                 self.table.takeItem(selItem[0], selItem[1])
                 self.d['data%i' % selItem[1]][0][selItem[0]]= np.nan
@@ -887,7 +886,7 @@ class SpreadSheet(QMainWindow):
         if all(len(x) == n for x in data):
             pass
         else:
-            print('Die Spalten haben nicht die gleiche Länge, soweit bin ich noch nicht mit programmieren!')
+            self.mw.show_statusbar_message('The columns have different lengths!', 4000)
             return
 
         data = np.transpose(data)
@@ -990,7 +989,8 @@ class SpreadSheet(QMainWindow):
     def get_plot_data(self):
         # get data from selected columns and prepares data for plot
 
-        self.plot_data = []    
+        self.plot_data = []     # [X-data, Y-data, label, file, yerr, plottype]  # in newer projected additional entry: self
+
 
         selCol = sorted(set(index.column() for index in self.table.selectedIndexes()))  #selected Columns
 
@@ -1005,7 +1005,7 @@ class SpreadSheet(QMainWindow):
 
         for j in selCol:
             if self.d['data%i'%j][2] != 'Y':
-                print('Please only select Y-columns!')
+                self.mw.show_statusbar_message('Please only select Y-columns!', 4000)
                 return
             else:
                 k = j-1
@@ -1027,11 +1027,22 @@ class SpreadSheet(QMainWindow):
                     else:
                         k = k-1
                 if k == -1:
-                    print('At least one dataset Y has no assigned X dataset.')
+                    self.mw.show_statusbar_message('At least one dataset Y has no assigned X dataset.', 4000)
                     return
                 else:
                     pass
 
+        # check that x and y have same length to avoid problems later:
+        # append Spreadsheet instance
+        for j in self.plot_data:
+            if len(j[0]) == len(j[1]):
+                j.append(self)
+            else:
+                self.mw.show_statusbar_message('X and Y have different lengths')
+                return
+
+
+        # emit signal to MainWindow to create new Plotwindow or add lines to existing plotwindow
         if plot_type != None:
             self.new_pw_signal.emit()
         else:
@@ -1444,6 +1455,12 @@ class MyCustomToolbar(NavigationToolbar2QT):
         Layer_Legend.exec_()
 
 class PlotWindow(QMainWindow):
+    '''
+    Parameters
+    ----------
+    plot_data: array    # [X-Data, Y-Data, label, ...]
+    '''
+
     closeWindowSignal = QtCore.pyqtSignal(str, str)                     # Signal in case plotwindow is closed
     def __init__(self, plot_data, fig, parent):
         super(PlotWindow, self).__init__(parent)
@@ -1577,7 +1594,7 @@ class PlotWindow(QMainWindow):
             self.lineDialog = QMenu()
             gotoSS_action = self.lineDialog.addAction("Go to Spreadsheet",lambda: self.go_to_spreadsheet(event.artist))
             point = self.mapToGlobal(QtCore.QPoint(event.mouseevent.x, self.frameGeometry().height() - event.mouseevent.y))
-            action = self.lineDialog.exec_(point)
+            self.lineDialog.exec_(point)
         else:
             pass
 
@@ -1659,25 +1676,25 @@ class PlotWindow(QMainWindow):
         self.addToolBar(QtCore.Qt.LeftToolBarArea, toolbar)
         
         # Tool to scale intensity of selected spectrum
-        ScaleAct = QAction(QIcon.fromTheme('go-up'), 'Scale', self)
+        ScaleAct = QAction(QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Tool_Scale.png"), 'Scale', self)
         ScaleAct.setStatusTip('Tool to scale intensity of selected spectrum')
         ScaleAct.triggered.connect(self.scale_spectrum)
         toolbar.addAction(ScaleAct)
 
         # Tool to shift selected spectrum in y-direction       
-        ShiftAct = QAction(QIcon.fromTheme('go-up'), 'Shift', self)
+        ShiftAct = QAction(QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Tool_Shift.png"), 'Shift', self)
         ShiftAct.setStatusTip('Tool to shift selected spectrum in y-direction')
         ShiftAct.triggered.connect(self.shift_spectrum)
         toolbar.addAction(ShiftAct)
 
         # Tool to draw line       
-        DrawAct = QAction(QIcon.fromTheme(''), 'Draw', self)
-        DrawAct.setStatusTip('Tool to draw line')
+        DrawAct = QAction(QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Arrow.png"), 'Draw', self)
+        DrawAct.setStatusTip('Tool to draw lines and arrows')
         DrawAct.triggered.connect(self.draw_line)
         toolbar.addAction(DrawAct)
 
-        # Tool to draw line       
-        TextAct = QAction(QIcon.fromTheme(''), 'Text', self)
+        # Tool to insert Text
+        TextAct = QAction(QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Tool_Text.png"), 'Text', self)
         TextAct.setStatusTip('Insert Text')
         TextAct.triggered.connect(self.insert_text)
         toolbar.addAction(TextAct) 
@@ -1688,8 +1705,29 @@ class PlotWindow(QMainWindow):
     ########## Functions and other stuff ##########
     def go_to_spreadsheet(self, line):
         line_index = self.Spektrum.index(line)
-        print(self.data[line_index])
+        if len(self.data[line_index]) == 7:
+            spreadsheet = self.data[line_index][6]
+            spreadsheet_name = spreadsheet.windowTitle()
+            item = spreadsheet.mw.treeWidget.findItems(spreadsheet_name, Qt.MatchFixedString | Qt.MatchRecursive)
+            for j in item:              #select spreadsheet if there are several items with same name
+                if j.type() == 1:
+                    spreadsheet_item = j
+                    break
+                else:
+                    continue
+            spreadsheet.mw.activate_window(spreadsheet_item)
+            header_name = self.data[line_index][2]
+            for j in range(spreadsheet.table.columnCount()):
+                if spreadsheet.table.horizontalHeaderItem(j).text() == header_name+'(Y)':
+                    spreadsheet.mw.show_statusbar_message(header_name, 4000)
+                    spreadsheet.table.setCurrentCell(0, j)
+                else:
+                    continue
 
+        elif len(self.data[line]) == 6:
+            print('This functions will be available, in future projects. This project is to old')
+        else:
+            print('This is weird!')
 
     def SelectDataset(self):
         # Select one or several datasets  
