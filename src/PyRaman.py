@@ -23,6 +23,7 @@ from matplotlib.widgets import Slider, Button, RadioButtons
 from matplotlib.figure import Figure
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
+import matplotlib.backends.qt_editor.figureoptions as figureoptions
 #from matplotlib.backends.qt_compat import QtCore, QtWidgets
 from numpy import pi
 from numpy.fft import fft, fftshift
@@ -43,7 +44,6 @@ from sympy.utilities.lambdify import lambdify, implemented_function
 from tabulate import tabulate
 
 import myfigureoptions  #see file 'myfigureoptions.py'
-import mytoolbar
 
 # This file essentially consists of three parts:
 # 1. Main Window
@@ -635,16 +635,19 @@ class SpreadSheetItem(QTableWidgetItem):
 
     def calculate(self):
         formula = self.formula()
-        if (formula is None or formula == ''):
+        if formula is None:
             self.value = self.wert
+            if math.isnan(self.value):
+                self.value = ''
             return
-        #elif formula == 'nan':
-        #    self.value = ''
-        #    return
 
         currentreqs = set(cellre.findall(formula))
 
         name = cellname(self.row(), self.column())
+
+        if name == formula:
+            print('You should not do this!')
+            return
 
         # Add this cell to the new requirement's dependents
         for r in currentreqs - self.reqs:
@@ -660,9 +663,11 @@ class SpreadSheetItem(QTableWidgetItem):
         # Note that eval is DANGEROUS and should not be used in production
         try:
             self.value = eval(formula, {}, environment)
-        except NameError:
+        except NameError:                                   # occurs if letters were typed in
             print('Bitte keine Buchstaben eingeben')
             self.value = self.wert
+        except SyntaxError:
+            print('keine Ahnung was hier los ist')
 
         self.reqs = currentreqs
 
@@ -707,8 +712,8 @@ class SpreadSheet(QMainWindow):
                 self.table.setItem(k, j, cell)		
 
         self.setCentralWidget(self.table)
+        self.table.itemChanged.connect(self.update_data)
 
-    
     def create_menubar(self): 
     # create the menubar               
         self.menubar = self.menuBar()
@@ -846,15 +851,6 @@ class SpreadSheet(QMainWindow):
     # Enter or Return: go to the next row
         key = event.key()
         if key == Qt.Key_Return or key == Qt.Key_Enter:
-            # save new value in data (self.d)
-            selItem = [[index.row(), index.column()] for index in self.table.selectedIndexes()][0]
-            new_cell_content = self.table.item(selItem[0], selItem[1]).text()
-            if new_cell_content == '':
-                self.table.takeItem(selItem[0], selItem[1])
-                self.d['data%i' % selItem[1]][0][selItem[0]]= np.nan
-            else:
-                self.d['data%i' % selItem[1]][0][selItem[0]] = new_cell_content
-
             # go to next row
             cr = self.table.currentRow()
             cc = self.table.currentColumn()
@@ -974,6 +970,16 @@ class SpreadSheet(QMainWindow):
                 self.table.setItem(k, j, newcell)
 
         self.pHomeTxt = FileName[0]
+
+    def update_data(self, item):
+        new_cell_content = item.text()
+        col = item.column()
+        row = item.row()
+        if new_cell_content == '':
+            self.table.takeItem(row, col)
+            self.d['data{}'.format(col)][0][row]= np.nan
+        else:
+            self.d['data{}'.format(col)][0][row] = new_cell_content
 
     def new_col(self):
         self.cols = self.cols + 1
@@ -1436,13 +1442,14 @@ class DataPointPicker:
         self.selected.set_data(self.xs[self.lastind], self.ys[self.lastind])
         self.selected.figure.canvas.draw()
 
-class MyCustomToolbar(NavigationToolbar2QT): 
+class MyCustomToolbar(NavigationToolbar2QT):
+    #icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Layer_content.png")
     toolitems = [t for t in NavigationToolbar2QT.toolitems]
     # Add new toolitem at last position
-    toolitems.append(
-        ("Layers", "manage layers and layer contents",
-        "", "layer_content"))
 
+    toolitems.append(
+        ('Layers', "manage layers and layer contents",
+         "", "layer_content"))
     def __init__(self, plotCanvas):
         NavigationToolbar2QT.__init__(self, plotCanvas, parent=None)
 
@@ -1453,6 +1460,14 @@ class MyCustomToolbar(NavigationToolbar2QT):
         Layer_Legend.setWindowTitle("Layer Content")
         Layer_Legend.setWindowModality(Qt.ApplicationModal)
         Layer_Legend.exec_()
+
+    def edit_parameters(self):
+        axes = self.canvas.figure.get_axes()
+        if not axes:
+            QtWidgets.QMessageBox.warning(
+                self.canvas.parent(), "Error", "There are no axes to edit.")
+            return
+        figureoptions.figure_edit(axes, self)
 
 class PlotWindow(QMainWindow):
     '''
@@ -1466,6 +1481,7 @@ class PlotWindow(QMainWindow):
         super(PlotWindow, self).__init__(parent)
         self.fig = fig
         self.data = plot_data
+        self.mw = parent
         self.backup_data = plot_data
         self.Spektrum = []
         self.ErrorBar = []
@@ -1474,7 +1490,7 @@ class PlotWindow(QMainWindow):
 
         self.plot()
         self.create_statusbar()
-        self.create_menubar()	
+        self.create_menubar()
         self.create_sidetoolbar()
 
         #self.cid1 = self.fig.canvas.mpl_connect('button_press_event', self.mousePressEvent)
@@ -1548,8 +1564,6 @@ class PlotWindow(QMainWindow):
         if key == (Qt.Key_Control and Qt.Key_Z):
             k = 0
             for j in self.backup_data:
-                print(j[0])
-                print(j[1])
                 self.Spektrum[k].set_xdata(j[0])
                 self.Spektrum[k].set_ydata(j[1])
                 k = k+1
@@ -1719,18 +1733,18 @@ class PlotWindow(QMainWindow):
             header_name = self.data[line_index][2]
             for j in range(spreadsheet.table.columnCount()):
                 if spreadsheet.table.horizontalHeaderItem(j).text() == header_name+'(Y)':
-                    spreadsheet.mw.show_statusbar_message(header_name, 4000)
+                    self.mw.show_statusbar_message(header_name, 4000)
                     spreadsheet.table.setCurrentCell(0, j)
                 else:
                     continue
 
         elif len(self.data[line]) == 6:
-            print('This functions will be available, in future projects. This project is to old')
+            self.mw.show_statusbar_message('This functions will be available, in future projects. This project is to old', 3000)
         else:
-            print('This is weird!')
+            self.mw.show_statusbar_message('This is weird!', 3000)
 
     def SelectDataset(self):
-        # Select one or several datasets  
+        # Select one or several datasets
         self.selectedDatasetNumber = []
         self.selectedData = []
         self.Dialog_SelDataSet = QDialog()
@@ -1828,7 +1842,7 @@ class PlotWindow(QMainWindow):
             a = 629
             grenze = 6
             controll_delete_parameter = True        #Parameter to controll if data point should be deleted
-            print('Folgende Datenpunkte von ' + self.data[j][2]  + ' wurden gelöscht:')
+            self.mw.show_statusbar_message('Following data points of {} were deleted'.format(self.data[j][2]), 3000)
             while a <= len(self.data[j][0]):
                 b = np.argmin(self.data[j][1][a-grenze:a+grenze])
                 if b == 0 or b == 12:
