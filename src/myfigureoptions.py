@@ -1,6 +1,8 @@
+#!/usr/bin/python
+# -*- coding: <encoding name> -*-
 # https://stackoverflow.com/questions/53099295/matplotlib-navigationtoolbar-advanced-figure-options
 # https://github.com/matplotlib/matplotlib/blob/master/lib/matplotlib/backends/qt_editor/figureoptions.py
-# Copyright © 2009 Pierre Raybaut
+# Copyright at 2009 Pierre Raybaut
 # Licensed under the terms of the MIT License
 # see the mpl licenses directory for a copy of the license
 # Modified to add a title fontsize
