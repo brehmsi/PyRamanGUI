@@ -3,7 +3,7 @@ import math
 import matplotlib
 import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
-import matplotlib.backends.qt_editor._formlayout as formlayout
+#import matplotlib.backends.qt_editor._formlayout as formlayout
 import numpy as np
 import os
 import pandas as pd
@@ -17,7 +17,8 @@ import sys
 import time
 from datetime import datetime
 
-from collections import ChainMap
+import collections
+#from collections import ChainMap
 from matplotlib import *
 from matplotlib.widgets import Slider, Button, RadioButtons
 from matplotlib.figure import Figure
@@ -495,7 +496,7 @@ class MainWindow(QMainWindow):
         close.setWindowTitle('Quit')
         close.setText("You sure?")
         close.setStandardButtons(QMessageBox.Yes | QMessageBox.Cancel)
-        close = close.exec()
+        close = close.exec_()
 
         if close == QMessageBox.Yes:
             event.accept()
@@ -527,12 +528,12 @@ class TextWindow(QMainWindow):
         # create the menubar               
         self.menubar = self.menuBar()
 
-        ### 1. Menüpunkt: File ###
+        # 1. Menu item: File
         fileMenu = self.menubar.addMenu('&File')
         fileMenu.addAction('Save Text', self.file_save)
         fileMenu.addAction('Load Text', self.load_file)
 
-        ### 2. Menüpunkt: Edit
+        ### 2. Menu item: Edit
         editMenu = self.menubar.addMenu('&Edit')       
 
         self.show()
@@ -572,7 +573,7 @@ class TextWindow(QMainWindow):
         close.setWindowTitle('Quit')
         close.setText("You sure?")
         close.setStandardButtons(QMessageBox.Yes | QMessageBox.Cancel)
-        close = close.exec()
+        close = close.exec_()
 
         if close == QMessageBox.Yes:
             self.closeWindowSignal.emit('Textwindow', self.windowTitle())
@@ -590,7 +591,7 @@ class TextWindow(QMainWindow):
 cellre = re.compile(r'\b[A-Z][0-9]\b')
 
 def cellname(i, j):
-    return f'{chr(ord("A")+j)}{i+1}'
+    return '{}{}'.format(chr(ord('A')+j), i+1)
 
 class SpreadSheetDelegate(QItemDelegate):
 	def __init__(self, parent=None):
@@ -659,7 +660,7 @@ class SpreadSheetItem(QTableWidgetItem):
         # Look up the values of our required cells
         reqvalues = {r: self.siblings[r].value for r in currentreqs}
         # Build an environment with these values and basic math functions
-        environment = ChainMap(math.__dict__, reqvalues)
+        environment = collections.ChainMap(math.__dict__, reqvalues)
         # Note that eval is DANGEROUS and should not be used in production
         try:
             self.value = eval(formula, {}, environment)
@@ -718,16 +719,16 @@ class SpreadSheet(QMainWindow):
     # create the menubar               
         self.menubar = self.menuBar()
 
-        ### 1. Menüpunkt: File ###
+        ### 1. menu item: File ###
         fileMenu = self.menubar.addMenu('&File')
         fileMenu.addAction('Save Data', self.file_save)
         fileMenu.addAction('Load Data', self.load_file)
 
-        ### 2. Menüpunkt: Edit
+        ### 2. menu item: Edit
         editMenu = self.menubar.addMenu('&Edit')
         editMenu.addAction('New Column', self.new_col)
 
-        ### 3. Menüpunkt: Plot
+        ### 3. menu item: Plot
         plotMenu = self.menubar.addMenu('&Plot')
         plotNew = plotMenu.addMenu('&New')
         plotNew.addAction('Line Plot', self.get_plot_data)
@@ -746,13 +747,13 @@ class SpreadSheet(QMainWindow):
         headers = [self.d[j][1] + '(' + self.d[j][2] + ')' for j in self.d.keys()]
         self.table.setHorizontalHeaderLabels(headers)
 
-        ### bei Rechts-Klick auf Header wird header_menu geöffnet ###
+        ### open header_menu with right mouse click ###
         self.headers = self.table.horizontalHeader()
         self.headers.setContextMenuPolicy(Qt.CustomContextMenu)
         self.headers.customContextMenuRequested.connect(self.show_header_context_menu)
         self.headers.setSelectionMode(QAbstractItemView.SingleSelection)
 
-        ### bei Doppelklick auf Tabellenkopf wird rename_header geöffnet ###
+        ### opens rename_header with double mouse click ###
         self.headerline = QtWidgets.QLineEdit()                         # Create
         self.headerline.setWindowFlags(QtCore.Qt.FramelessWindowHint)   # Hide title bar
         self.headerline.setAlignment(QtCore.Qt.AlignLeft)               # Set the Alignmnet
@@ -823,7 +824,7 @@ class SpreadSheet(QMainWindow):
             self.table.setHorizontalHeaderLabels(headers)
 
     def create_row_header(self):
-         ### bei Rechts-Klick auf Header wird header_menu geöffnet ###
+         ### opens header_menu with right mouse click###
         self.row_headers = self.table.verticalHeader()
         self.row_headers.setContextMenuPolicy(Qt.CustomContextMenu)
         self.row_headers.customContextMenuRequested.connect(self.row_options)
@@ -1059,7 +1060,7 @@ class SpreadSheet(QMainWindow):
         close.setWindowTitle('Quit')
         close.setText("You sure?")
         close.setStandardButtons(QMessageBox.Yes | QMessageBox.Cancel)
-        close = close.exec()
+        close = close.exec_()
 
         if close == QMessageBox.Yes:
             self.closeWindowSignal.emit('Spreadsheet', self.windowTitle())
@@ -1074,20 +1075,20 @@ class Functions:
     def __init__(self, pw):
         self.pw = pw
 
-    ### Definition der Lorentz Funktion für Fit ###
+    ### definition of Lorentzian for fit process ###
     def LorentzFct(self, x, xc, h, b):
         return  h/(1 + (2*(x - xc)/b)**2)
         #return a2/pi*a1/((x-a0)*(x-a0)+a1*a1)
 
-    ### Definition der Gauß Funktion für Fit ###
+    ### definition of Gaussian for fit process ###
     def GaussianFct(self, x, xc, h, b):
         return h*np.exp(-4*math.log(2)*((x - xc)/b)*((x-xc)/b))
         #return a2*np.exp(-(x-a0)*(x-a0)/(2*a1*a1))
 
-    ### Definition der Breit-Wigner-Fano Funktion für Fit ###
-    #(siehe z.B. "Interpretation of Raman spectra of disordered and amorphous carbon" von Ferrari und Robertson)
+    ### definition of Breit-Wigner-Fano fucntion for fit process ###
+    #(look e.g. "Interpretation of Raman spectra of disordered and amorphous carbon" von Ferrari und Robertson)
     #Q is BWF coupling coefficient
-    #For Q⁻¹->0: the Lorentzian line is recovered
+    #For Q^-1->0: the Lorentzian line is recovered
     def BreitWignerFct(self, x, xc, h, b, Q):
         return h*(1+2*(x-xc)/(Q*b))**2/(1+(2*(x-xc)/b)**2)
 
@@ -1523,8 +1524,8 @@ class PlotWindow(QMainWindow):
                 else:
                     self.Spektrum.append(self.ax.plot(j[0], j[1], j[4], label = j[2], picker = 5)[0])
             legend = self.ax.legend(fontsize = legendfontsize)
-            self.ax.set_xlabel('Raman shift / cm⁻¹', fontsize = labelfontsize)
-            self.ax.set_ylabel('Intensity / cts/s', fontsize = labelfontsize)
+            self.ax.set_xlabel(r'Raman shift / cm^-1', fontsize = labelfontsize)
+            self.ax.set_ylabel(r'Intensity / cts/s', fontsize = labelfontsize)
             self.ax.xaxis.set_tick_params(labelsize=tickfontsize)
             self.ax.yaxis.set_tick_params(labelsize=tickfontsize)
         else:
@@ -1647,11 +1648,11 @@ class PlotWindow(QMainWindow):
     ########## Bars (menubar, toolbar, statusbar) ##########
     def create_menubar(self):
         menubar = self.menuBar()
-        ### 1. Menüpunkt: File ###
+        ### 1. menu item: File ###
         fileMenu = menubar.addMenu('&File')
         fileMenu.addAction('Save to File', self.menu_save_to_file)
 
-        ### 2. Menüpunkt: Edit  ###
+        ### 2. menu item: Edit  ###
         editMenu = menubar.addMenu('&Edit')
         editMenu.addAction('Delete broken pixel - LabRam', self.delete_datapoint)
         editDeletePixel = editMenu.addAction('Delete single pixel', self.delete_pixel)
@@ -1661,7 +1662,7 @@ class PlotWindow(QMainWindow):
         editNormAct = editMenu.addAction('Normalize Spectrum', self.normalize)
         editNormAct.setStatusTip('Normalizes highest peak to 1')
 
-        ### 3. Menüpunkt: Analysis  ###
+        ### 3. menu: Analysis  ###
         analysisMenu = menubar.addMenu('&Analysis')
 
         ### 3.1 Analysis Fit
@@ -1675,7 +1676,7 @@ class PlotWindow(QMainWindow):
         analysisFitRoutine = analysisFit.addMenu('&Fitroutine')
         analysisFitRoutine.addAction('D und G Bande', self.fitroutine1)
 
-        ### 3.2 Analysis Basislinien-Korrektion
+        ### 3.2 Analysis base line correction
         analysisMenu.addAction('Baseline Correction', self.menu_baseline_als)
 
         self.show()
@@ -1832,7 +1833,7 @@ class PlotWindow(QMainWindow):
                 self.setFocus()
                 return
 
-    ### Löscht die Datenpunkte Nr. 630+n*957, da dieser Pixel im CCD Detektor kaputt ist
+    ### Deletes data point with number 630+n*957, because this pixel is broken in CCD detector of LabRam
     def delete_datapoint(self):
         self.SelectDataset()
         if self.selectedData == []:
@@ -1870,7 +1871,7 @@ class PlotWindow(QMainWindow):
             self.setFocus() 
             self.fig.canvas.draw()
 
-            ### Speichern der Daten ohne fehlerhaften Datenpunkte ###
+            ### Save data without defective data points ###
             startFileDirName = os.path.dirname(self.data[j][3])
             startFileName = startFileDirName + '/' + self.data[j][2]
             save_data = [self.data[j][0], self.data[j][1]]
@@ -1908,7 +1909,7 @@ class PlotWindow(QMainWindow):
         d1_edit = QtWidgets.QLineEdit()
         layout.addWidget(d1_edit, 1, 0)
         d1_edit.setText('500')
-        d1_name = QtWidgets.QLabel('Position in cm⁻¹')
+        d1_name = QtWidgets.QLabel(r'Position in cm^-1')
         layout.addWidget(d1_name, 1, 1)
 
         d2_edit = QtWidgets.QLineEdit()
@@ -1959,7 +1960,7 @@ class PlotWindow(QMainWindow):
         canvas = self.Canvas
         self.ax.figure.canvas.draw()
         print('\n', 'Lorentz')
-        print(tabulate([['Background', popt[0]], ['Raman Shift in cm⁻¹', popt[1]], ['Intensity', popt[2]], ['FWHM', popt[3]]], headers=['Parameters', 'Values']))
+        print(tabulate([['Background', popt[0]], [r'Raman Shift in cm^-1', popt[1]], ['Intensity', popt[2]], ['FWHM', popt[3]]], headers=['Parameters', 'Values']))
                 
     def FitGaussian(self):
         self.SelectDataset()
@@ -1982,7 +1983,7 @@ class PlotWindow(QMainWindow):
         canvas = self.Canvas
         self.ax.figure.canvas.draw()
         print('\n' + 'Gaussian')
-        print(tabulate([['Background', popt[0]], ['Raman Shift in cm⁻¹', popt[1]], ['Intensity', popt[2]], ['FWHM', popt[3]]], headers=['Parameters', 'Values']))
+        print(tabulate([['Background', popt[0]], [r'Raman Shift in cm^-1', popt[1]], ['Intensity', popt[2]], ['FWHM', popt[3]]], headers=['Parameters', 'Values']))
 
     def FitBreitWigner(self):
         self.SelectDataset()
@@ -2006,7 +2007,8 @@ class PlotWindow(QMainWindow):
         canvas = self.Canvas
         self.ax.figure.canvas.draw()
         print('\n Breit-Wigner')
-        print(tabulate([['Background', popt[0]], ['Raman Shift in cm⁻¹', popt[1]], ['Intensity', popt[2]], ['FWHM', popt[3]], ['Zusätzlicher Parameter', popt[4]]], headers=['Parameters', 'Values']))
+        print(tabulate([['Background', popt[0]], [r'Raman Shift in cm^-1', popt[1]], ['Intensity', popt[2]], ['FWHM', popt[3]],
+                        ['Additional Parameters', popt[4]]], headers=['Parameters', 'Values']))
 
     def DefineArea(self):
         self.SelectDataset()
@@ -2127,8 +2129,8 @@ class PlotWindow(QMainWindow):
     # also look at: https://stackoverflow.com/questions/29156532/python-baseline-correction-library
     def baseline_als(self, x, y, p, lam):
         niter = 10
-        #p = 0.001   			#asymmetry 0.001 ≤ p ≤ 0.1 is a good choice     recommended from Eilers and Boelens for Raman: 0.001    recommended from Simon: 0.0001 
-        #lam = 10000000			#smoothness 10^2 ≤ λ ≤ 10^9                     recommended from Eilers and Boelens for Raman: 10⁷      recommended from Simon: 10⁷
+        #p = 0.001   			#asymmetry 0.001 <= p <= 0.1 is a good choice     recommended from Eilers and Boelens for Raman: 0.001    recommended from Simon: 0.0001
+        #lam = 10000000			#smoothness 10^2 <= lambda <= 10^9                     recommended from Eilers and Boelens for Raman: 10^7      recommended from Simon: 10^7
         L = len(x)
         D = sparse.csc_matrix(np.diff(np.eye(L), 2))
         w = np.ones(L)
@@ -2164,8 +2166,8 @@ class PlotWindow(QMainWindow):
         working_y = y[np.where((x > x_min)&(x < x_max))]
  
         # parameter for background-correction 
-        p   = 0.0001             #asymmetry 0.001 ≤ p ≤ 0.1 is a good choice     recommended from Eilers and Boelens for Raman: 0.001    recommended from Simon: 0.0001 
-        lam = 10000000           #smoothness 10^2 ≤ λ ≤ 10^9                     recommended from Eilers and Boelens for Raman: 10⁷      recommended from Simon: 10⁷
+        p   = 0.0001             #asymmetry 0.001 <= p <= 0.1 is a good choice     recommended from Eilers and Boelens for Raman: 0.001    recommended from Simon: 0.0001
+        lam = 10000000           #smoothness 10^2 <= lambda <= 10^9                     recommended from Eilers and Boelens for Raman: 10^7     recommended from Simon: 10^7
        
         xb, yb, zb = self.baseline_als(working_x, working_y, p, lam)
         self.baseline,    = self.ax.plot(xb, zb, 'c--', label = 'baseline (' + self.selectedData[0][2] + ')')
@@ -2379,7 +2381,7 @@ class PlotWindow(QMainWindow):
         data_table.append(['Cluster Size in nm', L_a, L_a_err])
         data_table.append(['I_D/I_G', ratio, ratio_err])
 
-        save_data = 'R²=%.6f \n'%r_squared + 'Lorentz 1 = D-Bande, BWF (Breit-Wigner-Fano) 1 = G-Bande \n' + tabulate(data_table, headers = ['Parameters', 'Values', 'Errors'])
+        save_data = r'R^2=%.6f \n'%r_squared + 'Lorentz 1 = D-Bande, BWF (Breit-Wigner-Fano) 1 = G-Bande \n' + tabulate(data_table, headers = ['Parameters', 'Values', 'Errors'])
         print('\n')
         print(self.selectedData[0][2])
         print(save_data)
@@ -2527,7 +2529,7 @@ class PlotWindow(QMainWindow):
         close.setWindowTitle('Quit')
         close.setText("You sure?")
         close.setStandardButtons(QMessageBox.Yes | QMessageBox.Cancel)
-        close = close.exec()
+        close = close.exec_()
 
         if close == QMessageBox.Yes:
             self.closeWindowSignal.emit('Plotwindow', self.windowTitle())
