@@ -3,7 +3,7 @@ import math
 import matplotlib
 import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
-import matplotlib.backends.qt_editor.formlayout as formlayout
+import matplotlib.backends.qt_editor._formlayout as formlayout
 import numpy as np
 import os
 import pandas as pd
