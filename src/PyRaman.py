@@ -3,7 +3,7 @@ import math
 import matplotlib
 import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
-#import matplotlib.backends.qt_editor._formlayout as formlayout
+import matplotlib.backends.qt_editor.formlayout as formlayout
 import numpy as np
 import os
 import pandas as pd
@@ -1508,7 +1508,7 @@ class PlotWindow(QMainWindow):
        
         if self.fig == None:
             self.fig = Figure(figsize=(15,9))
-            self.ax = self.fig.add_subplot()
+            self.ax = self.fig.add_subplot(111)
             self.Canvas = FigureCanvasQTAgg(self.fig)
             layout.addWidget(self.Canvas)
 
@@ -1524,7 +1524,7 @@ class PlotWindow(QMainWindow):
                 else:
                     self.Spektrum.append(self.ax.plot(j[0], j[1], j[4], label = j[2], picker = 5)[0])
             legend = self.ax.legend(fontsize = legendfontsize)
-            self.ax.set_xlabel(r'Raman shift / cm^-1', fontsize = labelfontsize)
+            self.ax.set_xlabel(r'Raman shift / cm$^{-1}$', fontsize = labelfontsize)
             self.ax.set_ylabel(r'Intensity / cts/s', fontsize = labelfontsize)
             self.ax.xaxis.set_tick_params(labelsize=tickfontsize)
             self.ax.yaxis.set_tick_params(labelsize=tickfontsize)

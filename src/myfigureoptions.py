@@ -17,7 +17,7 @@ from BrokenAxes import brokenaxes
 
 import matplotlib
 from matplotlib import cm, colors as mcolors, markers, image as mimage
-import matplotlib.backends.qt_editor._formlayout as formlayout
+import matplotlib.backends.qt_editor.formlayout as formlayout
 from matplotlib.backends.qt_compat import QtGui
 
 
