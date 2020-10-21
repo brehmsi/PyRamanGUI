@@ -45,6 +45,7 @@ from sympy.utilities.lambdify import lambdify, implemented_function
 from tabulate import tabulate
 
 import myfigureoptions  #see file 'myfigureoptions.py'
+import Database_Measurements #see file Database_Measurements
 
 # This file essentially consists of three parts:
 # 1. Main Window
@@ -150,6 +151,8 @@ class MainWindow(QMainWindow):
         self.mainWidget.setHandleWidth(10)
 
         self.tabWidget = QtWidgets.QTabWidget()
+        self.tabWidget.setTabsClosable(True)
+        self.tabWidget.setMovable(True)
         self.treeWidget = RamanTreeWidget(self)                    # Qtreewidget, to controll open windows
         self.treeWidget.itemDoubleClicked.connect(self.activate_window)
         self.treeWidget.itemClicked.connect(self.tree_window_options)
@@ -182,6 +185,9 @@ class MainWindow(QMainWindow):
         medit.addAction('Cascade')
         medit.addAction('Tiled')
         medit.triggered[QAction].connect(self.rearange)
+
+        menu_tools = menu.addMenu('Tools')
+        menu_tools.addAction('Database for measurements', self.execute_database_measurements)
 
     def show_statusbar_message(self, message, time):
         self.statusBar.showMessage(message, time)
@@ -288,11 +294,15 @@ class MainWindow(QMainWindow):
             saveControllParam = 0
             pass
 
+    def execute_database_measurements(self):
+        title = 'Database'
+        DBM = Database_Measurements.DatabaseMeasurements()
+        DBM_tab = self.tabWidget.addTab(DBM, self.PyramanIcon, title)
+
     def create_sidetree_structure(self, structure):
         self.treeWidget.clear()
         for key, val in structure.items():
             self.new_Folder(key)
-
 
     def activate_window(self, item):
         text = item.text(0)
