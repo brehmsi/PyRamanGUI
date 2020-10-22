@@ -25,7 +25,7 @@ from matplotlib.figure import Figure
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 import matplotlib.backends.qt_editor.figureoptions as figureoptions
-#from matplotlib.backends.qt_compat import QtCore, QtWidgets
+from matplotlib.backends.qt_compat import _setDevicePixelRatioF, _devicePixelRatioF
 from numpy import pi
 from numpy.fft import fft, fftshift
 from os.path import join as pjoin
@@ -153,6 +153,7 @@ class MainWindow(QMainWindow):
         self.tabWidget = QtWidgets.QTabWidget()
         self.tabWidget.setTabsClosable(True)
         self.tabWidget.setMovable(True)
+        self.tabWidget.tabCloseRequested.connect(self.close_tab)
         self.treeWidget = RamanTreeWidget(self)                    # Qtreewidget, to controll open windows
         self.treeWidget.itemDoubleClicked.connect(self.activate_window)
         self.treeWidget.itemClicked.connect(self.tree_window_options)
@@ -176,7 +177,7 @@ class MainWindow(QMainWindow):
         FileNew = File.addMenu('New')
         FileNew.addAction('Spreadsheet', lambda: self.newWindow(None, 'Spreadsheet', None, None))
         FileNew.addAction('Textwindow', lambda: self.newWindow(None, 'Textwindow','', None))
-        FileNew.addAction('Folder', self.new_Folder)
+        FileNew.addAction('Folder', lambda: self.new_Folder(None))
         File.addAction('Open Project', self.open)
         File.addAction('Save Project As ...', lambda: self.save('Save As'))
         File.addAction('Save Project', lambda: self.save('Save'))
@@ -296,8 +297,14 @@ class MainWindow(QMainWindow):
 
     def execute_database_measurements(self):
         title = 'Database'
-        DBM = Database_Measurements.DatabaseMeasurements()
-        DBM_tab = self.tabWidget.addTab(DBM, self.PyramanIcon, title)
+        self.db_measurements = Database_Measurements.DatabaseMeasurements()
+        DBM_tab = self.tabWidget.addTab(self.db_measurements, self.PyramanIcon, title)
+
+    def close_tab(self, index):
+        if self.tabWidget.widget(index) == self.db_measurements:
+            self.tabWidget.removeTab(index)
+        else:
+            pass
 
     def create_sidetree_structure(self, structure):
         self.treeWidget.clear()
@@ -1460,9 +1467,16 @@ class MyCustomToolbar(NavigationToolbar2QT):
 
     toolitems.append(
         ('Layers', "manage layers and layer contents",
-         "", "layer_content"))
+         'Layer', "layer_content"))
+
     def __init__(self, plotCanvas):
         NavigationToolbar2QT.__init__(self, plotCanvas, parent=None)
+        #self._actions = {}  # mapping of toolitem method names to QActions.
+        #icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Layer_content.png")
+        #a = self.addAction(icon, 'Layers', self.layer_content)
+        #self._actions['layer_content'] = a
+        #a.setToolTip('manage layers and layer contents')
+
 
     def layer_content(self):
         Layer_Legend = QDialog()
@@ -1479,6 +1493,21 @@ class MyCustomToolbar(NavigationToolbar2QT):
                 self.canvas.parent(), "Error", "There are no axes to edit.")
             return
         figureoptions.figure_edit(axes, self)
+
+    def _icon(self, name, color=None):
+        if name == 'Layer.png':
+            icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Layer_content.png")
+        else:
+            name = name.replace('.png', '_large.png')
+            pm = QtGui.QPixmap(os.path.join(self.basedir, name))
+            _setDevicePixelRatioF(pm, _devicePixelRatioF(self))
+            if color is not None:
+                mask = pm.createMaskFromColor(QtGui.QColor('black'),
+                                              QtCore.Qt.MaskOutColor)
+                pm.fill(color)
+                pm.setMask(mask)
+            icon = QIcon(pm)
+        return icon
 
 class PlotWindow(QMainWindow):
     '''
