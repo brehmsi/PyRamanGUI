@@ -17,8 +17,8 @@ import sys
 import time
 from datetime import datetime
 
-import collections
-#from collections import ChainMap
+#import collections
+from collections import ChainMap
 from matplotlib import *
 from matplotlib.widgets import Slider, Button, RadioButtons
 from matplotlib.figure import Figure
@@ -279,6 +279,7 @@ class MainWindow(QMainWindow):
             pickle.dump(save_dict, file)
         except TypeError as e:
             self.show_statusbar_message('TypeError \n Someting went wrong. The file is not saved \n' + str(e), 4000)
+            print(str(e))
             saveControllParam = 1      
         file.close() 
 
@@ -447,7 +448,6 @@ class MainWindow(QMainWindow):
             windowtypeInt = 3
             txt = windowcontent
             self.window[windowtype][title] = TextWindow(self, txt)
-            newTxt = self.window[windowtype][title]
             icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/TextWindow.png")
         else:
             return
@@ -677,7 +677,7 @@ class SpreadSheetItem(QTableWidgetItem):
         # Look up the values of our required cells
         reqvalues = {r: self.siblings[r].value for r in currentreqs}
         # Build an environment with these values and basic math functions
-        environment = collections.ChainMap(math.__dict__, reqvalues)
+        environment = ChainMap(math.__dict__, reqvalues)
         # Note that eval is DANGEROUS and should not be used in production
         try:
             self.value = eval(formula, {}, environment)
@@ -1060,7 +1060,7 @@ class SpreadSheet(QMainWindow):
         # append Spreadsheet instance
         for j in self.plot_data:
             if len(j[0]) == len(j[1]):
-                j.append(self)
+                j.append(self.windowTitle())
             else:
                 self.mw.show_statusbar_message('X and Y have different lengths')
                 return
@@ -1143,56 +1143,52 @@ class LineBuilder:
 
 #idea: https://github.com/yuma-m/matplotlib-draggable-plot
 class LineDrawer:
-    def __init__(self, line):
-        self.line = line
+    def __init__(self, arrow):
+        '''
+        Class to draw lines and arrows
+
+        Parameters
+        ----------
+        arrow: FancyArrowPatch
+        '''
+        self.arrow = arrow
+        self.fig = self.arrow.figure
+        self.ax = self.fig.axes[0]
+        self.c = self.fig.canvas
+        posA, platzhalter_den_keiner_braucht, posB = self.arrow.get_path()._vertices
+        self.posA = list(posA)
+        self.posB = list(posB)
         self.pickedPoint = None
-        self.xs = self.line.get_xdata()
-        self.ys = self.line.get_ydata()
-        self.ax = self.line.axes
 
         self.startPlot()
          
-    def startPlot(self):    
-        self.selectedPoint, = self.ax.plot(self.xs[0], self.ys[0], 'o', ms=12, alpha=0.4, color='yellow', visible = False)
-        self.arrow = mpatches.FancyArrowPatch((self.xs[1], self.ys[1]), (self.xs[0], self.ys[0]),
-                                 mutation_scale=10, arrowstyle='-')
+    def startPlot(self):
+        self.arrow.set_label('_nolegend_ drawed_line')
         self.ax.add_patch(self.arrow)
-        #self.line.set_visible(True)
-        self.line.figure.canvas.draw()
-        self.cid1 = self.line.figure.canvas.mpl_connect('pick_event', self.pickpoint)
-        self.cid2 = self.line.figure.canvas.mpl_connect('button_release_event', self.unpickpoint)
-        self.cid3 = self.line.figure.canvas.mpl_connect('motion_notify_event', self.movepoint)
+        self.c.draw()
+        self.c.mpl_connect('pick_event', self.pickpoint)
+        self.c.mpl_connect('motion_notify_event', self.movepoint)
+        self.c.mpl_connect('button_release_event', self.unpickpoint)
+
 
     def pickpoint(self, event):
-        if event.artist == self.line and event.mouseevent.button == 1:
-            distance_threshold = 10
-            min_distance = math.sqrt(2 * (100 ** 2))
-            for x, y in zip(self.xs, self.ys):
-                distance = math.hypot(event.mouseevent.xdata - x, event.mouseevent.ydata - y)
-                if distance < min_distance:
-                    min_distance = distance
-                    self.pickedPoint = (x, y)
-            if min_distance < distance_threshold:
-                pass
+        if event.artist == self.arrow and event.mouseevent.button == 1:
+            min_distance = 25
+            distance_to_A = math.hypot(event.mouseevent.xdata - self.posA[0], event.mouseevent.ydata - self.posA[1])
+            distance_to_B = math.hypot(event.mouseevent.xdata - self.posB[0], event.mouseevent.ydata - self.posB[1])
+            if distance_to_A < min_distance:
+                self.pickedPoint = self.posA
+            elif distance_to_B < min_distance:
+                self.pickedPoint = self.posB
             else:
                 self.pickedPoint = None
-            self.selectedPoint.set_data(self.pickedPoint)
-            self.selectedPoint.set_visible(True)
-            self.selectedPoint.figure.canvas.draw()
-        elif event.artist == self.line and event.mouseevent.button == 3:
+                return
+            self.selectedPoint, = self.ax.plot(self.pickedPoint[0], self.pickedPoint[1], 'o', ms=12, alpha=0.4, color='yellow')
+            self.c.draw()
+        elif event.artist == self.arrow and event.mouseevent.button == 3:
             self.options()
         else:
-            self.selectedPoint.set_visible(False)
-            self.selectedPoint.figure.canvas.draw()
-
-    def unpickpoint(self, event):
-        if self.pickedPoint and event.button == 1:
-            self.updatePlot()
-            self.pickedPoint = None
-            self.selectedPoint.set_visible(False)
-            self.selectedPoint.figure.canvas.draw()
-        else:
-            return
+            pass
 
     def movepoint(self, event):
         if not self.pickedPoint:
@@ -1200,34 +1196,24 @@ class LineDrawer:
         elif event.xdata is None or event.ydata is None:
             return
         else:
-            self.xs = self.removePoint(self.xs, 0)
-            self.ys = self.removePoint(self.ys, 1)
-            self.addPoint(event)
-            self.updatePlot()
+            if self.pickedPoint == self.posA:
+                self.posA = (event.xdata, event.ydata)
+            elif self.pickedPoint == self.posB:
+                self.posB = (event.xdata, event.ydata)
+            else:
+                return
+            self.pickedPoint = (event.xdata, event.ydata)
+            self.arrow.set_positions(self.posA, self.posB)
+            self.selectedPoint.set_data(self.pickedPoint)
+            self.c.draw()
 
-    def addPoint(self, e):
-        if isinstance(e, MouseEvent):
-            x, y = float(e.xdata), float(e.ydata)
-            self.xs = np.append(self.xs, x)
-            self.ys = np.append(self.ys, y)
-            self.pickedPoint = [x,y]
+    def unpickpoint(self, event):
+        if self.pickedPoint and event.button == 1:
+            self.pickedPoint = None
+            self.selectedPoint.remove()
+            self.c.draw()
         else:
             return
-
-    def removePoint(self, a, i):
-        for index, item in enumerate(a):
-            if item == self.pickedPoint[i]:
-                a = np.delete(a, index)
-                return a
-
-    def updatePlot(self):
-        if self.pickedPoint == None:
-            return
-        else:
-            self.line.set_data(self.xs, self.ys)
-            self.arrow.set_positions((self.xs[0], self.ys[0]), (self.xs[1], self.ys[1]))
-            self.line.figure.canvas.draw()
-            self.arrow.figure.canvas.draw()
 
     def options(self):
         color = mcolors.to_hex(mcolors.to_rgba(self.arrow.get_edgecolor(),  # get color of arrow
@@ -1257,10 +1243,10 @@ class LineDrawer:
             ]
 
         positionOptions = [
-            ('x Start', self.xs[0]),
-            ('y Start', self.ys[0]),
-            ('x End', self.xs[1]),
-            ('y End', self.ys[1]),
+            ('x Start', self.posA[0]),
+            ('y Start', self.posA[1]),
+            ('x End', self.posB[0]),
+            ('y End', self.posB[1]),
         ]
 
         optionsList = [(lineOptions, "Line", ""), (arrowOptions, "Arrow", ""), (positionOptions, 'Postion', '')]
@@ -1278,34 +1264,22 @@ class LineDrawer:
         (arrowstyle, headlength, headwidth) = arrowOptions
         (xStart, yStart, xEnd, yEnd) = positionOptions
 
-        self.line.set_linewidth(width)
-        self.line.set_linestyle(linestyle)
-        self.line.set_color(color)
-
         self.arrow.set_linewidth(width)
         self.arrow.set_linestyle(linestyle)
         self.arrow.set_color(color)
         if arrowstyle != '-':
-            self.arrow.set_arrowstyle(arrowstyle, head_length = headlength, head_width = headwidth)
+            self.arrow.set_arrowstyle(arrowstyle, head_length=headlength, head_width=headwidth)
         else:
             self.arrow.set_arrowstyle(arrowstyle)
 
-        self.xs[0] = xStart
-        self.ys[0] = yStart
-        self.xs[1] = xEnd
-        self.ys[1] = yEnd
+        self.posA[0] = xStart
+        self.posA[1] = yStart
+        self.posB[0] = xEnd
+        self.posB[1] = yEnd
 
-        self.line.set_data(self.xs, self.ys)
-        self.arrow.set_positions((self.xs[0], self.ys[0]), (self.xs[1], self.ys[1]))
+        self.arrow.set_positions(self.posA, self.posB)
 
-        self.line.figure.canvas.draw()
-
-    def addArrow(self):
-        #self.arrow_style = mpatches.ArrowStyle("->", head_length=.6, head_width=.6)
-        self.arrow = mpatches.FancyArrowPatch((self.xs[1], self.ys[1]), (self.xs[0], self.ys[0]),
-                                 mutation_scale=10, arrowstyle='<-')
-        self.ax.add_patch(self.arrow)
-
+        self.c.draw()
 
 class InsertText:
     def __init__(self, spot): 
@@ -1403,8 +1377,8 @@ class InsertText:
 
 
 class DataPointPicker:
-#Creates a yellow dot around a selected data point
     def __init__(self, line, selected, a):
+        # Creates a yellow dot around a selected data point
         self.xs = line.get_xdata()
         self.ys = line.get_ydata()
         self.line = line
@@ -1461,7 +1435,6 @@ class DataPointPicker:
         self.selected.figure.canvas.draw()
 
 class MyCustomToolbar(NavigationToolbar2QT):
-    #icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Layer_content.png")
     toolitems = [t for t in NavigationToolbar2QT.toolitems]
     # Add new toolitem at last position
 
@@ -1471,12 +1444,6 @@ class MyCustomToolbar(NavigationToolbar2QT):
 
     def __init__(self, plotCanvas):
         NavigationToolbar2QT.__init__(self, plotCanvas, parent=None)
-        #self._actions = {}  # mapping of toolitem method names to QActions.
-        #icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Layer_content.png")
-        #a = self.addAction(icon, 'Layers', self.layer_content)
-        #self._actions['layer_content'] = a
-        #a.setToolTip('manage layers and layer contents')
-
 
     def layer_content(self):
         Layer_Legend = QDialog()
@@ -1527,6 +1494,7 @@ class PlotWindow(QMainWindow):
         self.ErrorBar = []
         self.functions = Functions(self)
         self.InsertedText = []                          # Storage for text inserted in the plot
+        self.drawed_line = []                           # Storage for lines and arrows drawed in the plot
 
         self.plot()
         self.create_statusbar()
@@ -1545,7 +1513,7 @@ class PlotWindow(QMainWindow):
         labelfontsize = 24
         tickfontsize = 18
        
-        if self.fig == None:
+        if self.fig == None:            #new Plot
             self.fig = Figure(figsize=(15,9))
             self.ax = self.fig.add_subplot(111)
             self.Canvas = FigureCanvasQTAgg(self.fig)
@@ -1562,17 +1530,20 @@ class PlotWindow(QMainWindow):
                     barlinecol[0].set_label('_Hidden barlinecol ' + j[2])
                 else:
                     self.Spektrum.append(self.ax.plot(j[0], j[1], j[4], label = j[2], picker = 5)[0])
-            legend = self.ax.legend(fontsize = legendfontsize)
+            self.ax.legend(fontsize = legendfontsize)
             self.ax.set_xlabel(r'Raman shift / cm$^{-1}$', fontsize = labelfontsize)
             self.ax.set_ylabel(r'Intensity / cts/s', fontsize = labelfontsize)
             self.ax.xaxis.set_tick_params(labelsize=tickfontsize)
             self.ax.yaxis.set_tick_params(labelsize=tickfontsize)
-        else:
+        else:                       #loaded Plot
             self.ax = self.fig.axes[0]
             self.Canvas = FigureCanvasQTAgg(self.fig)
             layout.addWidget(self.Canvas)
             for j in self.ax.lines:
-                self.Spektrum.append(j)
+                if j.get_label() == '_nolegend_ drawed_line':       # drawed line or arrow
+                    self.drawed_line.append(LineDrawer(j))
+                else:                                           # spectrum
+                    self.Spektrum.append(j)
             self.ax.get_legend()
         self.addToolBar(MyCustomToolbar(self.Canvas))
 
@@ -1597,7 +1568,7 @@ class PlotWindow(QMainWindow):
             spect.set_marker(ma)
         handles, labels = self.ax.get_legend_handles_labels()
         self.update_legend(handles, labels)
-        self.ax.figure.canvas.draw()
+        self.fig.canvas.draw()
 
     def keyPressEvent(self, event):
         key = event.key
@@ -1607,8 +1578,7 @@ class PlotWindow(QMainWindow):
                 self.Spektrum[k].set_xdata(j[0])
                 self.Spektrum[k].set_ydata(j[1])
                 k = k+1
-            canvas = self.Canvas
-            self.ax.figure.canvas.draw()
+            self.fig.canvas.draw()
         else:
             pass
 
@@ -1646,7 +1616,7 @@ class PlotWindow(QMainWindow):
             self.ax.figure.canvas.draw()
         elif event.artist in self.Spektrum and event.mouseevent.button == 3:
             self.lineDialog = QMenu()
-            gotoSS_action = self.lineDialog.addAction("Go to Spreadsheet",lambda: self.go_to_spreadsheet(event.artist))
+            self.lineDialog.addAction("Go to Spreadsheet",lambda: self.go_to_spreadsheet(event.artist))
             point = self.mapToGlobal(QtCore.QPoint(event.mouseevent.x, self.frameGeometry().height() - event.mouseevent.y))
             self.lineDialog.exec_(point)
         else:
@@ -1760,16 +1730,16 @@ class PlotWindow(QMainWindow):
     def go_to_spreadsheet(self, line):
         line_index = self.Spektrum.index(line)
         if len(self.data[line_index]) == 7:
-            spreadsheet = self.data[line_index][6]
-            spreadsheet_name = spreadsheet.windowTitle()
-            item = spreadsheet.mw.treeWidget.findItems(spreadsheet_name, Qt.MatchFixedString | Qt.MatchRecursive)
+            spreadsheet_name = self.data[line_index][6]
+            item = self.mw.treeWidget.findItems(spreadsheet_name, Qt.MatchFixedString | Qt.MatchRecursive)
             for j in item:              #select spreadsheet if there are several items with same name
                 if j.type() == 1:
                     spreadsheet_item = j
                     break
                 else:
                     continue
-            spreadsheet.mw.activate_window(spreadsheet_item)
+            self.mw.activate_window(spreadsheet_item)
+            spreadsheet = self.mw.window['Spreadsheet'][spreadsheet_name]
             header_name = self.data[line_index][2]
             for j in range(spreadsheet.table.columnCount()):
                 if spreadsheet.table.horizontalHeaderItem(j).text() == header_name+'(Y)':
@@ -1779,7 +1749,7 @@ class PlotWindow(QMainWindow):
                     continue
 
         elif len(self.data[line]) == 6:
-            self.mw.show_statusbar_message('This functions will be available, in future projects. This project is to old', 3000)
+            self.mw.show_statusbar_message('This functions will be available, in future projects. This project is too old', 3000)
         else:
             self.mw.show_statusbar_message('This is weird!', 3000)
 
@@ -1996,8 +1966,7 @@ class PlotWindow(QMainWindow):
 
         x1 = np.linspace(min(x), max(x), 1000)
         self.ax.plot(x1, self.functions.FctSumme(x1, *popt), '-r')
-        canvas = self.Canvas
-        self.ax.figure.canvas.draw()
+        self.fig.canvas.draw()
         print('\n', 'Lorentz')
         print(tabulate([['Background', popt[0]], [r'Raman Shift in cm^-1', popt[1]], ['Intensity', popt[2]], ['FWHM', popt[3]]], headers=['Parameters', 'Values']))
                 
@@ -2019,8 +1988,7 @@ class PlotWindow(QMainWindow):
 
         x1 = np.linspace(min(x), max(x), 10000)
         self.ax.plot(x1, self.functions.FctSumme(x1, *popt), '-r')
-        canvas = self.Canvas
-        self.ax.figure.canvas.draw()
+        self.fig.canvas.draw()
         print('\n' + 'Gaussian')
         print(tabulate([['Background', popt[0]], [r'Raman Shift in cm^-1', popt[1]], ['Intensity', popt[2]], ['FWHM', popt[3]]], headers=['Parameters', 'Values']))
 
@@ -2486,13 +2454,11 @@ class PlotWindow(QMainWindow):
         xs = self.selectedData[0][0]
         ys = self.selectedData[0][1]
         ns = self.selectedDatasetNumber[0]
-        canvas = self.Canvas
         self.cid_scale = self.ax.figure.canvas.mpl_connect('button_release_event', self.scale_click)
         self.ax.figure.canvas.start_event_loop(timeout=10000) 
         ys = ys*self.scale_factor
         self.data[ns][1] = ys
         self.Spektrum[ns].set_ydata(ys)
-        canvas = self.Canvas
         self.ax.figure.canvas.draw()
             
     def scale_click(self, event):
@@ -2517,13 +2483,11 @@ class PlotWindow(QMainWindow):
         xs = self.selectedData[0][0]
         ys = self.selectedData[0][1]
         ns = self.selectedDatasetNumber[0]
-        canvas = self.Canvas
         self.cid_shift = self.ax.figure.canvas.mpl_connect('button_release_event', self.shift_click)
         self.ax.figure.canvas.start_event_loop(timeout=10000)
         ys = ys + self.shift_factor
         self.data[ns][1] = ys
         self.Spektrum[ns].set_ydata(ys)
-        canvas = self.Canvas
         self.ax.figure.canvas.draw()
 
     def shift_click(self, event):
@@ -2535,8 +2499,8 @@ class PlotWindow(QMainWindow):
             y = event.ydata
             ind = min(range(len(xs)), key=lambda i: abs(xs[i]-x))
             self.shift_factor = y - ys[ind]
-            self.ax.figure.canvas.mpl_disconnect(self.cid_shift)
-            self.ax.figure.canvas.stop_event_loop(self)
+            self.fig.canvas.mpl_disconnect(self.cid_shift)
+            self.fig.canvas.stop_event_loop(self)
         else:
             pass
 
@@ -2546,11 +2510,15 @@ class PlotWindow(QMainWindow):
         except RuntimeError:
             return
 
-        line, = self.ax.plot([pts[0][0], pts[1][0]], [pts[0][1], pts[1][1]], 'black', lw=2, picker = 5)
-        line.set_visible(False)
-        self.drawedLine = LineDrawer(line)
-        canvas = self.Canvas
-        self.ax.figure.canvas.draw()
+        #line, = self.ax.plot([pts[0][0], pts[1][0]], [pts[0][1], pts[1][1]], 'black', lw=2,
+        #                     picker=5, label='_nolegend_ drawed_line')
+        posA = (pts[0][0], pts[0][1])
+        posB = (pts[1][0], pts[1][1])
+        arrow = mpatches.FancyArrowPatch(posA, posB ,
+                                 mutation_scale=10, arrowstyle='-', picker=10)
+        arrow.set_figure(self.fig)
+        self.drawed_line.append(LineDrawer(arrow))
+        self.fig.canvas.draw()
 
     def insert_text(self):
         try:
