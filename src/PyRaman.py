@@ -1160,12 +1160,6 @@ class LineDrawer:
         self.posB = list(posB)
         self.pickedPoint = None
 
-        self.startPlot()
-         
-    def startPlot(self):
-        self.arrow.set_label('_nolegend_ drawed_line')
-        self.ax.add_patch(self.arrow)
-        self.c.draw()
         self.c.mpl_connect('pick_event', self.pickpoint)
         self.c.mpl_connect('motion_notify_event', self.movepoint)
         self.c.mpl_connect('button_release_event', self.unpickpoint)
@@ -1197,12 +1191,12 @@ class LineDrawer:
             return
         else:
             if self.pickedPoint == self.posA:
-                self.posA = (event.xdata, event.ydata)
+                self.posA = [event.xdata, event.ydata]
             elif self.pickedPoint == self.posB:
-                self.posB = (event.xdata, event.ydata)
+                self.posB = [event.xdata, event.ydata]
             else:
                 return
-            self.pickedPoint = (event.xdata, event.ydata)
+            self.pickedPoint = [event.xdata, event.ydata]
             self.arrow.set_positions(self.posA, self.posB)
             self.selectedPoint.set_data(self.pickedPoint)
             self.c.draw()
@@ -1276,7 +1270,6 @@ class LineDrawer:
         self.posA[1] = yStart
         self.posB[0] = xEnd
         self.posB[1] = yEnd
-
         self.arrow.set_positions(self.posA, self.posB)
 
         self.c.draw()
@@ -1494,7 +1487,7 @@ class PlotWindow(QMainWindow):
         self.ErrorBar = []
         self.functions = Functions(self)
         self.InsertedText = []                          # Storage for text inserted in the plot
-        self.drawed_line = []                           # Storage for lines and arrows drawed in the plot
+        self.drawn_line = []                           # Storage for lines and arrows drawn in the plot
 
         self.plot()
         self.create_statusbar()
@@ -1540,10 +1533,11 @@ class PlotWindow(QMainWindow):
             self.Canvas = FigureCanvasQTAgg(self.fig)
             layout.addWidget(self.Canvas)
             for j in self.ax.lines:
-                if j.get_label() == '_nolegend_ drawed_line':       # drawed line or arrow
-                    self.drawed_line.append(LineDrawer(j))
-                else:                                           # spectrum
-                    self.Spektrum.append(j)
+                self.Spektrum.append(j)
+            for j in self.ax.get_children():
+                if type(j) == mpatches.FancyArrowPatch:             #all drawn lines and arrows
+                    self.drawn_line.append(LineDrawer(j))
+
             self.ax.get_legend()
         self.addToolBar(MyCustomToolbar(self.Canvas))
 
@@ -2011,8 +2005,7 @@ class PlotWindow(QMainWindow):
         popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0 = p_start) #, bounds=([0, 500], [200, 540]))
         x1 = np.linspace(min(x), max(x), 10000)
         self.ax.plot(x1, self.functions.FctSumme(x1, *popt), '-r')
-        canvas = self.Canvas
-        self.ax.figure.canvas.draw()
+        self.fig.canvas.draw()
         print('\n Breit-Wigner')
         print(tabulate([['Background', popt[0]], [r'Raman Shift in cm^-1', popt[1]], ['Intensity', popt[2]], ['FWHM', popt[3]],
                         ['Additional Parameters', popt[4]]], headers=['Parameters', 'Values']))
@@ -2506,18 +2499,15 @@ class PlotWindow(QMainWindow):
 
     def draw_line(self):
         try:
-            pts = self.fig.ginput(2)
+            pts = self.fig.ginput(2)        # get two points
         except RuntimeError:
             return
-
-        #line, = self.ax.plot([pts[0][0], pts[1][0]], [pts[0][1], pts[1][1]], 'black', lw=2,
-        #                     picker=5, label='_nolegend_ drawed_line')
-        posA = (pts[0][0], pts[0][1])
-        posB = (pts[1][0], pts[1][1])
-        arrow = mpatches.FancyArrowPatch(posA, posB ,
-                                 mutation_scale=10, arrowstyle='-', picker=10)
+        posA = pts[0]
+        posB = pts[1]
+        arrow = mpatches.FancyArrowPatch(posA, posB, mutation_scale=10, arrowstyle='-', picker=10)
         arrow.set_figure(self.fig)
-        self.drawed_line.append(LineDrawer(arrow))
+        self.ax.add_patch(arrow)
+        self.drawn_line.append(LineDrawer(arrow))
         self.fig.canvas.draw()
 
     def insert_text(self):
