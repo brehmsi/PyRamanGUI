@@ -155,12 +155,11 @@ def figure_edit(axes, parent=None):
             return label, 0
 
     # Get / Curves / errorbar capline
-    par = 0
     linedict = {}
     ebcaplinedict = {}          # capline of errorbar
     for line in axes.get_lines():
         label = line.get_label()
-        if label == '_nolegend_':
+        if '_nolegend_' in label:
             continue
         elif label.split(' ', 1)[0] == '_Hidden':     # Errorbars
             rest = label.split('_Hidden ', 1)[1]
@@ -176,7 +175,7 @@ def figure_edit(axes, parent=None):
     ebbarlinedict = {}            # barline of errorbar
     for collection in axes.collections:
         label = collection.get_label()
-        if label == '_nolegend_':
+        if '_nolegend_' in label:
             continue
         elif label.split(' ', 1)[0] == '_Hidden':     # Errorbars
             rest = label.split('_Hidden ', 1)[1]
@@ -278,7 +277,7 @@ def figure_edit(axes, parent=None):
     imagedict = {}
     for image in axes.get_images():
         label = image.get_label()
-        if label == '_nolegend_':
+        if '_nolegend_' in label:
             continue
         imagedict[label] = image
     imagelabels = sorted(imagedict, key=cmp_key)
@@ -572,14 +571,13 @@ def figure_edit_brokenaxis(axes, parent = None):
             return label, 0
 
     # Get / Curves / errorbar capline
-    par = 0
     linedict = []
     ebcaplinedict = {}          # capline of errorbar
     for idx, ax in enumerate(axes[1:]):
         linedict.append({})
         for line in ax.get_lines():
             label = line.get_label()
-            if label == '_nolegend_':
+            if '_nolegend_' in label:
                 continue
             elif label.split(' ', 1)[0] == '_Hidden':     # Errorbars
                 rest = label.split('_Hidden ', 1)[1]
@@ -595,7 +593,7 @@ def figure_edit_brokenaxis(axes, parent = None):
     ebbarlinedict = {}            # barline of errorbar
     for collection in axes[1].collections:
         label = collection.get_label()
-        if label == '_nolegend_':
+        if '_nolegend_' in label:
             continue
         elif label.split(' ', 1)[0] == '_Hidden':     # Errorbars
             rest = label.split('_Hidden ', 1)[1]
@@ -697,7 +695,7 @@ def figure_edit_brokenaxis(axes, parent = None):
     imagedict = {}
     for image in axes[0].get_images():
         label = image.get_label()
-        if label == '_nolegend_':
+        if '_nolegend_' in label:
             continue
         imagedict[label] = image
     imagelabels = sorted(imagedict, key=cmp_key)
