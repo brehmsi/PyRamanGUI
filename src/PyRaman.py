@@ -1155,7 +1155,7 @@ class LineDrawer:
         self.fig = self.arrow.figure
         self.ax = self.fig.axes[0]
         self.c = self.fig.canvas
-        posA, platzhalter_den_keiner_braucht, posB = self.arrow.get_path()._vertices
+        posA, *_, posB = self.arrow.get_path()._vertices
         self.posA = list(posA)
         self.posB = list(posB)
         self.pickedPoint = None
@@ -1275,61 +1275,45 @@ class LineDrawer:
         self.c.draw()
 
 class InsertText:
-    def __init__(self, spot): 
-        self.fig = spot.figure
-        self.ax = spot.axes
-        self.textpt = spot.get_data()   #Point, where text is placed
-        self.pickedText = None
-        self.newText = None
-        self.create_textbox()
-
-    def create_textbox(self):
-        self.texty = self.ax.annotate(r'''*''', self.textpt, picker = 5)
-        self.ax.add_artist(self.texty)
-        
-        self.cid1 = self.texty.figure.canvas.mpl_connect('pick_event', self.on_pick)
-        self.cid2 = self.texty.figure.canvas.mpl_connect('button_release_event', self.on_release)
-        self.cid3 = self.texty.figure.canvas.mpl_connect('motion_notify_event', self.on_motion)
+    def __init__(self, text):
+        self.text = text
+        self.fig = self.text.figure
+        self.cid1 = self.fig.canvas.mpl_connect('pick_event', self.on_pick)
+        self.newText = None     #text content
 
     def on_pick(self, event):
-        if event.artist == self.texty and event.mouseevent.button == 1 and event.mouseevent.dblclick == True:
+        if event.artist == self.text and event.mouseevent.button == 1 and event.mouseevent.dblclick == True:
             tbox=dict(boxstyle='Square', fc="w", ec="k")
-            self.texty.set_bbox(tbox) 
-            self.cid4 = self.texty.figure.canvas.mpl_connect('key_press_event', self.text_input)
+            self.text.set_bbox(tbox)
+            self.cid4 = self.fig.canvas.mpl_connect('key_press_event', self.text_input)
             self.fig.canvas.setFocusPolicy( QtCore.Qt.ClickFocus )
             self.fig.canvas.setFocus()
             self.fig.canvas.draw()
-        elif event.artist == self.texty and event.mouseevent.button == 1:
-            self.pickedText = self.texty
-        elif event.artist == self.texty and event.mouseevent.button == 3:
+        elif event.artist == self.text and event.mouseevent.button == 1:
+            self.cid2 = self.fig.canvas.mpl_connect('button_release_event', self.on_release)
+            self.cid3 = self.fig.canvas.mpl_connect('motion_notify_event', self.on_motion)
+        elif event.artist == self.text and event.mouseevent.button == 3:
             self.text_options()
         elif 'cid4' in locals():
-            self.texty.figure.canvas.mpl_disconnect(self.cid4)
-        else:
-            return
-
-    def on_release(self, event):
-        if self.pickedText == None:
-            return
-        elif event.button == 1:
-            self.pickedText = None
+            self.fig.canvas.mpl_disconnect(self.cid4)
         else:
             return
 
     def on_motion(self, event):
-        if self.pickedText == None:
-            return
-        else:
-            pos = (event.xdata, event.ydata)
-            self.texty.set_position(pos)
-            self.fig.canvas.draw()
+        pos = (event.xdata, event.ydata)
+        self.text.set_position(pos)
+        self.fig.canvas.draw()
+
+    def on_release(self, event):
+        self.fig.canvas.mpl_disconnect(self.cid2)
+        self.fig.canvas.mpl_disconnect(self.cid3)
 
     def text_input(self, event):
         insert = event.key
         if event.key == 'enter':
-            self.texty.figure.canvas.mpl_disconnect(self.cid4)
-            self.texty.set_text(self.newText)
-            self.texty.set_bbox(None)
+            self.text.figure.canvas.mpl_disconnect(self.cid4)
+            self.text.set_text(self.newText)
+            self.text.set_bbox(None)
             self.fig.canvas.draw()
             self.newText = None
             return
@@ -1346,26 +1330,25 @@ class InsertText:
             self.newText = insert
         else:
             self.newText = self.newText + insert
-        self.texty.set_text(self.newText)
+        self.text.set_text(self.newText)
         self.fig.canvas.draw()
 
     def text_options(self):
-        color = mcolors.to_hex(mcolors.to_rgba(self.texty.get_color(), self.texty.get_alpha()), keep_alpha=True)
+        color = mcolors.to_hex(mcolors.to_rgba(self.text.get_color(), self.text.get_alpha()), keep_alpha=True)
         text_options_list = [
-            ('Fontsize', self.texty.get_fontsize()),
+            ('Fontsize', self.text.get_fontsize()),
             ('Color', color),
             ]
 
-        texty_option = formlayout.fedit(text_options_list, title="Text options")
-        if texty_option is not None:
-            self.apply_callback(texty_option)
+        text_option_menu = formlayout.fedit(text_options_list, title="Text options")
+        if text_option_menu is not None:
+            self.apply_callback(text_option_menu)
 
     def apply_callback(self, options):
         (fontsize, color) = options
 
-        self.texty.set_fontsize(fontsize)
-        self.texty.set_color(color)
-
+        self.text.set_fontsize(fontsize)
+        self.text.set_color(color)
         self.fig.canvas.draw()
 
 
@@ -1486,7 +1469,7 @@ class PlotWindow(QMainWindow):
         self.Spektrum = []
         self.ErrorBar = []
         self.functions = Functions(self)
-        self.InsertedText = []                          # Storage for text inserted in the plot
+        self.inserted_text = []                          # Storage for text inserted in the plot
         self.drawn_line = []                           # Storage for lines and arrows drawn in the plot
 
         self.plot()
@@ -1535,9 +1518,12 @@ class PlotWindow(QMainWindow):
             for j in self.ax.lines:
                 self.Spektrum.append(j)
             for j in self.ax.get_children():
-                if type(j) == mpatches.FancyArrowPatch:             #all drawn lines and arrows
+                if type(j) == mpatches.FancyArrowPatch:             # all drawn lines and arrows
                     self.drawn_line.append(LineDrawer(j))
-
+                elif type(j)== matplotlib.text.Annotation:          # all inserted texts
+                    self.inserted_text.append(InsertText(j))
+                else:
+                    pass
             self.ax.get_legend()
         self.addToolBar(MyCustomToolbar(self.Canvas))
 
@@ -2516,9 +2502,11 @@ class PlotWindow(QMainWindow):
         except RuntimeError:
             return
 
-        textspot, = self.ax.plot([pt[0][0]], [pt[0][1]], 'black', lw=2, picker = 5)
-        textspot.set_visible(False)
-        self.InsertedText.append(InsertText(textspot))
+        #textspot, = self.ax.plot([pt[0][0]], [pt[0][1]], 'black', lw=2, picker = 5)
+        #textspot.set_visible(False)
+        text = self.ax.annotate(r'''*''', pt[0], picker=5)
+        self.inserted_text.append(InsertText(text))
+        self.ax.add_artist(text)
         self.fig.canvas.draw()
 
     def closeEvent(self, event):
