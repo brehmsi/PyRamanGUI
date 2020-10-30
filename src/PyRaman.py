@@ -3,6 +3,7 @@ import math
 import matplotlib
 import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 import matplotlib.backends.qt_editor._formlayout as formlayout
 import numpy as np
 import os
@@ -20,8 +21,8 @@ from datetime import datetime
 #import collections
 from collections import ChainMap
 from matplotlib import *
-from matplotlib.widgets import Slider, Button, RadioButtons
 from matplotlib.figure import Figure
+from matplotlib.widgets import LassoSelector
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 import matplotlib.backends.qt_editor.figureoptions as figureoptions
@@ -1278,6 +1279,8 @@ class InsertText:
     def __init__(self, text):
         self.text = text
         self.fig = self.text.figure
+        if self.fig == None:
+            return
         self.cid1 = self.fig.canvas.mpl_connect('pick_event', self.on_pick)
         self.newText = None     #text content
 
@@ -1310,6 +1313,7 @@ class InsertText:
 
     def text_input(self, event):
         insert = event.key
+        old_text = self.newText
         if event.key == 'enter':
             self.text.figure.canvas.mpl_disconnect(self.cid4)
             self.text.set_text(self.newText)
@@ -1330,8 +1334,15 @@ class InsertText:
             self.newText = insert
         else:
             self.newText = self.newText + insert
-        self.text.set_text(self.newText)
-        self.fig.canvas.draw()
+
+        try:
+            self.text.set_text(self.newText)
+            self.fig.canvas.draw()
+        except ValueError as e:
+            self.text.set_text(old_text)
+            self.fig.canvas.draw()
+            print(e)
+
 
     def text_options(self):
         color = mcolors.to_hex(mcolors.to_rgba(self.text.get_color(), self.text.get_alpha()), keep_alpha=True)
@@ -1410,6 +1421,57 @@ class DataPointPicker:
         self.selected.set_data(self.xs[self.lastind], self.ys[self.lastind])
         self.selected.figure.canvas.draw()
 
+
+class DataSetSelecter(QtWidgets.QDialog):
+    def __init__(self, data_set_names, select_only_one = True):
+        super(DataSetSelecter, self).__init__(parent=None)
+        '''
+        Select one or several datasets
+
+        Parameters
+        ----------
+        data_set_names           # names of all datasets
+        select_only_one          # if True only on Dataset can be selected
+        '''
+        self.data_set_names = data_set_names
+        self.select_only_one = select_only_one
+        self.selectedDatasetNumber = []
+        self.CheckDataset = []
+        self.create_dialog()
+
+    def create_dialog(self):
+        layout = QtWidgets.QGridLayout()
+
+        for idx, name in enumerate(self.data_set_names):
+            self.CheckDataset.append(QCheckBox(name, self))
+            layout.addWidget(self.CheckDataset[idx], idx, 0)
+            if self.select_only_one is True:
+                self.CheckDataset[idx].stateChanged.connect(self.onStateChange)
+
+        ok_button = QPushButton("ok", self)
+        layout.addWidget(ok_button, len(self.data_set_names), 0)
+        ok_button.clicked.connect(self.Ok_button)
+        self.setLayout(layout)
+        self.setWindowTitle("Dialog")
+        self.exec_()
+
+    @pyqtSlot(int)
+    def onStateChange(self, state):
+        if state == Qt.Checked:
+            for j in self.CheckDataset:
+                if self.sender() != j:
+                    j.setChecked(False)
+
+    def Ok_button(self):
+        # OK Button for function SecetedDataset
+        for idx, d in enumerate(self.CheckDataset):
+            if d.isChecked():
+                self.selectedDatasetNumber.append(idx)
+            else:
+                pass
+        self.close()
+
+
 class MyCustomToolbar(NavigationToolbar2QT):
     toolitems = [t for t in NavigationToolbar2QT.toolitems]
     # Add new toolitem at last position
@@ -1442,7 +1504,7 @@ class MyCustomToolbar(NavigationToolbar2QT):
             icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Layer_content.png")
         else:
             name = name.replace('.png', '_large.png')
-            pm = QtGui.QPixmap(os.path.join(self.basedir, name))
+            pm = QtGui.QPixmap(str(cbook._get_data_path('images', name)))
             _setDevicePixelRatioF(pm, _devicePixelRatioF(self))
             if color is not None:
                 mask = pm.createMaskFromColor(QtGui.QColor('black'),
@@ -1451,6 +1513,7 @@ class MyCustomToolbar(NavigationToolbar2QT):
                 pm.setMask(mask)
             icon = QIcon(pm)
         return icon
+
 
 class PlotWindow(QMainWindow):
     '''
@@ -1488,7 +1551,7 @@ class PlotWindow(QMainWindow):
         legendfontsize = 24
         labelfontsize = 24
         tickfontsize = 18
-       
+
         if self.fig == None:            #new Plot
             self.fig = Figure(figsize=(15,9))
             self.ax = self.fig.add_subplot(111)
@@ -1608,7 +1671,7 @@ class PlotWindow(QMainWindow):
             leg_draggable = old_legend._draggable is not None
             leg_ncol = old_legend._ncol
             leg_fontsize = int(old_legend._fontsize)
-            leg_frameon = old_legend._drawFrame
+            leg_frameon = old_legend.get_frame_on()
             leg_shadow = old_legend.shadow
             leg_fancybox = type(old_legend.legendPatch.get_boxstyle())
             leg_framealpha = old_legend.get_frame().get_alpha()
@@ -1657,12 +1720,14 @@ class PlotWindow(QMainWindow):
         ### 3.1 Analysis Fit
         analysisFit = analysisMenu.addMenu('&Fit')
         
-        analysisFitEinzel = analysisFit.addMenu('&Einzelfunktionen')
-        analysisFitEinzel.addAction('Lorentz', self.FitLorentz)
-        analysisFitEinzel.addAction('Gaussian', self.FitGaussian)
-        analysisFitEinzel.addAction('Breit-Wigner', self.FitBreitWigner)
-        
-        analysisFitRoutine = analysisFit.addMenu('&Fitroutine')
+        analysisFitSingleFct = analysisFit.addMenu('&Single function')
+
+        analysisFitSingleFct.addAction('Lorentz')
+        analysisFitSingleFct.addAction('Gaussian')
+        analysisFitSingleFct.addAction('Breit-Wigner-Fano')
+        analysisFitSingleFct.triggered[QAction].connect(self.fit_single_function)
+
+        analysisFitRoutine = analysisFit.addMenu('&Fit routine')
         analysisFitRoutine.addAction('D und G Bande', self.fitroutine1)
 
         ### 3.2 Analysis base line correction
@@ -1733,43 +1798,18 @@ class PlotWindow(QMainWindow):
         else:
             self.mw.show_statusbar_message('This is weird!', 3000)
 
-    def SelectDataset(self):
-        # Select one or several datasets
-        self.selectedDatasetNumber = []
+    def SelectDataset(self, select_only_one=False):
+        data_sets_name = []
+        for j in self.ax.get_lines():
+            data_sets_name.append(j.get_label())
+        DSS = DataSetSelecter(data_sets_name, select_only_one)
         self.selectedData = []
-        self.Dialog_SelDataSet = QDialog()
-        layout = QtWidgets.QGridLayout()
-        self.CheckDataset = []
-        # for j in range(len(self.data)):
-        #     self.CheckDataset.append(QCheckBox(self.data[j][2], self))
-        #     layout.addWidget(self.CheckDataset[j], j, 0)
-        for idx, line in enumerate(self.ax.get_lines()):
-            self.CheckDataset.append(QCheckBox(line.get_label(), self))
-            layout.addWidget(self.CheckDataset[idx], idx, 0)
-
-        ok_button = QPushButton("ok", self.Dialog_SelDataSet)
-        layout.addWidget(ok_button, len(self.data), 0)
-        ok_button.clicked.connect(self.Ok_button)
-        self.Dialog_SelDataSet.setLayout(layout)
-        self.Dialog_SelDataSet.setWindowTitle("Dialog")
-        self.Dialog_SelDataSet.setWindowModality(Qt.ApplicationModal)
-        self.Dialog_SelDataSet.exec_()
-
-    def Ok_button(self):
-        # OK Button for function SecetedDataset
-        for idx, d in enumerate(self.CheckDataset):
-            if d.isChecked():
-                self.selectedDatasetNumber.append(idx)
-                self.selectedData.append(self.data[idx])
-            else:
-                pass
-        self.Dialog_SelDataSet.close()
+        self.selectedDatasetNumber = DSS.selectedDatasetNumber
+        for j in self.selectedDatasetNumber:
+            self.selectedData.append(self.data[j])
 
     def menu_save_to_file(self):
-        self.SelectDataset()
-        if self.selectedData == []:
-            return
-
+        self.SelectDataset(True)
         for j in self.selectedData:
             if j[3] != None:
                 startFileDirName = os.path.dirname(j[3])
@@ -1801,9 +1841,6 @@ class PlotWindow(QMainWindow):
 
     def delete_pixel(self):
         self.SelectDataset()
-        if self.selectedData == []:
-            return
-
         for j in self.selectedDatasetNumber:
             controll_delete_parameter = True
             while controll_delete_parameter == True:
@@ -1825,9 +1862,6 @@ class PlotWindow(QMainWindow):
     ### Deletes data point with number 630+n*957, because this pixel is broken in CCD detector of LabRam
     def delete_datapoint(self):
         self.SelectDataset()
-        if self.selectedData == []:
-            return
-
         for j in self.selectedDatasetNumber:
             a = 629
             grenze = 6
@@ -1869,19 +1903,16 @@ class PlotWindow(QMainWindow):
 
     def normalize(self):
         self.SelectDataset()
-        if self.selectedData == []:
-            return
-
-        for j in self.selectedDatasetNumber:
-            self.data[j][1] = self.data[j][1]/numpy.amax(self.data[j][1])
-            self.Spektrum[j].set_data(self.data[j][0], self.data[j][1])
+        for n in self.selectedDatasetNumber:
+            self.data[n][1] = self.data[n][1]/numpy.amax(self.data[n][1])
+            self.Spektrum[n].set_data(self.data[n][0], self.data[n][1])
             self.fig.canvas.draw()
             ### Save normalized data ###
-            (fileBaseName, fileExtension) = os.path.splitext(self.data[j][2])
-            startFileDirName = os.path.dirname(self.data[j][3])
+            (fileBaseName, fileExtension) = os.path.splitext(self.data[n][2])
+            startFileDirName = os.path.dirname(self.data[n][3])
             startFileBaseName = startFileDirName + '/' + fileBaseName
             startFileName = startFileBaseName + '_norm.txt'
-            save_data = [self.data[j][0], self.data[j][1]]
+            save_data = [self.data[n][0], self.data[n][1]]
             save_data = np.transpose(save_data)
             self.save_to_file('Save normalized data in file', startFileName, save_data)
 
@@ -1929,168 +1960,143 @@ class PlotWindow(QMainWindow):
         d3 = float(d3_edit.text())      #FWHM
         return ([d0, d1, d2, d3])
 
-    def FitLorentz(self):
+    def fit_single_function(self, q):
         self.SelectDataset()
-        if self.selectedData == []:
+        if self.selectedDatasetNumber != []:
+            x_min, x_max = self.SelectArea()
+            p_start = self.get_start_values()
+            if q.text() == 'Lorentz':
+                self.anzahl_Lorentz = 1
+                self.anzahl_Gauss = 0
+                self.anzahl_BWF = 0
+
+            if q.text() == 'Gaussian':
+                self.anzahl_Lorentz = 0
+                self.anzahl_Gauss = 1
+                self.anzahl_BWF = 0
+
+            if q.text() == 'Breit-Wigner-Fano':
+                self.anzahl_Lorentz = 0
+                self.anzahl_Gauss = 0
+                self.anzahl_BWF = 1
+                p_start.append(-10)                 # additional parameter in BWF for asymmetry
+        else:
             return
 
-        xs = self.selectedData[0][0]
-        ys = self.selectedData[0][1]
-        x,y = self.SelectArea(xs, ys)
+        for j in self.selectedDatasetNumber:
+            xs = self.Spektrum[j].get_xdata()
+            ys = self.Spektrum[j].get_ydata()
+            x = xs[np.where((xs > x_min) & (xs < x_max))]
+            y = ys[np.where((xs > x_min) & (xs < x_max))]
 
-        p_start = self.get_start_values()
-        self.anzahl_Lorentz = 1                       
-        self.anzahl_Gauss   = 0   
-        self.anzahl_BWF     = 0
-        popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0 = p_start) #, bounds=([0, 500], [200, 540]))
+            popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0=p_start)  # , bounds=([0, 500], [200, 540]))
+            x1 = np.linspace(min(x), max(x), 1000)
+            self.ax.plot(x1, self.functions.FctSumme(x1, *popt), '-r')
+            self.fig.canvas.draw()
 
-        x1 = np.linspace(min(x), max(x), 1000)
-        self.ax.plot(x1, self.functions.FctSumme(x1, *popt), '-r')
-        self.fig.canvas.draw()
-        print('\n', 'Lorentz')
-        print(tabulate([['Background', popt[0]], [r'Raman Shift in cm^-1', popt[1]], ['Intensity', popt[2]], ['FWHM', popt[3]]], headers=['Parameters', 'Values']))
-                
-    def FitGaussian(self):
-        self.SelectDataset()
-        if self.selectedData == []:
-            return
-
-        xs = self.selectedData[0][0]
-        ys = self.selectedData[0][1]
-        x,y = self.SelectArea(xs, ys)
-
-        p_start = self.get_start_values()
-
-        self.anzahl_Lorentz = 0                       
-        self.anzahl_Gauss   = 1   
-        self.anzahl_BWF     = 0
-        popt, pcov = curve_fit(self.functions.GaussianFct, x, y, p0 = p_start) #, bounds=([0, 500], [200, 540]))
-
-        x1 = np.linspace(min(x), max(x), 10000)
-        self.ax.plot(x1, self.functions.FctSumme(x1, *popt), '-r')
-        self.fig.canvas.draw()
-        print('\n' + 'Gaussian')
-        print(tabulate([['Background', popt[0]], [r'Raman Shift in cm^-1', popt[1]], ['Intensity', popt[2]], ['FWHM', popt[3]]], headers=['Parameters', 'Values']))
-
-    def FitBreitWigner(self):
-        self.SelectDataset()
-        if self.selectedData == []:
-            return
-
-        xs = self.selectedData[0][0]
-        ys = self.selectedData[0][1]
-        x,y = self.SelectArea(xs, ys)
-        
-        p_start = self.get_start_values()
-        p_start.append(-10)
-
-        self.anzahl_Lorentz = 0                       
-        self.anzahl_Gauss   = 0   
-        self.anzahl_BWF     = 1
-
-        popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0 = p_start) #, bounds=([0, 500], [200, 540]))
-        x1 = np.linspace(min(x), max(x), 10000)
-        self.ax.plot(x1, self.functions.FctSumme(x1, *popt), '-r')
-        self.fig.canvas.draw()
-        print('\n Breit-Wigner')
-        print(tabulate([['Background', popt[0]], [r'Raman Shift in cm^-1', popt[1]], ['Intensity', popt[2]], ['FWHM', popt[3]],
-                        ['Additional Parameters', popt[4]]], headers=['Parameters', 'Values']))
+            print('\n {} {}'.format(self.Spektrum[j].get_label(), q.text()))
+            parmeter_name = ['Background', r'Raman Shift in cm^-1', 'Intensity', 'FWHM', 'additional Parameter']
+            print_param = []
+            for idx, p in enumerate(popt):
+                print_param.append([parmeter_name[idx], p])
+            print(tabulate(print_param, headers=['Parameters', 'Values']))
 
     def DefineArea(self):
         self.SelectDataset()
-        if self.selectedData == []:
-            return
+        if n in self.selectedDatasetNumber:
+            spct = self.Spektrum[n]
+            xs = spct.get_xdata()
+            ys = spct.get_ydata()
+            x_min, x_max = self.SelectArea()
+            x = xs[np.where((xs > x_min)&(xs < x_max))]
+            y = ys[np.where((xs > x_min)&(xs < x_max))]
 
-        xs = self.selectedData[0][0]
-        ys = self.selectedData[0][1]
-        x,y = self.SelectArea(xs, ys)
-        self.data.append([x, y, self.selectedData[0][2]+'_cut', self.selectedData[0][3]])
-        self.Spektrum.append(self.ax.plot(x, y, label = self.selectedData[0][2]+'_cut', picker = 5))
+            self.data.append([x, y, '{}_cut'.format(spct.get_label()), self.selectedData[0][3]])
+            self.Spektrum.append(self.ax.plot(x, y, label='{}_cut'.format(spct.get_label()), picker=5))
 
-    def SelectArea(self, x, y):
-        line1, = self.ax.plot([min(x), min(x)], [min(y), max(y)], 'r-', lw=1)
-        line2, = self.ax.plot([max(x), max(x)], [min(y), max(y)], 'r-', lw=1)
-        canvas = self.Canvas
-        self.ax.figure.canvas.draw()
+    def SelectArea(self):
+        self.ax.autoscale(False)
+        y_min, y_max = self.ax.get_ylim()
+        x_min, x_max = self.ax.get_xlim()
+        line1, = self.ax.plot([x_min, x_min], [y_min, y_max], 'r-', lw=1)
+        line2, = self.ax.plot([x_max, x_max], [y_min, y_max], 'r-', lw=1)
+        self.fig.canvas.draw()
+        self.mw.show_statusbar_message('Left click shifts limits, Right click  them', 4000)
         linebuilder1 = LineBuilder(line1)
-        x_min = linebuilder1.xs  #untere Grenze Fitbereich
-
+        x_min = linebuilder1.xs  #lower limit
         linebuilder2 = LineBuilder(line2)
-        x_max = linebuilder2.xs  #oberer Grenze Fitbereich
-               
- 
-        working_x = x[np.where((x > x_min)&(x < x_max))]
-        working_y = y[np.where((x > x_min)&(x < x_max))]
-        
+        x_max = linebuilder2.xs  #upper limit
         line1.remove()
         line2.remove()
-        self.ax.figure.canvas.draw()
-        return working_x, working_y
+        self.fig.canvas.draw()
+        self.ax.autoscale(True)
+        return x_min, x_max
 	
     def menu_baseline_als(self):
-        self.SelectDataset()
-        if self.selectedData == []:
-            return
+        self.SelectDataset(True)
+        for n in self.selectedDatasetNumber:
+            spct = self.Spektrum[n]
+            xs = spct.get_xdata()
+            ys = spct.get_ydata()
+            x_min, x_max = self.SelectArea()
+            x = xs[np.where((xs > x_min)&(xs < x_max))]
+            y = ys[np.where((xs > x_min)&(xs < x_max))]
 
-        xs = self.selectedData[0][0]
-        ys = self.selectedData[0][1]
-        x,y = self.SelectArea(xs, ys)
-        
-        self.Dialog_BaselineParameter = QDialog()
-        layout = QtWidgets.QGridLayout()
-        
-        p_edit = QtWidgets.QLineEdit()  
-        layout.addWidget(p_edit, 0, 0)
-        p_edit.setText('0.001')
-        p_label = QtWidgets.QLabel('p')
-        layout.addWidget(p_label, 0, 1)
+            self.Dialog_BaselineParameter = QDialog()
+            layout = QtWidgets.QGridLayout()
 
-        lam_edit = QtWidgets.QLineEdit() 
-        layout.addWidget(lam_edit, 1, 0)
-        lam_edit.setText('10000000')
-        lam_label = QtWidgets.QLabel('lambda')
-        layout.addWidget(lam_label, 1, 1)
+            p_edit = QtWidgets.QLineEdit()
+            layout.addWidget(p_edit, 0, 0)
+            p_edit.setText('0.001')
+            p_label = QtWidgets.QLabel('p')
+            layout.addWidget(p_label, 0, 1)
 
-        p = float(p_edit.text())
-        lam = float(lam_edit.text())
-        xb,yb,zb = self.baseline_als(x, y, p, lam)    
-        self.baseline,    = self.ax.plot(xb, zb, 'c--', label = 'baseline (' + self.selectedData[0][2] + ')')
-        self.blcSpektrum, = self.ax.plot(xb, yb, 'c-', label = 'baseline-corrected '+ self.selectedData[0][2])
-        self.ax.figure.canvas.draw()
+            lam_edit = QtWidgets.QLineEdit()
+            layout.addWidget(lam_edit, 1, 0)
+            lam_edit.setText('10000000')
+            lam_label = QtWidgets.QLabel('lambda')
+            layout.addWidget(lam_label, 1, 1)
 
-        self.finishbutton = QPushButton('Ok', self)       
-        self.finishbutton.setCheckable(True)
-        self.finishbutton.setToolTip('Are you happy with the start parameters? \n Close the dialog window and save the baseline!')
-        self.finishbutton.clicked.connect(lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text())))
-        layout.addWidget(self.finishbutton, 2, 0)
+            p = float(p_edit.text())
+            lam = float(lam_edit.text())
+            xb,yb,zb = self.baseline_als(x, y, p, lam)
+            self.baseline,    = self.ax.plot(xb, zb, 'c--', label = 'baseline ({})'.format(spct.get_label()))
+            self.blcSpektrum, = self.ax.plot(xb, yb, 'c-', label = 'baseline-corrected ({})'.format(spct.get_label()))
+            self.ax.figure.canvas.draw()
 
-        self.closebutton = QPushButton('Close', self)
-        self.closebutton.setCheckable(True)
-        self.closebutton.setToolTip('Closes the dialog window and baseline is not saved.')
-        self.closebutton.clicked.connect(lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text())))
-        layout.addWidget(self.closebutton, 2, 1)
+            self.finishbutton = QPushButton('Ok', self)
+            self.finishbutton.setCheckable(True)
+            self.finishbutton.setToolTip('Are you happy with the start parameters? \n Close the dialog window and save the baseline!')
+            self.finishbutton.clicked.connect(lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text())))
+            layout.addWidget(self.finishbutton, 2, 0)
 
-        applybutton = QPushButton('Apply', self)
-        applybutton.setToolTip('Do you want to try the fit parameters? \n Lets do it!')
-        applybutton.clicked.connect(lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text())))
-        layout.addWidget(applybutton, 2, 2)
+            self.closebutton = QPushButton('Close', self)
+            self.closebutton.setCheckable(True)
+            self.closebutton.setToolTip('Closes the dialog window and baseline is not saved.')
+            self.closebutton.clicked.connect(lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text())))
+            layout.addWidget(self.closebutton, 2, 1)
 
-        self.Dialog_BaselineParameter.setLayout(layout)
-        self.Dialog_BaselineParameter.setWindowTitle("Baseline Parameter")
-        self.Dialog_BaselineParameter.setWindowModality(Qt.ApplicationModal)
-        self.Dialog_BaselineParameter.exec_()
+            applybutton = QPushButton('Apply', self)
+            applybutton.setToolTip('Do you want to try the fit parameters? \n Lets do it!')
+            applybutton.clicked.connect(lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text())))
+            layout.addWidget(applybutton, 2, 2)
+
+            self.Dialog_BaselineParameter.setLayout(layout)
+            self.Dialog_BaselineParameter.setWindowTitle("Baseline Parameter")
+            self.Dialog_BaselineParameter.setWindowModality(Qt.ApplicationModal)
+            self.Dialog_BaselineParameter.exec_()
     
     def baseline_als_call(self, x, y, p, lam):
         self.blcSpektrum.remove()
         self.baseline.remove()
         if self.closebutton.isChecked():
             self.Dialog_BaselineParameter.close()
-            self.ax.figure.canvas.draw()
+            self.fig.canvas.draw()
         elif self.finishbutton.isChecked():
             xb, yb, zb = self.baseline_als(x, y, p, lam)
-            self.baseline,    = self.ax.plot(xb, zb, 'c--', label = 'baseline (' + self.selectedData[0][2] + ')')
-            self.Spektrum.append(self.ax.plot(xb, yb, 'c-', label = 'baseline-corrected '+ self.selectedData[0][2])[0])
-            self.ax.figure.canvas.draw()
+            self.baseline,    = self.ax.plot(xb, zb, 'c--', label = 'baseline ({})'.format(self.selectedData[0][2]))
+            self.Spektrum.append(self.ax.plot(xb, yb, 'c-', label = 'baseline-corrected ({})'.format(self.selectedData[0][2])[0]))
+            self.fig.canvas.draw()
             
             ### Save background-corrected data ###
             (fileBaseName, fileExtension) = os.path.splitext(self.selectedData[0][2])
@@ -2106,9 +2112,9 @@ class PlotWindow(QMainWindow):
             self.Dialog_BaselineParameter.close()
         else:
             xb, yb, zb = self.baseline_als(x, y, p, lam)
-            self.baseline,    = self.ax.plot(xb, zb, 'c--', label = 'baseline (' + self.selectedData[0][2] + ')')
-            self.blcSpektrum, = self.ax.plot(xb, yb, 'c-', label = 'baseline-corrected '+ self.selectedData[0][2])
-            self.ax.figure.canvas.draw()
+            self.baseline,    = self.ax.plot(xb, zb, 'c--', label='baseline ({})'.format(self.selectedData[0][2]))
+            self.blcSpektrum, = self.ax.plot(xb, yb, 'c-', label='baseline-corrected ({})'.format(self.selectedData[0][2]))
+            self.fig.canvas.draw()
 
     # Baseline correction 
     # based on: "Baseline Correction with Asymmetric Least SquaresSmoothing" from Eilers and Boelens
@@ -2129,43 +2135,29 @@ class PlotWindow(QMainWindow):
         
 #        self.baseline,    = self.ax.plot(x, z, 'c--', label = 'baseline (' + self.selectedData[0][2] + ')')
 #        self.blcSpektrum, = self.ax.plot(x, y, 'c-', label = 'baseline-corrected '+ self.selectedData[0][2])
-#        self.ax.figure.canvas.draw()
-        return x, y, z          #x - ist klar, y - background-corrected Intensity-values, z - background
+#        self.fig.canvas.draw()
+        return x, y, z          #x - Raman Shift, y - background-corrected Intensity-values, z - background
 	
     # Partially based on Christian's Mathematica Notebook
     # Fitroutine for D and G bands in spectra of carbon compounds
     def fitroutine1(self):
-        # Select which data set will be fitted  (at moment only for one at the same time)
+        # Select which data set will be fitted
         self.SelectDataset()
-        if self.selectedData == []:
-            return
-            
-        x = self.selectedData[0][0]
-        y = self.selectedData[0][1]
-      
+        #if self.selectedData == []:
+        #    return
+
         #Limits for Backgroundcorrection
         x_min =  200
         x_max = 4000
 
-        #Limit data to fit range 
-        working_x = x[np.where((x > x_min)&(x < x_max))]
-        working_y = y[np.where((x > x_min)&(x < x_max))]
- 
-        # parameter for background-correction 
-        p   = 0.0001             #asymmetry 0.001 <= p <= 0.1 is a good choice     recommended from Eilers and Boelens for Raman: 0.001    recommended from Simon: 0.0001
-        lam = 10000000           #smoothness 10^2 <= lambda <= 10^9                     recommended from Eilers and Boelens for Raman: 10^7     recommended from Simon: 10^7
-       
-        xb, yb, zb = self.baseline_als(working_x, working_y, p, lam)
-        self.baseline,    = self.ax.plot(xb, zb, 'c--', label = 'baseline (' + self.selectedData[0][2] + ')')
-        self.blcSpektrum, = self.ax.plot(xb, yb, 'c-', label = 'baseline-corrected '+ self.selectedData[0][2])
-        self.ax.figure.canvas.draw()
+        # parameter for background-correction
+        p = 0.0001  # asymmetry 0.001 <= p <= 0.1 is a good choice     recommended from Eilers and Boelens for Raman: 0.001    recommended from Simon: 0.0001
+        lam = 10000000  # smoothness 10^2 <= lambda <= 10^9            recommended from Eilers and Boelens for Raman: 10^7     recommended from Simon: 10^7
 
-        #define fitarea 
-        x_min =  850 
-        x_max = 2000
-        #limit data to fitarea 
-        working_x = xb[np.where((xb > x_min)&(xb < x_max))]
-        working_y = yb[np.where((xb > x_min)&(xb < x_max))]
+        # Limits for FitProcess
+        # define fitarea
+        x_min_fit = 850
+        x_max_fit = 2000
 
         #Fitprocess
         #D-Band: Lorentz
@@ -2173,37 +2165,38 @@ class PlotWindow(QMainWindow):
         self.anzahl_Lorentz = 1   # number of Lorentzian
         self.anzahl_Gauss   = 0   # number of Gaussian
         self.anzahl_BWF     = 1   # number of Breit-Wigner-Fano
-
         aL  = self.anzahl_Lorentz
         aG  = self.anzahl_Gauss
         aB  = self.anzahl_BWF
         aLG = self.anzahl_Lorentz + self.anzahl_Gauss
 
+        # Fit parameter: initial guess and boundaries
+
         pStart = []
         pBoundsLow = []
-        pBoundsUp  = []
+        pBoundsUp = []
         inf = np.inf
 
-        pStart.append((1360,  80,  50))         #Lorentz (D-Bande)
+        pStart.append((1360, 80, 50))  # Lorentz (D-Bande)
         pBoundsLow.append((1335, 0, 0))
         pBoundsUp.append((1385, inf, inf))
 
-       # pStart.append((1165,   2,   5))         #Gaussian 0
-       # pBoundsLow.append((1150, 0, 0))    
-       # pBoundsUp.append((1180, inf, inf))
-       # pStart.append((1238,   2,   5))         #Gaussian 1
-       # pBoundsLow.append((1223, 0, 0))
-       # pBoundsUp.append((1253, inf, inf))
-       # pStart.append((1435, 20, 80))           #Gaussian 2
-       # pBoundsLow.append((1420, 0, 0))
-       # pBoundsUp.append((1455, inf, inf))
-        pStart.append((1600, 200,  50, -10))    #Breit-Wigner-Fano
+        # pStart.append((1165,   2,   5))         #Gaussian 0
+        # pBoundsLow.append((1150, 0, 0))
+        # pBoundsUp.append((1180, inf, inf))
+        # pStart.append((1238,   2,   5))         #Gaussian 1
+        # pBoundsLow.append((1223, 0, 0))
+        # pBoundsUp.append((1253, inf, inf))
+        # pStart.append((1435, 20, 80))           #Gaussian 2
+        # pBoundsLow.append((1420, 0, 0))
+        # pBoundsUp.append((1455, inf, inf))
+        pStart.append((1600, 200, 50, -10))  # Breit-Wigner-Fano
         pBoundsLow.append((0, 0, 0, -inf))
         pBoundsUp.append((inf, inf, inf, 0))
 
         p_start = []
         p_bounds_low = []
-        p_bounds_up  = []
+        p_bounds_up = []
         p_start.extend([0])
         p_bounds_low.extend([-10])
         p_bounds_up.extend([10])
@@ -2212,195 +2205,213 @@ class PlotWindow(QMainWindow):
             p_bounds_low.extend(pBoundsLow[i])
             p_bounds_up.extend(pBoundsUp[i])
 
-        #Limits
+        # Limits Fit parameter
         p_bounds = ((p_bounds_low, p_bounds_up))
-        popt, pcov = curve_fit(self.functions.FctSumme, working_x, working_y, p0 = p_start, bounds = p_bounds, absolute_sigma = False)
 
-        ### Plot the Fit Data ###
-        x1  = np.linspace(min(working_x), max(working_x), 3000)
-        y_L = []
-        for j in range(aL):
-            y_L.append(np.array(popt[0] + self.functions.LorentzFct(x1, popt[1+3*j], popt[2+3*j], popt[3+3*j])))
-        y_G = []
-        for j in range(aG):
-            y_G.append(np.array(popt[0] + self.functions.GaussianFct(x1, popt[1+3*aL+3*j], popt[2+3*aL+3*j], popt[3+3*aL+3*j])))
-        y_BWF = []
-        for j in range(aB):
-            y_BWF.append(np.array(popt[0] + self.functions.BreitWignerFct(x1, popt[4*j+3*aLG+1], popt[4*j+3*aLG+2], popt[4*j+3*aLG+3], popt[4*j+3*aLG+4])))
-        y_Ges = np.array(self.functions.FctSumme(x1, *popt))
-        self.ax.plot(x1, y_Ges, '-r')
-        for j in y_G:
-            self.ax.plot(x1, j, '--g')
-        for j in y_L:
-            self.ax.plot(x1, j, '--g')
-        for j in y_BWF:
-            self.ax.plot(x1, j, '--g')
+        # iterate through all selected data sets
+        for n in self.selectedDatasetNumber:
+            x = self.Spektrum[n].get_xdata()
+            y = self.Spektrum[n].get_ydata()
+      
+            #Limit data to fit range
+            working_x = x[np.where((x > x_min)&(x < x_max))]
+            working_y = y[np.where((x > x_min)&(x < x_max))]
 
-        canvas = self.Canvas
-        self.ax.figure.canvas.draw()
+            xb, yb, zb = self.baseline_als(working_x, working_y, p, lam)
+            self.baseline,    = self.ax.plot(xb, zb, 'c--', label = 'baseline ({})'.format(self.Spektrum[n].get_label()))
+            self.blcSpektrum, = self.ax.plot(xb, yb, 'c-', label = 'baseline-corrected ({})'.format(self.Spektrum[n].get_label()))
+            self.fig.canvas.draw()
+
+            #limit data to fitarea
+            working_x = xb[np.where((xb > x_min_fit)&(xb < x_max_fit))]
+            working_y = yb[np.where((xb > x_min_fit)&(xb < x_max_fit))]
+
+            popt, pcov = curve_fit(self.functions.FctSumme, working_x, working_y, p0 = p_start, bounds = p_bounds, absolute_sigma = False)
+
+            ### Plot the Fit Data ###
+            x1  = np.linspace(min(working_x), max(working_x), 3000)
+            y_L = []
+            for j in range(aL):
+                y_L.append(np.array(popt[0] + self.functions.LorentzFct(x1, popt[1+3*j], popt[2+3*j], popt[3+3*j])))
+            y_G = []
+            for j in range(aG):
+                y_G.append(np.array(popt[0] + self.functions.GaussianFct(x1, popt[1+3*aL+3*j], popt[2+3*aL+3*j], popt[3+3*aL+3*j])))
+            y_BWF = []
+            for j in range(aB):
+                y_BWF.append(np.array(popt[0] + self.functions.BreitWignerFct(x1, popt[4*j+3*aLG+1], popt[4*j+3*aLG+2], popt[4*j+3*aLG+3], popt[4*j+3*aLG+4])))
+            y_Ges = np.array(self.functions.FctSumme(x1, *popt))
+            self.ax.plot(x1, y_Ges, '-r')
+            for j in y_G:
+                self.ax.plot(x1, j, '--g')
+            for j in y_L:
+                self.ax.plot(x1, j, '--g')
+            for j in y_BWF:
+                self.ax.plot(x1, j, '--g')
+
+            self.fig.canvas.draw()
         
-        #### Calculate Errors and R square ###
-        perr = np.sqrt(np.diag(pcov))
+            #### Calculate Errors and R square ###
+            perr = np.sqrt(np.diag(pcov))
 
-        residuals = working_y - self.functions.FctSumme(working_x, *popt)
-        ss_res = numpy.sum(residuals**2)
-        ss_tot = numpy.sum((working_y - numpy.mean(working_y))**2)
-        r_squared = 1 - (ss_res / ss_tot)
+            residuals = working_y - self.functions.FctSumme(working_x, *popt)
+            ss_res = numpy.sum(residuals**2)
+            ss_tot = numpy.sum((working_y - numpy.mean(working_y))**2)
+            r_squared = 1 - (ss_res / ss_tot)
         
-        #### Calculate Peak-Areas and there Errors ####
-        r,a0,h,xc,b,Q = syp.symbols('r a0 h xc b Q', real=True)
+            #### Calculate Peak-Areas and there Errors ####
+            r,a0,h,xc,b,Q = syp.symbols('r a0 h xc b Q', real=True)
 
-        #Anti-Derivative of Lorentzian Function      
-        #F_L = syp.integrate(a0 + h/(1 + (2*(r - xc)/b)**2), (r, x_min, x_max))
-        #F_L = syp.simplify(F_L)
-        #F_L = syp.trigsimp(F_L)
-        F_L = (x_max-x_min)*a0 - b*h*syp.atan(2*(xc - x_max)/b)/2 + b*h*syp.atan(2*(xc - x_min)/b)/2
-        Flam_L = lambdify([a0, xc, h, b], F_L)
+            #Anti-Derivative of Lorentzian Function
+            #F_L = syp.integrate(a0 + h/(1 + (2*(r - xc)/b)**2), (r, x_min, x_max))
+            #F_L = syp.simplify(F_L)
+            #F_L = syp.trigsimp(F_L)
+            F_L = (x_max-x_min)*a0 - b*h*syp.atan(2*(xc - x_max)/b)/2 + b*h*syp.atan(2*(xc - x_min)/b)/2
+            Flam_L = lambdify([a0, xc, h, b], F_L)
 
-        #Anti-Derivative of Gaussian Function
-        #f_G = (a0 + h*syp.exp(-4*syp.log(2)*((r-xc)/b)*((r-xc)/b)))
-        #F_G = syp.integrate(f_G, (r, xmin, xmax))
-        #F_G = syp.simplify(F_G)
-        #F_G = syp.trigsimp(F_G)
-        F_G = (4*a0*(x_max - x_min)*syp.sqrt(syp.log(2)) - syp.sqrt(syp.pi)*b*h*syp.erf(2*(xc - x_max)*syp.sqrt(syp.log(2))/b) + 
-              syp.sqrt(syp.pi)*b*h*syp.erf(2*(xc - x_min)*syp.sqrt(syp.log(2))/b))/(4*syp.sqrt(syp.log(2)))
-        Flam_G = lambdify([a0, xc, h, b], F_G)
+            #Anti-Derivative of Gaussian Function
+            #f_G = (a0 + h*syp.exp(-4*syp.log(2)*((r-xc)/b)*((r-xc)/b)))
+            #F_G = syp.integrate(f_G, (r, xmin, xmax))
+            #F_G = syp.simplify(F_G)
+            #F_G = syp.trigsimp(F_G)
+            F_G = (4*a0*(x_max - x_min)*syp.sqrt(syp.log(2)) - syp.sqrt(syp.pi)*b*h*syp.erf(2*(xc - x_max)*syp.sqrt(syp.log(2))/b) +
+                  syp.sqrt(syp.pi)*b*h*syp.erf(2*(xc - x_min)*syp.sqrt(syp.log(2))/b))/(4*syp.sqrt(syp.log(2)))
+            Flam_G = lambdify([a0, xc, h, b], F_G)
 
-        #Anti-Derivative of Breit-Wigner-Fano Function
-        #f_B = (a0 + BreitWignerFct(r, xc, h, b, Q))
-        #F_B = syp.integrate(f_B, (r, x_min, x_max))
-        #F_B = syp.simplify(F_B)
-        #F_B = syp.trigsimp(F_B)
-        F_B = (Q*b*h*(syp.log(b**2/4 + xc**2 - 2*xc*x_max + x_max**2) - syp.log(b**2/4 + xc**2 - 2*xc*x_min + x_min**2)) - 
-              b*h*(Q - 1)*(Q + 1)*syp.atan(2*(xc - x_max)/b) + b*h*(Q - 1)*(Q + 1)*syp.atan(2*(xc - x_min)/b) + 2*x_max*(Q**2*a0 + h) - 2*x_min*(Q**2*a0 + h))/(2*Q**2)
-        Flam_B = lambdify([a0, xc, h, b, Q], F_B)
+            #Anti-Derivative of Breit-Wigner-Fano Function
+            #f_B = (a0 + BreitWignerFct(r, xc, h, b, Q))
+            #F_B = syp.integrate(f_B, (r, x_min, x_max))
+            #F_B = syp.simplify(F_B)
+            #F_B = syp.trigsimp(F_B)
+            F_B = (Q*b*h*(syp.log(b**2/4 + xc**2 - 2*xc*x_max + x_max**2) - syp.log(b**2/4 + xc**2 - 2*xc*x_min + x_min**2)) -
+                  b*h*(Q - 1)*(Q + 1)*syp.atan(2*(xc - x_max)/b) + b*h*(Q - 1)*(Q + 1)*syp.atan(2*(xc - x_min)/b) + 2*x_max*(Q**2*a0 + h) - 2*x_min*(Q**2*a0 + h))/(2*Q**2)
+            Flam_B = lambdify([a0, xc, h, b, Q], F_B)
 
-        #Peak Area
-        I_L = []
-        for j in range(aL):
-            I_L.append(Flam_L(popt[0], popt[1+3*j], popt[2+3*j], popt[3+3*j]))
+            #Peak Area
+            I_L = []
+            for j in range(aL):
+                I_L.append(Flam_L(popt[0], popt[1+3*j], popt[2+3*j], popt[3+3*j]))
 
-        I_G = []
-        for j in range(aG):
-            I_G.append(Flam_G(popt[0], popt[1+3*aL+3*j], popt[2+3*aL+3*j], popt[3+3*aL+3*j]))
+            I_G = []
+            for j in range(aG):
+                I_G.append(Flam_G(popt[0], popt[1+3*aL+3*j], popt[2+3*aL+3*j], popt[3+3*aL+3*j]))
 
-        I_BWF = []
-        for j in range(aB):
-            I_BWF.append(Flam_B(popt[0], popt[4*j+3*aLG+1], popt[4*j+3*aLG+2], popt[4*j+3*aLG+3], popt[4*j+3*aLG+4]))
+            I_BWF = []
+            for j in range(aB):
+                I_BWF.append(Flam_B(popt[0], popt[4*j+3*aLG+1], popt[4*j+3*aLG+2], popt[4*j+3*aLG+3], popt[4*j+3*aLG+4]))
 
-        #Calculate partial derivates                         
-        dF_La0 = syp.diff(F_L, a0)
-        dF_Lh  = syp.diff(F_L, h)
-        dF_Lxc = syp.diff(F_L, xc)
-        dF_Lb  = syp.diff(F_L, b)
+            #Calculate partial derivates
+            dF_La0 = syp.diff(F_L, a0)
+            dF_Lh  = syp.diff(F_L, h)
+            dF_Lxc = syp.diff(F_L, xc)
+            dF_Lb  = syp.diff(F_L, b)
 
-        dF_Ga0 = syp.diff(F_G, a0)
-        dF_Gh  = syp.diff(F_G, h)
-        dF_Gxc = syp.diff(F_G, xc)
-        dF_Gb  = syp.diff(F_G, b)
+            dF_Ga0 = syp.diff(F_G, a0)
+            dF_Gh  = syp.diff(F_G, h)
+            dF_Gxc = syp.diff(F_G, xc)
+            dF_Gb  = syp.diff(F_G, b)
 
-        dF_Ba0 = syp.diff(F_B, a0)
-        dF_Bh  = syp.diff(F_B, h)
-        dF_Bxc = syp.diff(F_B, xc)
-        dF_Bb  = syp.diff(F_B, b)
-        dF_BQ  = syp.diff(F_B, Q)
+            dF_Ba0 = syp.diff(F_B, a0)
+            dF_Bh  = syp.diff(F_B, h)
+            dF_Bxc = syp.diff(F_B, xc)
+            dF_Bb  = syp.diff(F_B, b)
+            dF_BQ  = syp.diff(F_B, Q)
 
-        #Calculate Error of Peak Area with law of error propagation
-        da0,dh,dxc,db,dQ = syp.symbols('da0 dh dxc db dQ', real=True)
-        
-        DeltaF_L = syp.Abs(dF_La0)*da0 + syp.Abs(dF_Lh)*dh + syp.Abs(dF_Lxc)*dxc + syp.Abs(dF_Lb)*db
-        DeltaFlam_L = lambdify([a0, da0, xc, dxc, h, dh, b, db], DeltaF_L)
-        I_L_err = []
-        for j in range(aL):
-            I_L_err.append(DeltaFlam_L(popt[0], perr[0], popt[3*j+1], perr[3*j+1], popt[3*j+2], perr[3*j+2], popt[3*j+3], perr[3*j+3]))
+            #Calculate Error of Peak Area with law of error propagation
+            da0,dh,dxc,db,dQ = syp.symbols('da0 dh dxc db dQ', real=True)
 
-        DeltaF_G = syp.Abs(dF_Ga0)*da0 + syp.Abs(dF_Gh)*dh + syp.Abs(dF_Gxc)*dxc + syp.Abs(dF_Gb)*db
-        DeltaFlam_G = lambdify([a0, da0, xc, dxc, h, dh, b, db], DeltaF_G)
-        I_G_err = []
-        for j in range(aG):
-            I_G_err.append(DeltaFlam_G(popt[0], perr[0], popt[3*j+3*aL+1], perr[3*j+3*aL+1], popt[3*j+3*aL+2], perr[3*j+3*aL+2], popt[3*j+3*aL+3], perr[3*j+3*aL+3]))
+            DeltaF_L = syp.Abs(dF_La0)*da0 + syp.Abs(dF_Lh)*dh + syp.Abs(dF_Lxc)*dxc + syp.Abs(dF_Lb)*db
+            DeltaFlam_L = lambdify([a0, da0, xc, dxc, h, dh, b, db], DeltaF_L)
+            I_L_err = []
+            for j in range(aL):
+                I_L_err.append(DeltaFlam_L(popt[0], perr[0], popt[3*j+1], perr[3*j+1], popt[3*j+2], perr[3*j+2], popt[3*j+3], perr[3*j+3]))
 
-        DeltaF_B = syp.Abs(dF_Ba0)*da0 + syp.Abs(dF_Bh)*dh + syp.Abs(dF_Bxc)*dxc + syp.Abs(dF_Bb)*db + syp.Abs(dF_BQ)*dQ
-        DeltaFlam_B = lambdify([a0, da0, xc, dxc, h, dh, b, db, Q, dQ], DeltaF_B)
-        I_BWF_err = []
-        for j in range(aB):
-            I_BWF_err.append(DeltaFlam_B(popt[0], perr[0], popt[4*j+3*aLG+1], perr[4*j+3*aLG+1], popt[4*j+3*aLG+2], perr[4*j+3*aLG+2], popt[4*j+3*aLG+3], perr[4*j+3*aLG+3], popt[4*j+3*aLG+4], perr[4*j+3*aLG+4]))
+            DeltaF_G = syp.Abs(dF_Ga0)*da0 + syp.Abs(dF_Gh)*dh + syp.Abs(dF_Gxc)*dxc + syp.Abs(dF_Gb)*db
+            DeltaFlam_G = lambdify([a0, da0, xc, dxc, h, dh, b, db], DeltaF_G)
+            I_G_err = []
+            for j in range(aG):
+                I_G_err.append(DeltaFlam_G(popt[0], perr[0], popt[3*j+3*aL+1], perr[3*j+3*aL+1], popt[3*j+3*aL+2], perr[3*j+3*aL+2], popt[3*j+3*aL+3], perr[3*j+3*aL+3]))
 
-        ### Estimate Cluster size ###
-        #ID/IG = C(lambda)/L_a
-        #mit C(514.5 nm) = 44 Angstrom
-        ID = I_L[0]
-        IG = I_BWF[0]
-        ID_err = I_L_err[0]
-        IG_err = I_BWF_err[0]
-        L_a = 4.4 * IG/ID
-        L_a_err = L_a*(ID_err/ID + IG_err/IG)
-        ratio = ID/IG
-        ratio_err = ratio*(ID_err/ID + IG_err/IG)
+            DeltaF_B = syp.Abs(dF_Ba0)*da0 + syp.Abs(dF_Bh)*dh + syp.Abs(dF_Bxc)*dxc + syp.Abs(dF_Bb)*db + syp.Abs(dF_BQ)*dQ
+            DeltaFlam_B = lambdify([a0, da0, xc, dxc, h, dh, b, db, Q, dQ], DeltaF_B)
+            I_BWF_err = []
+            for j in range(aB):
+                I_BWF_err.append(DeltaFlam_B(popt[0], perr[0], popt[4*j+3*aLG+1], perr[4*j+3*aLG+1], popt[4*j+3*aLG+2], perr[4*j+3*aLG+2], popt[4*j+3*aLG+3], perr[4*j+3*aLG+3], popt[4*j+3*aLG+4], perr[4*j+3*aLG+4]))
 
-        # bring data into printable form
-        data_table = [['Background', popt[0], perr[0]]]
-        data_table.append(['','',''])
-        for j in range(aL):
-            data_table.append(['Lorentz %i'%(j+1)])
-            data_table.append(['Raman Shift in cm-1', popt[j*3+1], perr[j*3+1]])
-            data_table.append(['Peak height in cps', popt[j*3+2], perr[j*3+2]])
-            data_table.append(['FWHM in cm-1', popt[j*3+3], perr[j*3+3]])
-            data_table.append(['Peak area in cps*cm-1', I_L[j], I_L_err[j]])
+            ### Estimate Cluster size ###
+            #ID/IG = C(lambda)/L_a
+            #mit C(514.5 nm) = 44 Angstrom
+            ID = I_L[0]
+            IG = I_BWF[0]
+            ID_err = I_L_err[0]
+            IG_err = I_BWF_err[0]
+            L_a = 4.4 * IG/ID
+            L_a_err = L_a*(ID_err/ID + IG_err/IG)
+            ratio = ID/IG
+            ratio_err = ratio*(ID_err/ID + IG_err/IG)
+
+            # bring data into printable form
+            data_table = [['Background', popt[0], perr[0]]]
             data_table.append(['','',''])
-        for j in range(aG):
-            data_table.append(['Gauss %i'%(j+1)])
-            data_table.append(['Raman Shift in cm-1', popt[j*3+3*aL+1], perr[j*3+3*aL+1]])
-            data_table.append(['Peak height in cps', popt[j*3+3*aL+2], perr[j*3+3*aL+2]])
-            data_table.append(['FWHM in cm-1', popt[j*3+3*aL+3], perr[j*3+3*aL+3]])
-            data_table.append(['Peak area in cps*cm-1', I_G[j], I_G_err[j]])
-            data_table.append(['','',''])
-        for j in range(aB):
-            data_table.append(['BWF %i'%(j+1)])
-            data_table.append(['Raman Shift in cm-1', popt[j*3+3*aLG+1], perr[j*3+3*aLG+1]])
-            data_table.append(['Peak height in cps', popt[j*3+3*aLG+2], perr[j*3+3*aLG+2]])
-            data_table.append(['FWHM in cm-1', popt[j*3+3*aLG+3], perr[j*3+3*aLG+3]])
-            data_table.append(['BWF Coupling Coefficient', popt[j*3+3*aLG+4], perr[j*3+3*aLG+4]])
-            data_table.append(['Peak area in cps*cm-1', I_BWF[j], I_BWF_err[j]])
-            data_table.append(['','',''])
+            for j in range(aL):
+                data_table.append(['Lorentz %i'%(j+1)])
+                data_table.append(['Raman Shift in cm-1', popt[j*3+1], perr[j*3+1]])
+                data_table.append(['Peak height in cps', popt[j*3+2], perr[j*3+2]])
+                data_table.append(['FWHM in cm-1', popt[j*3+3], perr[j*3+3]])
+                data_table.append(['Peak area in cps*cm-1', I_L[j], I_L_err[j]])
+                data_table.append(['','',''])
+            for j in range(aG):
+                data_table.append(['Gauss %i'%(j+1)])
+                data_table.append(['Raman Shift in cm-1', popt[j*3+3*aL+1], perr[j*3+3*aL+1]])
+                data_table.append(['Peak height in cps', popt[j*3+3*aL+2], perr[j*3+3*aL+2]])
+                data_table.append(['FWHM in cm-1', popt[j*3+3*aL+3], perr[j*3+3*aL+3]])
+                data_table.append(['Peak area in cps*cm-1', I_G[j], I_G_err[j]])
+                data_table.append(['','',''])
+            for j in range(aB):
+                data_table.append(['BWF %i'%(j+1)])
+                data_table.append(['Raman Shift in cm-1', popt[j*3+3*aLG+1], perr[j*3+3*aLG+1]])
+                data_table.append(['Peak height in cps', popt[j*3+3*aLG+2], perr[j*3+3*aLG+2]])
+                data_table.append(['FWHM in cm-1', popt[j*3+3*aLG+3], perr[j*3+3*aLG+3]])
+                data_table.append(['BWF Coupling Coefficient', popt[j*3+3*aLG+4], perr[j*3+3*aLG+4]])
+                data_table.append(['Peak area in cps*cm-1', I_BWF[j], I_BWF_err[j]])
+                data_table.append(['','',''])
 
-        data_table.append(['Cluster Size in nm', L_a, L_a_err])
-        data_table.append(['I_D/I_G', ratio, ratio_err])
+            data_table.append(['Cluster Size in nm', L_a, L_a_err])
+            data_table.append(['I_D/I_G', ratio, ratio_err])
 
-        save_data = r'R^2=%.6f \n'%r_squared + 'Lorentz 1 = D-Bande, BWF (Breit-Wigner-Fano) 1 = G-Bande \n' + tabulate(data_table, headers = ['Parameters', 'Values', 'Errors'])
-        print('\n')
-        print(self.selectedData[0][2])
-        print(save_data)
+            save_data = r'R^2=%.6f \n'%r_squared + 'Lorentz 1 = D-Bande, BWF (Breit-Wigner-Fano) 1 = G-Bande \n' + tabulate(data_table, headers = ['Parameters', 'Values', 'Errors'])
+            print('\n')
+            print(self.Spektrum[n].get_label())
+            print(save_data)
 
-        (fileBaseName, fileExtension) = os.path.splitext(self.selectedData[0][2])
-        startFileDirName = os.path.dirname(self.selectedData[0][3])
-        file_cluster = open(startFileDirName + "/Clustersize.txt", "a")
-        file_cluster.write('\n'+str(fileBaseName) + '   %.4f'%L_a + '   %.4f'%L_a_err)
-        file_cluster.close()
+            (fileBaseName, fileExtension) = os.path.splitext(self.Spektrum[n].get_label())
+            startFileDirName = os.path.dirname(self.selectedData[0][3])
+            file_cluster = open(startFileDirName + "/Clustersize.txt", "a")
+            file_cluster.write('\n'+str(fileBaseName) + '   %.4f'%L_a + '   %.4f'%L_a_err)
+            file_cluster.close()
 
-        ### Save the fit parameter ###
-        startFileBaseName = startFileDirName + '/' + fileBaseName
-        startFileName = startFileBaseName + '_fitpara.txt'
-        self.save_to_file('Save fit parameter in file', startFileName, save_data)
+            ### Save the fit parameter ###
+            startFileBaseName = startFileDirName + '/' + fileBaseName
+            startFileName = startFileBaseName + '_fitpara.txt'
+            self.save_to_file('Save fit parameter in file', startFileName, save_data)
 
-        ### Save the Fit data ###
-        startFileName = startFileBaseName + '_fitdata.txt'
-        save_data = [x1]
-        for j in y_L:
-            save_data.append(j)
-        for j in y_G:
-            save_data.append(j)
-        for j in y_BWF:
-            save_data.append(j)
-        save_data.append(y_Ges)
-        save_data = np.transpose(save_data)
-        self.save_to_file('Save fit data in file', startFileName, save_data)
-        
-        ### Save background-corrected data ###
-        startFileName = startFileBaseName + '_backgroundCorr.txt'
-        save_data = [xb, yb, zb]
-        save_data = np.transpose(save_data)
-        self.save_to_file('Save background-corrected data in file', startFileName, save_data)
+            ### Save the Fit data ###
+            startFileName = startFileBaseName + '_fitdata.txt'
+            save_data = [x1]
+            for j in y_L:
+                save_data.append(j)
+            for j in y_G:
+                save_data.append(j)
+            for j in y_BWF:
+                save_data.append(j)
+            save_data.append(y_Ges)
+            save_data = np.transpose(save_data)
+            self.save_to_file('Save fit data in file', startFileName, save_data)
+
+            ### Save background-corrected data ###
+            startFileName = startFileBaseName + '_backgroundCorr.txt'
+            save_data = [xb, yb, zb]
+            save_data = np.transpose(save_data)
+            self.save_to_file('Save background-corrected data in file', startFileName, save_data)
 
     ########## Functions of toolbar ##########
     def check_if_line_was_removed(self):
@@ -2427,87 +2438,83 @@ class PlotWindow(QMainWindow):
 
     def scale_spectrum(self):
         self.check_if_line_was_removed()
-        self.SelectDataset()
-        if self.selectedData == []:
-            return
-        xs = self.selectedData[0][0]
-        ys = self.selectedData[0][1]
-        ns = self.selectedDatasetNumber[0]
-        self.cid_scale = self.ax.figure.canvas.mpl_connect('button_release_event', self.scale_click)
-        self.ax.figure.canvas.start_event_loop(timeout=10000) 
-        ys = ys*self.scale_factor
-        self.data[ns][1] = ys
-        self.Spektrum[ns].set_ydata(ys)
-        self.ax.figure.canvas.draw()
+        self.SelectDataset(True)
+        for n in self.selectedDatasetNumber:
+            ys = self.Spektrum[n].get_ydata()
+            self.cid_scale = self.fig.canvas.mpl_connect('button_release_event', self.scale_click)
+            self.ax.figure.canvas.start_event_loop(timeout=10000)
+            ys = ys*self.scale_factor
+            self.data[n][1] = ys
+            self.Spektrum[n].set_ydata(ys)
+            self.fig.canvas.draw()
             
     def scale_click(self, event):
-        xs = self.selectedData[0][0]
-        ys = self.selectedData[0][1]
-        ns = self.selectedDatasetNumber[0]
         if event.button == 1:
-            x = event.xdata
-            y = event.ydata
-            ind = min(range(len(xs)), key=lambda i: abs(xs[i]-x))
-            self.scale_factor = y/ys[ind]
-            self.ax.figure.canvas.mpl_disconnect(self.cid_scale)
-            self.ax.figure.canvas.stop_event_loop(self)
+            for n in self.selectedDatasetNumber:
+                xs = self.Spektrum[n].get_xdata()
+                ys = self.Spektrum[n].get_ydata()
+                x = event.xdata
+                y = event.ydata
+                ind = min(range(len(xs)), key=lambda i: abs(xs[i]-x))
+                self.scale_factor = y/ys[ind]
+                self.fig.canvas.mpl_disconnect(self.cid_scale)
+                self.fig.canvas.stop_event_loop(self)
         else:
             pass
 
     def shift_spectrum(self):
         self.check_if_line_was_removed()
-        self.SelectDataset()
-        if self.selectedData == []:
-            return
-        xs = self.selectedData[0][0]
-        ys = self.selectedData[0][1]
-        ns = self.selectedDatasetNumber[0]
-        self.cid_shift = self.ax.figure.canvas.mpl_connect('button_release_event', self.shift_click)
-        self.ax.figure.canvas.start_event_loop(timeout=10000)
-        ys = ys + self.shift_factor
-        self.data[ns][1] = ys
-        self.Spektrum[ns].set_ydata(ys)
-        self.ax.figure.canvas.draw()
+        self.SelectDataset(True)
+        for n in self.selectedDatasetNumber:
+            ys = self.Spektrum[n].get_ydata()
+            self.cid_shift = self.fig.canvas.mpl_connect('button_release_event', self.shift_click)
+            self.ax.figure.canvas.start_event_loop(timeout=10000)
+            ys = ys + self.shift_factor
+            self.data[n][1] = ys
+            self.Spektrum[n].set_ydata(ys)
+            self.fig.canvas.draw()
 
     def shift_click(self, event):
-        xs = self.selectedData[0][0]
-        ys = self.selectedData[0][1]
-        ns = self.selectedDatasetNumber[0]
         if event.button == 1:
-            x = event.xdata
-            y = event.ydata
-            ind = min(range(len(xs)), key=lambda i: abs(xs[i]-x))
-            self.shift_factor = y - ys[ind]
-            self.fig.canvas.mpl_disconnect(self.cid_shift)
-            self.fig.canvas.stop_event_loop(self)
+            for n in self.selectedDatasetNumber:
+                xs = self.Spektrum[n].get_xdata()
+                ys = self.Spektrum[n].get_ydata()
+                x = event.xdata
+                y = event.ydata
+                ind = min(range(len(xs)), key=lambda i: abs(xs[i]-x))
+                self.shift_factor = y - ys[ind]
+                self.fig.canvas.mpl_disconnect(self.cid_shift)
+                self.fig.canvas.stop_event_loop(self)
         else:
             pass
 
+    def pick_points_for_arrow(self, event):
+        self.selected_points.append([event.xdata, event.ydata])
+        if len(self.selected_points) == 2:
+            self.fig.canvas.mpl_disconnect(self.pick_arrow_points_connection)
+            posA = self.selected_points[0]
+            posB = self.selected_points[1]
+
+            arrow = mpatches.FancyArrowPatch(posA, posB, mutation_scale=10, arrowstyle='-', picker=10)
+            arrow.set_figure(self.fig)
+            self.ax.add_patch(arrow)
+            self.drawn_line.append(LineDrawer(arrow))
+            self.fig.canvas.draw()
+
     def draw_line(self):
-        try:
-            pts = self.fig.ginput(2)        # get two points
-        except RuntimeError:
-            return
-        posA = pts[0]
-        posB = pts[1]
-        arrow = mpatches.FancyArrowPatch(posA, posB, mutation_scale=10, arrowstyle='-', picker=10)
-        arrow.set_figure(self.fig)
-        self.ax.add_patch(arrow)
-        self.drawn_line.append(LineDrawer(arrow))
+        self.selected_points = []
+        self.pick_arrow_points_connection = self.fig.canvas.mpl_connect('button_press_event', self.pick_points_for_arrow)
+
+    def pick_point_for_text(self, event):
+        pos = [event.xdata, event.ydata]
+        text = self.ax.annotate(r'''*''', pos, picker=5)
+        self.inserted_text.append(InsertText(text))
+        self.ax.add_artist(text)
+        self.fig.canvas.mpl_disconnect(self.pick_text_point_connection)
         self.fig.canvas.draw()
 
     def insert_text(self):
-        try:
-            pt = self.fig.ginput(1)
-        except RuntimeError:
-            return
-
-        #textspot, = self.ax.plot([pt[0][0]], [pt[0][1]], 'black', lw=2, picker = 5)
-        #textspot.set_visible(False)
-        text = self.ax.annotate(r'''*''', pt[0], picker=5)
-        self.inserted_text.append(InsertText(text))
-        self.ax.add_artist(text)
-        self.fig.canvas.draw()
+        self.pick_text_point_connection = self.fig.canvas.mpl_connect('button_press_event', self.pick_point_for_text)
 
     def closeEvent(self, event):
         close = QMessageBox()
