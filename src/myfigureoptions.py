@@ -113,7 +113,7 @@ def figure_edit(axes, parent=None):
         _draggable = old_legend._draggable is not None
         _ncol = old_legend._ncol
         _fontsize = int(old_legend._fontsize)
-        _frameon = old_legend._drawFrame
+        _frameon = old_legend.get_frame_on()
         _shadow = old_legend.shadow
         _fancybox = type(old_legend.legendPatch.get_boxstyle()) == matplotlib.patches.BoxStyle.Round
         _framealpha = old_legend.get_frame().get_alpha()
@@ -529,7 +529,7 @@ def figure_edit_brokenaxis(axes, parent = None):
         _draggable = old_legend._draggable is not None
         _ncol = old_legend._ncol
         _fontsize = int(old_legend._fontsize)
-        _frameon = old_legend._drawFrame
+        _frameon = old_legend.get_frame_on()
         _shadow = old_legend.shadow
         _fancybox = type(old_legend.legendPatch.get_boxstyle()) == matplotlib.patches.BoxStyle.Round
         _framealpha = old_legend.get_frame().get_alpha()
