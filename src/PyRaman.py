@@ -891,7 +891,13 @@ class SpreadSheet(QMainWindow):
             super(SpreadSheet, self).keyPressEvent(event)
 
     def file_save(self):
-        formattyp = '%.3f' 
+        SaveFileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Save File', self.pHomeTxt)
+        if SaveFileName[0] == '':
+            SaveFileName = SaveFileName[0]
+        else:
+            return
+
+        formattyp = '%.3f'
         data = [self.d['data0'][0]]
         for j in range(1, self.cols):
             data.append(self.d['data%i'%j][0])
@@ -905,11 +911,7 @@ class SpreadSheet(QMainWindow):
             return
 
         data = np.transpose(data)
-        SaveFileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Save File', self.pHomeTxt)
-        if SaveFileName:
-            SaveFileName = SaveFileName[0]
-        else:
-            return
+
 
         if SaveFileName[-4:] == '.txt':
             pass
