@@ -1114,9 +1114,9 @@ class Functions:
 
     ### Summing up the fit functions ###
     def FctSumme(self, x, *p):   
-        a = self.pw.anzahl_Lorentz     #number of Lorentzians
-        b = self.pw.anzahl_Gauss       #number of Gaussians
-        c = self.pw.anzahl_BWF         #number of Breit-Wigner-Fano functions
+        a = self.pw.n_fit_fct['Lorentz']     #number of Lorentzians
+        b = self.pw.n_fit_fct['Gauss']       #number of Gaussians
+        c = self.pw.n_fit_fct['Breit-Wigner-Fano']        #number of Breit-Wigner-Fano functions
         pL = 1  
         pG = 1 + a*3
         pB = 1 + a*3 + b*3
@@ -1535,7 +1535,14 @@ class PlotWindow(QMainWindow):
         self.ErrorBar = []
         self.functions = Functions(self)
         self.inserted_text = []                          # Storage for text inserted in the plot
-        self.drawn_line = []                           # Storage for lines and arrows drawn in the plot
+        self.drawn_line = []                             # Storage for lines and arrows drawn in the plot
+
+        self.n_fit_fct = {                               # number of fit functions (Lorentzian, Gaussian and Breit-Wigner-Fano)
+            'Lorentz': 0,
+            'Gauss': 0,
+            'Breit-Wigner-Fano': 0
+        }
+
 
         self.plot()
         self.create_statusbar()
@@ -1721,13 +1728,14 @@ class PlotWindow(QMainWindow):
 
         ### 3.1 Analysis Fit
         analysisFit = analysisMenu.addMenu('&Fit')
-        
-        analysisFitSingleFct = analysisFit.addMenu('&Single function')
 
+        analysisFitSingleFct = analysisFit.addMenu('&Single function')
         analysisFitSingleFct.addAction('Lorentz')
         analysisFitSingleFct.addAction('Gaussian')
         analysisFitSingleFct.addAction('Breit-Wigner-Fano')
-        analysisFitSingleFct.triggered[QAction].connect(self.fit_single_function)
+        analysisFitSingleFct.triggered[QAction].connect(self.fit_single_peak)
+
+        analysisFit.addAction('Fit several Peaks', self.fit_several_peaks)
 
         analysisFitRoutine = analysisFit.addMenu('&Fit routine')
         analysisFitRoutine.addAction('D und G Bande', self.fitroutine1)
@@ -1920,68 +1928,78 @@ class PlotWindow(QMainWindow):
 
     def get_start_values(self):
         self.Dialog_FitParameter = QDialog()
-        layout = QtWidgets.QGridLayout()
+        layout_hor = QtWidgets.QHBoxLayout()
+        layout1 = QtWidgets.QVBoxLayout()
+        layout2 = QtWidgets.QVBoxLayout()
 
-        d0_edit = QtWidgets.QLineEdit()
-        layout.addWidget(d0_edit, 0, 0)
-        d0_edit.setText('0.0')
-        d0_name = QtWidgets.QLabel('Background')
-        layout.addWidget(d0_name, 0, 1)
+        background = QtWidgets.QLineEdit()
+        layout1.addWidget(background)
+        background.setText('0.0')
+        layout2.addWidget(QtWidgets.QLabel('Background'))
 
-        d1_edit = QtWidgets.QLineEdit()
-        layout.addWidget(d1_edit, 1, 0)
-        d1_edit.setText('500')
-        d1_name = QtWidgets.QLabel(r'Position in cm^-1')
-        layout.addWidget(d1_name, 1, 1)
+        position = []
+        intensity = []
+        FWHM = []
+        BWF_parmeter = []
 
-        d2_edit = QtWidgets.QLineEdit()
-        layout.addWidget(d2_edit, 2, 0)
-        d2_edit.setText('100')
-        d2_name = QtWidgets.QLabel('Intensity')
-        layout.addWidget(d2_name, 2, 1)
+        ni = 0
+        for key, val in self.n_fit_fct.items():
+            for j in range(ni, ni+int(val)):
+                ni += 1
+                layout1.addWidget(QtWidgets.QLabel('{}. {}'.format(j+1, key)))
+                layout2.addWidget(QtWidgets.QLabel(''))
 
-        d3_edit = QtWidgets.QLineEdit()
-        layout.addWidget(d3_edit, 3, 0)
-        d3_edit.setText('5')
-        d3_name = QtWidgets.QLabel('FWHM')
-        layout.addWidget(d3_name, 3, 1)
+                position.append(QtWidgets.QLineEdit())
+                layout1.addWidget(position[j])
+                position[j].setText('3250')
+                layout2.addWidget(QtWidgets.QLabel(r'Position in cm^-1'))
+
+                intensity.append(QtWidgets.QLineEdit())
+                layout1.addWidget(intensity[j])
+                intensity[j].setText('150')
+                layout2.addWidget(QtWidgets.QLabel('Intensity'))
+
+                FWHM.append(QtWidgets.QLineEdit())
+                layout1.addWidget(FWHM[j])
+                FWHM[j].setText('300')
+                layout2.addWidget(QtWidgets.QLabel('FWHM'))
+
+                BWF_parmeter.append(QtWidgets.QLineEdit())
+                BWF_parmeter[j].setText('-10')
+                if key == 'Breit-Wigner-Fano':
+                    layout1.addWidget(BWF_parmeter[j])
+                    layout2.addWidget(QtWidgets.QLabel('Additional parameter'))
+
 
         okbutton = QPushButton('Ok', self)
-        okbutton.setToolTip('Starts the fit')
+        okbutton.setToolTip('Start the fit')
         okbutton.clicked.connect(self.Dialog_FitParameter.close)
-        layout.addWidget(okbutton, 4, 0)
+        layout1.addWidget(okbutton)
+        layout2.addWidget(QtWidgets.QLabel(''))
 
-        self.Dialog_FitParameter.setLayout(layout)
+        layout_hor.addLayout(layout1)
+        layout_hor.addLayout(layout2)
+        self.Dialog_FitParameter.setLayout(layout_hor)
         self.Dialog_FitParameter.setWindowTitle("Fit Parameter")
         self.Dialog_FitParameter.setWindowModality(Qt.ApplicationModal)
 
         self.Dialog_FitParameter.exec_()
-        d0 = float(d0_edit.text())      #Background
-        d1 = float(d1_edit.text())      #Peak-Position in cm^-1
-        d2 = float(d2_edit.text())      #Intensity
-        d3 = float(d3_edit.text())      #FWHM
-        return ([d0, d1, d2, d3])
+        parameter = [float(background.text())]               #Background
+        for key in self.n_fit_fct.keys():
+            for j in range(self.n_fit_fct[key]):
+                parameter.append(float(position[j].text()))      #Peak position in cm^-1
+                parameter.append(float(intensity[j].text()))     #Intensity
+                parameter.append(float(FWHM[j].text()))          #FWHM
+                if key == 'Breit-Wigner-Fano':
+                    parameter.append(float(BWF_parmeter[j].text()))
+        return parameter
 
-    def fit_single_function(self, q):
+    def fit_single_peak(self, q):
         self.SelectDataset()
         if self.selectedDatasetNumber != []:
             x_min, x_max = self.SelectArea()
+            self.n_fit_fct[q.text()] = 1
             p_start = self.get_start_values()
-            if q.text() == 'Lorentz':
-                self.anzahl_Lorentz = 1
-                self.anzahl_Gauss = 0
-                self.anzahl_BWF = 0
-
-            if q.text() == 'Gaussian':
-                self.anzahl_Lorentz = 0
-                self.anzahl_Gauss = 1
-                self.anzahl_BWF = 0
-
-            if q.text() == 'Breit-Wigner-Fano':
-                self.anzahl_Lorentz = 0
-                self.anzahl_Gauss = 0
-                self.anzahl_BWF = 1
-                p_start.append(-10)                 # additional parameter in BWF for asymmetry
         else:
             return
 
@@ -2003,9 +2021,85 @@ class PlotWindow(QMainWindow):
                 print_param.append([parmeter_name[idx], p])
             print(tabulate(print_param, headers=['Parameters', 'Values']))
 
+        self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
+
+    def dialog_to_get_number_of_fct(self):
+        self.combo_fct = []
+        self.dialog_several_fit_functions = QtWidgets.QDialog()
+        self.layout_several_fit_function = QtWidgets.QVBoxLayout()
+
+        button = QPushButton("Add Function")
+        button.clicked.connect(self.dialog_add_function)
+        self.layout_several_fit_function.addWidget(button)
+
+        okbutton = QPushButton("OK")
+        okbutton.clicked.connect(self.dialog_several_fit_functions.close)
+        self.layout_several_fit_function.addWidget(okbutton)
+
+        self.dialog_several_fit_functions.setLayout(self.layout_several_fit_function)
+        self.dialog_several_fit_functions.setWindowTitle("Fit Functions")
+        self.dialog_several_fit_functions.setWindowModality(Qt.ApplicationModal)
+        self.dialog_several_fit_functions.exec_()
+
+        for fct in self.combo_fct:
+            self.n_fit_fct[fct.currentText()] += 1
+
+    def dialog_add_function(self):
+        label = QtWidgets.QLabel('{}. Function'.format(len(self.combo_fct)+1))
+        self.layout_several_fit_function.addWidget(label)
+        self.combo_fct.append(QtWidgets.QComboBox(self))
+        self.combo_fct[-1].addItem("Lorentz")
+        self.combo_fct[-1].addItem("Gauss")
+        self.combo_fct[-1].addItem("Breit-Wigner-Fano")
+        self.layout_several_fit_function.addWidget(self.combo_fct[-1])
+        self.dialog_several_fit_functions.update()
+
+    def fit_several_peaks(self):
+        self.SelectDataset()
+        if self.selectedDatasetNumber != []:
+            self.dialog_to_get_number_of_fct()
+            x_min, x_max = self.SelectArea()
+            p_start = self.get_start_values()
+
+        for n in self.selectedDatasetNumber:
+            xs = self.Spektrum[n].get_xdata()
+            ys = self.Spektrum[n].get_ydata()
+            x = xs[np.where((xs > x_min) & (xs < x_max))]
+            y = ys[np.where((xs > x_min) & (xs < x_max))]
+
+            try:
+                popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0=p_start)
+            except RuntimeError as e:
+                self.mw.show_statusbar_message(str(e), 4000)
+                self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
+                return
+
+
+            print(popt)
+
+            ### Plot the Fit Data ###
+            x1 = np.linspace(min(x), max(x), 1000)
+            self.ax.plot(x1, self.functions.FctSumme(x1, *popt), '-r')
+
+            aL = self.n_fit_fct['Lorentz']
+            aG = self.n_fit_fct['Gauss']
+            for key in self.n_fit_fct.keys():
+                for i in range(self.n_fit_fct[key]):
+                    if key == 'Lorentz':
+                        y_fit = popt[0] + self.functions.LorentzFct(x1, popt[3*i+1], popt[3*i+2], popt[3*i+3])
+                    elif key == 'Gauss':
+                        y_fit = popt[0] + self.functions.GaussianFct(x1, popt[3*(i+aL)+1], popt[3*(i+aL)+2], popt[3*(i+aL)+3])
+                    elif key == 'Breit-Wigner-Fano':
+                        y_fit = popt[0] + self.functions.BreitWignerFct(x1, popt[4*i+3*(aL+aG)+1], popt[4*i+3*(aL+aG)+2], popt[4*i+3*(aL+aG)+3], popt[4*i+3*(aL+aG)+4])
+                    self.ax.plot(x1, y_fit, '--g')
+
+            self.fig.canvas.draw()
+
+        self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
+
     def DefineArea(self):
         self.SelectDataset()
-        if n in self.selectedDatasetNumber:
+        for n in self.selectedDatasetNumber:
             spct = self.Spektrum[n]
             xs = spct.get_xdata()
             ys = spct.get_ydata()
@@ -2164,13 +2258,13 @@ class PlotWindow(QMainWindow):
         #Fitprocess
         #D-Band: Lorentz
         #G-Band: BreitWignerFano
-        self.anzahl_Lorentz = 1   # number of Lorentzian
-        self.anzahl_Gauss   = 0   # number of Gaussian
-        self.anzahl_BWF     = 1   # number of Breit-Wigner-Fano
-        aL  = self.anzahl_Lorentz
-        aG  = self.anzahl_Gauss
-        aB  = self.anzahl_BWF
-        aLG = self.anzahl_Lorentz + self.anzahl_Gauss
+        self.n_fit_fct['Lorentz'] = 1   # number of Lorentzian
+        self.n_fit_fct['Gauss']   = 0   # number of Gaussian
+        self.n_fit_fct['Breit-Wigner-Fano']     = 1   # number of Breit-Wigner-Fano
+        aL  = self.n_fit_fct['Lorentz']
+        aG  = self.n_fit_fct['Gauss']
+        aB  = self.n_fit_fct['Breit-Wigner-Fano']
+        aLG = self.n_fit_fct['Lorentz'] + self.n_fit_fct['Gauss']
 
         # Fit parameter: initial guess and boundaries
 
