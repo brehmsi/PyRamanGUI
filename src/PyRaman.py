@@ -29,20 +29,16 @@ import matplotlib.backends.qt_editor.figureoptions as figureoptions
 from matplotlib.backends.qt_compat import _setDevicePixelRatioF, _devicePixelRatioF
 from numpy import pi
 from numpy.fft import fft, fftshift
-from os.path import join as pjoin
 from PyQt5 import QtGui, QtCore, QtWidgets, QtCore
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, pyqtSlot, QObject
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QTableWidget, QVBoxLayout, QSizePolicy, 
     QMessageBox, QPushButton, QCheckBox, QTreeWidgetItem, QTableWidgetItem, QItemDelegate, 
     QLineEdit, QPushButton, QWidget, QMenu, QAction, QDialog, QFileDialog, QInputDialog, QAbstractItemView)
-from scipy import sparse, fftpack
+from scipy import sparse
 from scipy.optimize import curve_fit
-from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import spsolve
-from scipy.integrate import quad
-from scipy.signal import (find_peaks, savgol_filter, argrelextrema)
-from sympy.utilities.lambdify import lambdify, implemented_function
+from sympy.utilities.lambdify import lambdify
 from tabulate import tabulate
 
 import myfigureoptions  #see file 'myfigureoptions.py'
@@ -118,9 +114,6 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
         # keep the default behaviour
         super(RamanTreeWidget, self).dropEvent(event)
 
-    #def editItem(self, item):
-    #    # keep the default behaviour
-    #    super(RamanTreeWidget, self).editItem(item)
 
 class MainWindow(QMainWindow):
     '''
@@ -193,6 +186,15 @@ class MainWindow(QMainWindow):
 
     def show_statusbar_message(self, message, time):
         self.statusBar.showMessage(message, time)
+
+    def keyPressEvent(self, event):
+        # A few shortcuts
+        key = event.key()
+        if key == (Qt.Key_Control and Qt.Key_S):
+            self.save('Save')
+            self.show_statusbar_message('The project was saved', 2000)
+        else:
+            super(MainWindow, self).keyPressEvent(event)
 
     def open(self):
         # Load project in new MainWindow or in existing MW, if empty
@@ -781,22 +783,19 @@ class SpreadSheet(QMainWindow):
         self.headerline.editingFinished.connect(self.doneEditing)
 
     def rename_header(self, column):
-        window_position = self.pos()
         # This block sets up the geometry for the line edit
+        header_position = self.headers.mapToGlobal(QtCore.QPoint(0, 0))
         edit_geometry = self.headerline.geometry()
-        edit_geometry.setWidth(self.table.columnWidth(column))
+        edit_geometry.setWidth(self.headers.sectionSize(column))
         edit_geometry.setHeight(self.table.rowHeight(0))
-        x_column_pos = self.table.columnWidth(column)*column
-        edit_geometry.setX(window_position.x() + x_column_pos + 37)
-        edit_geometry.setY(window_position.y() + 60) 
-        #edit_geometry.moveLeft(self.sectionViewportPosition(section))
+        edit_geometry.moveLeft(header_position.x() + self.headers.sectionViewportPosition(column))
+        edit_geometry.moveTop(header_position.y())
         self.headerline.setGeometry(edit_geometry)
 
         self.headerline.setText(self.d['data%i'%column][1])
         self.headerline.setHidden(False) # Make it visiable
         self.headerline.setFocus()
         self.sectionedit = column
-        oldHeader = self.table.horizontalHeaderItem(column)
 
     def doneEditing(self):
         self.headerline.setHidden(True)
@@ -957,22 +956,40 @@ class SpreadSheet(QMainWindow):
         else:
             return
         
-        anz_newFiles = len(newFiles)
+        n_newFiles = len(newFiles)
         data = []
         lines = []
         FileName = []
-        for j in range(anz_newFiles):
+        header = []
+        for j in range(n_newFiles):
+            # read first line to get header
+            with open(newFiles[j]) as f:
+                firstline = f.readline()
+            # check if file has a header (starts with #)
+            if firstline[0] == '#':
+                firstline = firstline[1:-2]                      # remove '#' at beginning and '\n' at end
+                firstline = firstline.split('%')               # headers of different columns are seperated by '%'
+                header.append(firstline)
+            else:
+                header.append(None)
+                pass
             data.append(np.loadtxt(newFiles[j]))
             data[j] = np.transpose(data[j])
             lines.append(len(data[j]))
             FileName.append(os.path.splitext(os.path.basename(newFiles[j]))[0]) 
-        for k in range(anz_newFiles): 
+        for k in range(n_newFiles):
             for j in range(lines[k]):	
                 data_name = 'data%i'%(j+self.cols)			
                 if j == 0:
-                    self.d.update({data_name : (data[k][j], str(FileName[k]), 'X', newFiles[k])})
+                    if header[k] == None:   # if header is None, use Filename as header
+                        self.d.update({data_name : (data[k][j], str(FileName[k]), 'X', newFiles[k])})
+                    else:
+                        self.d.update({data_name: (data[k][j], header[k][j], 'X', newFiles[k])})
                 else:
-                    self.d.update({data_name : (data[k][j], str(FileName[k]), 'Y', newFiles[k])})
+                    if header[k] == None:
+                        self.d.update({data_name : (data[k][j], str(FileName[k]), 'Y', newFiles[k])})
+                    else:
+                        self.d.update({data_name: (data[k][j], header[k][j], 'Y', newFiles[k])})
             self.cols = self.cols + lines[k]
 
         self.rows = max([len(self.d[j][0]) for j in self.d.keys()])
@@ -1474,6 +1491,143 @@ class DataSetSelecter(QtWidgets.QDialog):
         self.close()
 
 
+
+class FitOptionsDialog(QtWidgets.QDialog):
+    def __init__(self):
+        super(FitOptionsDialog, self).__init__(parent=None)
+        '''
+        Options Dialog for Fitprocess
+
+        Parameters
+        ----------
+
+        '''
+        self.n_fit_fct = {  # number of fit functions (Lorentzian, Gaussian and Breit-Wigner-Fano)
+            'Lorentz': 0,
+            'Gauss': 0,
+            'Breit-Wigner-Fano': 0
+        }
+        self.fit_fcts = {}
+
+        self.p_start = self.create_dialog()
+
+    def create_dialog(self):
+        self.layout = QtWidgets.QVBoxLayout()
+
+        # Button to add Fit function
+        button = QPushButton("Add Function")
+        button.clicked.connect(self.dialog_add_function)
+        self.layout.addWidget(button)
+
+        # OK Button => accept start values for fit
+        okbutton = QPushButton("OK")
+        okbutton.clicked.connect(self.close)
+        self.layout.addWidget(okbutton)
+
+        # Add input (QLineEdit) for background
+        hlayout = QtWidgets.QHBoxLayout()
+        layout1 = QtWidgets.QVBoxLayout()
+        layout2 = QtWidgets.QVBoxLayout()
+        layout3 = QtWidgets.QVBoxLayout()
+        layout1.addWidget(QtWidgets.QLabel('    '))
+        background = QtWidgets.QLineEdit()
+        layout2.addWidget(background)
+        background.setText('0.0')
+        layout3.addWidget(QtWidgets.QLabel('Background           '))
+        hlayout.addLayout(layout1)
+        hlayout.addLayout(layout2)
+        hlayout.addLayout(layout3)
+        self.layout.addLayout(hlayout)
+
+        self.setLayout(self.layout)
+        self.setWindowTitle("Fit Functions")
+        self.setWindowModality(Qt.ApplicationModal)
+        self.exec_()
+
+        p_start = [float(background.text())]                                      # Background
+        parameter = {'Lorentz': [],
+                     'Gauss': [],
+                     'Breit-Wigner-Fano': []}
+        for key in self.fit_fcts.keys():
+            name_fct = self.fit_fcts[key]['fct'].currentText()
+            parameter[name_fct].append(float(self.fit_fcts[key]['position'].text()))          # Peak position in cm^-1
+            parameter[name_fct].append(float(self.fit_fcts[key]['intensity'].text()))         # Intensity
+            parameter[name_fct].append(float(self.fit_fcts[key]['FWHM'].text()))              # FWHM
+            if name_fct == 'Breit-Wigner-Fano':
+                parameter[name_fct].append(float(self.fit_fcts[key]['additional'].text()))    # additional BWF parameter for asymmetry
+            self.n_fit_fct[name_fct] += 1
+        for p in parameter.values():
+            p_start.extend(p)
+        return p_start
+
+    def dialog_add_function(self):
+        # Add combobox to select fit function
+        n = len(self.fit_fcts) + 1          #Number of functions
+        self.fit_fcts.update({n: {}})
+
+        label = QtWidgets.QLabel('{}. Function'.format(n))
+        self.layout.addWidget(label)
+        cbox = QtWidgets.QComboBox(self)
+        cbox.addItem("Lorentz")
+        cbox.addItem("Gauss")
+        cbox.addItem("Breit-Wigner-Fano")
+        cbox.currentTextChanged.connect(lambda: self.fct_change(cbox.currentText(), n))
+        self.layout.addWidget(cbox)
+        self.fit_fcts[n].update({'fct': cbox})
+
+        # Fitparameters
+        hlayout = QtWidgets.QHBoxLayout()
+        layout1 = QtWidgets.QVBoxLayout()
+        layout2 = QtWidgets.QVBoxLayout()
+        layout3 = QtWidgets.QVBoxLayout()
+
+        layout1.addWidget(QtWidgets.QLabel('    '))
+        pos = QtWidgets.QLineEdit()
+        layout2.addWidget(pos)
+        pos.setText('3250')
+        layout3.addWidget(QtWidgets.QLabel(r'Position in cm^-1'))
+        self.fit_fcts[n].update({'position': pos})
+
+        layout1.addWidget(QtWidgets.QLabel('    '))
+        intensity = QtWidgets.QLineEdit()
+        layout2.addWidget(intensity)
+        intensity.setText('150')
+        layout3.addWidget(QtWidgets.QLabel('Intensity'))
+        self.fit_fcts[n].update({'intensity': intensity})
+
+        layout1.addWidget(QtWidgets.QLabel('    '))
+        FWHM = QtWidgets.QLineEdit()
+        layout2.addWidget(FWHM)
+        FWHM.setText('300')
+        layout3.addWidget(QtWidgets.QLabel('FWHM'))
+        self.fit_fcts[n].update({'FWHM': FWHM})
+
+        hlayout.addLayout(layout1)
+        hlayout.addLayout(layout2)
+        hlayout.addLayout(layout3)
+        self.fit_fcts[n].update({'layout': [layout1, layout2, layout3]})
+        self.layout.addLayout(hlayout)
+
+        self.update()
+
+    def fct_change(self, fct_name, n):
+        if fct_name == 'Breit-Wigner-Fano' and all(k != 'additional' for k in self.fit_fcts[n].keys() ):
+            BWF_parmeter = QtWidgets.QLineEdit()
+            BWF_parmeter.setText('-10')
+            self.fit_fcts[n]['layout'][0].addWidget(QtWidgets.QLabel('    '))
+            self.fit_fcts[n]['layout'][1].addWidget(BWF_parmeter)
+            self.fit_fcts[n]['layout'][2].addWidget(QtWidgets.QLabel('Additional parameter'))
+            self.fit_fcts[n].update({'additional': BWF_parmeter})
+            self.update()
+        elif fct_name != 'Breit-Wigner-Fano' and any(k == 'additional' for k in self.fit_fcts[n].keys() ):
+            for l in self.fit_fcts[n]['layout']:
+                l.itemAt(3).widget().setParent(None)
+            del self.fit_fcts[n]['additional']
+        else:
+            pass
+
+
+
 class MyCustomToolbar(NavigationToolbar2QT):
     toolitems = [t for t in NavigationToolbar2QT.toolitems]
     # Add new toolitem at last position
@@ -1536,13 +1690,11 @@ class PlotWindow(QMainWindow):
         self.functions = Functions(self)
         self.inserted_text = []                          # Storage for text inserted in the plot
         self.drawn_line = []                             # Storage for lines and arrows drawn in the plot
-
         self.n_fit_fct = {                               # number of fit functions (Lorentzian, Gaussian and Breit-Wigner-Fano)
             'Lorentz': 0,
             'Gauss': 0,
             'Breit-Wigner-Fano': 0
         }
-
 
         self.plot()
         self.create_statusbar()
@@ -1735,10 +1887,11 @@ class PlotWindow(QMainWindow):
         analysisFitSingleFct.addAction('Breit-Wigner-Fano')
         analysisFitSingleFct.triggered[QAction].connect(self.fit_single_peak)
 
-        analysisFit.addAction('Fit several Peaks', self.fit_several_peaks)
+        analysisFit.addAction('Fit several Peaks', self.fit_peaks)
 
-        analysisFitRoutine = analysisFit.addMenu('&Fit routine')
-        analysisFitRoutine.addAction('D und G Bande', self.fitroutine1)
+        analysisRoutine = analysisMenu.addMenu('&Analysis routines')
+        analysisRoutine.addAction('D und G Bande', self.fit_D_G)
+        analysisRoutine.addAction('Sulfur oxyanion ratios', self.ratio_H2O_sulfuroxyanion)
 
         ### 3.2 Analysis base line correction
         analysisMenu.addAction('Baseline Correction', self.menu_baseline_als)
@@ -2023,43 +2176,13 @@ class PlotWindow(QMainWindow):
 
         self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
 
-    def dialog_to_get_number_of_fct(self):
-        self.combo_fct = []
-        self.dialog_several_fit_functions = QtWidgets.QDialog()
-        self.layout_several_fit_function = QtWidgets.QVBoxLayout()
-
-        button = QPushButton("Add Function")
-        button.clicked.connect(self.dialog_add_function)
-        self.layout_several_fit_function.addWidget(button)
-
-        okbutton = QPushButton("OK")
-        okbutton.clicked.connect(self.dialog_several_fit_functions.close)
-        self.layout_several_fit_function.addWidget(okbutton)
-
-        self.dialog_several_fit_functions.setLayout(self.layout_several_fit_function)
-        self.dialog_several_fit_functions.setWindowTitle("Fit Functions")
-        self.dialog_several_fit_functions.setWindowModality(Qt.ApplicationModal)
-        self.dialog_several_fit_functions.exec_()
-
-        for fct in self.combo_fct:
-            self.n_fit_fct[fct.currentText()] += 1
-
-    def dialog_add_function(self):
-        label = QtWidgets.QLabel('{}. Function'.format(len(self.combo_fct)+1))
-        self.layout_several_fit_function.addWidget(label)
-        self.combo_fct.append(QtWidgets.QComboBox(self))
-        self.combo_fct[-1].addItem("Lorentz")
-        self.combo_fct[-1].addItem("Gauss")
-        self.combo_fct[-1].addItem("Breit-Wigner-Fano")
-        self.layout_several_fit_function.addWidget(self.combo_fct[-1])
-        self.dialog_several_fit_functions.update()
-
-    def fit_several_peaks(self):
+    def fit_peaks(self):
         self.SelectDataset()
         if self.selectedDatasetNumber != []:
-            self.dialog_to_get_number_of_fct()
             x_min, x_max = self.SelectArea()
-            p_start = self.get_start_values()
+            fitdialog = FitOptionsDialog()
+            p_start = fitdialog.p_start
+            self.n_fit_fct = fitdialog.n_fit_fct
 
         for n in self.selectedDatasetNumber:
             xs = self.Spektrum[n].get_xdata()
@@ -2073,9 +2196,6 @@ class PlotWindow(QMainWindow):
                 self.mw.show_statusbar_message(str(e), 4000)
                 self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
                 return
-
-
-            print(popt)
 
             ### Plot the Fit Data ###
             x1 = np.linspace(min(x), max(x), 1000)
@@ -2094,6 +2214,39 @@ class PlotWindow(QMainWindow):
                     self.ax.plot(x1, y_fit, '--g')
 
             self.fig.canvas.draw()
+
+            #Calculate Errors and R square
+            perr = np.sqrt(np.diag(pcov))
+            residuals = y - self.functions.FctSumme(x, *popt)
+            ss_res = numpy.sum(residuals**2)
+            ss_tot = numpy.sum((y - numpy.mean(y))**2)
+            r_squared = 1 - (ss_res / ss_tot)
+
+            # bring data into printable form
+            data_table = [['Background', popt[0], perr[0]]]
+            data_table.append(['', '', ''])
+            a = 0
+            for key in self.n_fit_fct.keys():
+                for j in range(self.n_fit_fct[key]):
+                    data_table.append(['{} {}'.format(key, j + 1)])
+                    if key != 'Breit-Wigner-Fano':
+                        data_table.append(['Raman Shift in cm-1', popt[j*3+a+1], perr[j*3+a+1]])
+                        data_table.append(['Peak height in cps', popt[j*3+a+2], perr[j*3+a+2]])
+                        data_table.append(['FWHM in cm-1', popt[j*3+a+3], perr[j*3+a+3]])
+                        data_table.append(['', '', ''])
+                        a += 3
+                    else:
+                        data_table.append(['Raman Shift in cm-1', popt[j*4+a+1], perr[j*4+a+1]])
+                        data_table.append(['Peak height in cps', popt[j * 4 + a + 2], perr[j*4+a+2]])
+                        data_table.append(['FWHM in cm-1', popt[j*4+a+3], perr[j*4+a+3]])
+                        data_table.append(['', '', ''])
+                        data_table.append(
+                            ['BWF Coupling Coefficient', popt[j*4+a+4], perr[j*3+a+4]])
+                        a += 4
+                    data_table.append(['', '', ''])
+            print('\n {} \n'.format(self.Spektrum[n].get_label()))
+            print(r'R^2={:.4f} \n'.format(r_squared))
+            print(tabulate(data_table, headers=['Parameters', 'Values', 'Errors']))
 
         self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
 
@@ -2129,12 +2282,15 @@ class PlotWindow(QMainWindow):
         return x_min, x_max
 	
     def menu_baseline_als(self):
-        self.SelectDataset(True)
+        self.SelectDataset()
+        x_min, x_max = self.SelectArea()
+        p_start = '0.001'
+        lam_start = '10000000'
         for n in self.selectedDatasetNumber:
             spct = self.Spektrum[n]
             xs = spct.get_xdata()
             ys = spct.get_ydata()
-            x_min, x_max = self.SelectArea()
+
             x = xs[np.where((xs > x_min)&(xs < x_max))]
             y = ys[np.where((xs > x_min)&(xs < x_max))]
 
@@ -2143,13 +2299,13 @@ class PlotWindow(QMainWindow):
 
             p_edit = QtWidgets.QLineEdit()
             layout.addWidget(p_edit, 0, 0)
-            p_edit.setText('0.001')
+            p_edit.setText(p_start)
             p_label = QtWidgets.QLabel('p')
             layout.addWidget(p_label, 0, 1)
 
             lam_edit = QtWidgets.QLineEdit()
             layout.addWidget(lam_edit, 1, 0)
-            lam_edit.setText('10000000')
+            lam_edit.setText(lam_start)
             lam_label = QtWidgets.QLabel('lambda')
             layout.addWidget(lam_label, 1, 1)
 
@@ -2158,44 +2314,45 @@ class PlotWindow(QMainWindow):
             xb,yb,zb = self.baseline_als(x, y, p, lam)
             self.baseline,    = self.ax.plot(xb, zb, 'c--', label = 'baseline ({})'.format(spct.get_label()))
             self.blcSpektrum, = self.ax.plot(xb, yb, 'c-', label = 'baseline-corrected ({})'.format(spct.get_label()))
-            self.ax.figure.canvas.draw()
+            self.fig.canvas.draw()
 
             self.finishbutton = QPushButton('Ok', self)
             self.finishbutton.setCheckable(True)
             self.finishbutton.setToolTip('Are you happy with the start parameters? \n Close the dialog window and save the baseline!')
-            self.finishbutton.clicked.connect(lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text())))
+            self.finishbutton.clicked.connect(lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text()), spct))
             layout.addWidget(self.finishbutton, 2, 0)
 
             self.closebutton = QPushButton('Close', self)
             self.closebutton.setCheckable(True)
             self.closebutton.setToolTip('Closes the dialog window and baseline is not saved.')
-            self.closebutton.clicked.connect(lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text())))
+            self.closebutton.clicked.connect(lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text()), spct))
             layout.addWidget(self.closebutton, 2, 1)
 
             applybutton = QPushButton('Apply', self)
             applybutton.setToolTip('Do you want to try the fit parameters? \n Lets do it!')
-            applybutton.clicked.connect(lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text())))
+            applybutton.clicked.connect(lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text()), spct))
             layout.addWidget(applybutton, 2, 2)
 
             self.Dialog_BaselineParameter.setLayout(layout)
             self.Dialog_BaselineParameter.setWindowTitle("Baseline Parameter")
             self.Dialog_BaselineParameter.setWindowModality(Qt.ApplicationModal)
             self.Dialog_BaselineParameter.exec_()
+            p_start = p_edit.text()
+            lam_start = lam_edit.text()
     
-    def baseline_als_call(self, x, y, p, lam):
+    def baseline_als_call(self, x, y, p, lam, spct):
         self.blcSpektrum.remove()
         self.baseline.remove()
+        name = spct.get_label()
         if self.closebutton.isChecked():
             self.Dialog_BaselineParameter.close()
-            self.fig.canvas.draw()
         elif self.finishbutton.isChecked():
             xb, yb, zb = self.baseline_als(x, y, p, lam)
-            self.baseline,    = self.ax.plot(xb, zb, 'c--', label = 'baseline ({})'.format(self.selectedData[0][2]))
-            self.Spektrum.append(self.ax.plot(xb, yb, 'c-', label = 'baseline-corrected ({})'.format(self.selectedData[0][2])[0]))
-            self.fig.canvas.draw()
+            self.baseline,    = self.ax.plot(xb, zb, 'c--', label = 'baseline ({})'.format(name))
+            self.Spektrum.append(self.ax.plot(xb, yb, 'c-', label = 'baseline-corrected ({})'.format(name)[0]))
             
             ### Save background-corrected data ###
-            (fileBaseName, fileExtension) = os.path.splitext(self.selectedData[0][2])
+            (fileBaseName, fileExtension) = os.path.splitext(name)
             startFileDirName = os.path.dirname(self.selectedData[0][3])
             startFileBaseName = startFileDirName + '/' + fileBaseName
             startFileName = startFileBaseName + '_backgroundCorr.txt'
@@ -2208,9 +2365,9 @@ class PlotWindow(QMainWindow):
             self.Dialog_BaselineParameter.close()
         else:
             xb, yb, zb = self.baseline_als(x, y, p, lam)
-            self.baseline,    = self.ax.plot(xb, zb, 'c--', label='baseline ({})'.format(self.selectedData[0][2]))
-            self.blcSpektrum, = self.ax.plot(xb, yb, 'c-', label='baseline-corrected ({})'.format(self.selectedData[0][2]))
-            self.fig.canvas.draw()
+            self.baseline,    = self.ax.plot(xb, zb, 'c--', label='baseline ({})'.format(name))
+            self.blcSpektrum, = self.ax.plot(xb, yb, 'c-', label='baseline-corrected ({})'.format(name))
+        self.fig.canvas.draw()
 
     # Baseline correction 
     # based on: "Baseline Correction with Asymmetric Least SquaresSmoothing" from Eilers and Boelens
@@ -2236,7 +2393,7 @@ class PlotWindow(QMainWindow):
 	
     # Partially based on Christian's Mathematica Notebook
     # Fitroutine for D and G bands in spectra of carbon compounds
-    def fitroutine1(self):
+    def fit_D_G(self):
         # Select which data set will be fitted
         self.SelectDataset()
         #if self.selectedData == []:
@@ -2508,6 +2665,65 @@ class PlotWindow(QMainWindow):
             save_data = [xb, yb, zb]
             save_data = np.transpose(save_data)
             self.save_to_file('Save background-corrected data in file', startFileName, save_data)
+
+    def ratio_H2O_sulfuroxyanion(self):
+        # this function calculates the intensity ratio of different peaks
+        # simply by getting the maximum of a peak
+
+        self.SelectDataset()
+        save_data = []
+        for n in self.selectedDatasetNumber:
+            spct = self.Spektrum[n]
+            xs = spct.get_xdata()
+            ys = spct.get_ydata()
+
+            ### get height of water peak
+            x_min, x_max = [3000, 3750]
+            y = ys[np.where((xs > x_min) & (xs < x_max))]
+            water_peak = max(y)
+
+            ### get height of hydrogensulfate peak (at ca. 1050cm-1)
+            x_min, x_max = [1040, 1060]
+            y = ys[np.where((xs > x_min) & (xs < x_max))]
+            hydrogensulfate_peak = max(y)
+
+            ### get height of sulfate peak (at ca. 980cm-1)
+            x_min, x_max = [970, 990]
+            y = ys[np.where((xs > x_min) & (xs < x_max))]
+            sulfate_peak = max(y)
+
+            ### get height of peroxydisulfate peak (at ca. 835cm-1)
+            x_min, x_max = [825, 835]
+            y = ys[np.where((xs > x_min) & (xs < x_max))]
+            peroxydisulfate_peak = max(y)
+
+            ### get height of peroxydisulfate peak (at ca. 1075cm-1)
+            x_min, x_max = [1060, 1085]
+            y = ys[np.where((xs > x_min) & (xs < x_max))]
+            peroxydisulfate_peak_2 = max(y)
+
+            # calculate ratios
+
+            r_sulfate_water = sulfate_peak/water_peak
+            r_peroxydisulfate_water = peroxydisulfate_peak/water_peak
+            r_peroxydisulfate_water_2 = peroxydisulfate_peak_2/water_peak
+            r_hydrogensulfate_water = hydrogensulfate_peak/water_peak
+
+            save_data.append([r_sulfate_water, r_peroxydisulfate_water, r_peroxydisulfate_water_2, r_hydrogensulfate_water])
+
+            #print(sulfate_peak, hydrogensulfate_peak, peroxydisulfate_peak, peroxydisulfate_peak_2, water_peak)
+
+
+        filename = 'ratios.txt'
+        filepath = os.path.dirname(self.selectedData[0][3])
+        save_data = np.array(save_data)
+        print(save_data)
+
+        ### Save the ratios ###
+        filename = '{}/{}'.format(filepath, filename)
+        self.save_to_file('Save calculated ratios in file', filename, save_data)
+
+
 
     ########## Functions of toolbar ##########
     def check_if_line_was_removed(self):
