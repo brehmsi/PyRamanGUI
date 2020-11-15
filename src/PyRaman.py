@@ -1515,9 +1515,14 @@ class FitOptionsDialog(QtWidgets.QDialog):
         self.layout = QtWidgets.QVBoxLayout()
 
         # Button to add Fit function
-        button = QPushButton("Add Function")
-        button.clicked.connect(self.dialog_add_function)
-        self.layout.addWidget(button)
+        addbutton = QPushButton("Add Function")
+        addbutton.clicked.connect(self.add_function)
+        self.layout.addWidget(addbutton)
+
+        # Button to remove fit funtion
+        removebutton = QPushButton('Remove Funtion')
+        removebutton.clicked.connect(self.remove_function)
+        self.layout.addWidget(removebutton)
 
         # OK Button => accept start values for fit
         okbutton = QPushButton("OK")
@@ -1560,7 +1565,7 @@ class FitOptionsDialog(QtWidgets.QDialog):
             p_start.extend(p)
         return p_start
 
-    def dialog_add_function(self):
+    def add_function(self):
         # Add combobox to select fit function
         n = len(self.fit_fcts) + 1          #Number of functions
         self.fit_fcts.update({n: {}})
@@ -1573,7 +1578,9 @@ class FitOptionsDialog(QtWidgets.QDialog):
         cbox.addItem("Breit-Wigner-Fano")
         cbox.currentTextChanged.connect(lambda: self.fct_change(cbox.currentText(), n))
         self.layout.addWidget(cbox)
+
         self.fit_fcts[n].update({'fct': cbox})
+        self.fit_fcts[n].update({'label': label})
 
         # Fitparameters
         hlayout = QtWidgets.QHBoxLayout()
@@ -1609,6 +1616,16 @@ class FitOptionsDialog(QtWidgets.QDialog):
         self.layout.addLayout(hlayout)
 
         self.update()
+
+    def remove_function(self):
+        last_key = list(self.fit_fcts.keys())[-1]
+        for l in self.fit_fcts[last_key]['layout']:
+            for i in reversed(range(l.count())):
+                l.itemAt(i).widget().setParent(None)
+            l.setParent(None)
+        self.fit_fcts[last_key]['label'].setParent(None)
+        self.fit_fcts[last_key]['fct'].setParent(None)
+        del self.fit_fcts[last_key]
 
     def fct_change(self, fct_name, n):
         if fct_name == 'Breit-Wigner-Fano' and all(k != 'additional' for k in self.fit_fcts[n].keys() ):
@@ -2225,23 +2242,23 @@ class PlotWindow(QMainWindow):
             # bring data into printable form
             data_table = [['Background', popt[0], perr[0]]]
             data_table.append(['', '', ''])
-            a = 0
+            a = 1
             for key in self.n_fit_fct.keys():
                 for j in range(self.n_fit_fct[key]):
                     data_table.append(['{} {}'.format(key, j + 1)])
                     if key != 'Breit-Wigner-Fano':
-                        data_table.append(['Raman Shift in cm-1', popt[j*3+a+1], perr[j*3+a+1]])
-                        data_table.append(['Peak height in cps', popt[j*3+a+2], perr[j*3+a+2]])
-                        data_table.append(['FWHM in cm-1', popt[j*3+a+3], perr[j*3+a+3]])
+                        data_table.append(['Raman Shift in cm-1', popt[j*3+a], perr[j*3+a]])
+                        data_table.append(['Peak height in cps', popt[j*3+a+1], perr[j*3+a+1]])
+                        data_table.append(['FWHM in cm-1', popt[j*3+a+2], perr[j*3+a+2]])
                         data_table.append(['', '', ''])
                         a += 3
                     else:
-                        data_table.append(['Raman Shift in cm-1', popt[j*4+a+1], perr[j*4+a+1]])
-                        data_table.append(['Peak height in cps', popt[j * 4 + a + 2], perr[j*4+a+2]])
-                        data_table.append(['FWHM in cm-1', popt[j*4+a+3], perr[j*4+a+3]])
+                        data_table.append(['Raman Shift in cm-1', popt[j*4+a], perr[j*4+a]])
+                        data_table.append(['Peak height in cps', popt[j*4+a+1], perr[j*4+a+1]])
+                        data_table.append(['FWHM in cm-1', popt[j*4+a+2], perr[j*4+a+2]])
                         data_table.append(['', '', ''])
                         data_table.append(
-                            ['BWF Coupling Coefficient', popt[j*4+a+4], perr[j*3+a+4]])
+                            ['BWF Coupling Coefficient', popt[j*4+a+3], perr[j*3+a+3]])
                         a += 4
                     data_table.append(['', '', ''])
             print('\n {} \n'.format(self.Spektrum[n].get_label()))
