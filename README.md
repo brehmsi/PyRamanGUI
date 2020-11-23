@@ -1,8 +1,11 @@
 ![GitHub Logo](/images/PyRAMAN_v1.png)
 
 # PyRaman - A general purpose RAMAN evaluation tool 
-  - Author: Simon Brehm (SB, Email: simbre17@googlemail.com) 
-  - Side-kick: Sebastian Schwalbe (SS, Email: theonov13@gmail.com) , Jakob Kraus (JaK, Email: ) 
+  - Author:
+    - Simon Brehm (SB, Email: simbre17@googlemail.com) 
+  - Side-kick:
+    - Sebastian Schwalbe (SS, Email: theonov13@gmail.com) 
+    - Jakob Kraus (JaK, Email: ) 
   - Coding language Python 3.0 
   - Licence: 
 # Description
