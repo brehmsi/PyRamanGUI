@@ -1,16 +1,13 @@
 # Autor: Simon Brehm
+import beepy
 import math
 import matplotlib
 import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
-import matplotlib.pyplot as plt
 import matplotlib.backends.qt_editor._formlayout as formlayout
 import numpy as np
 import os
-import pandas as pd
 import pickle
-import pylab
-import random
 import re
 import scipy
 import sympy as syp
@@ -184,8 +181,10 @@ class MainWindow(QMainWindow):
         menu_tools = menu.addMenu('Tools')
         menu_tools.addAction('Database for measurements', self.execute_database_measurements)
 
-    def show_statusbar_message(self, message, time):
+    def show_statusbar_message(self, message, time, error_sound=False):
         self.statusBar.showMessage(message, time)
+        if error_sound:
+            beepy.beep(sound=3)
 
     def keyPressEvent(self, event):
         # A few shortcuts
@@ -1493,15 +1492,16 @@ class DataSetSelecter(QtWidgets.QDialog):
 
 
 class FitOptionsDialog(QtWidgets.QDialog):
-    def __init__(self):
-        super(FitOptionsDialog, self).__init__(parent=None)
+    def __init__(self, parent):
+        super(FitOptionsDialog, self).__init__(parent=parent)
         '''
         Options Dialog for Fitprocess
 
         Parameters
         ----------
-
+        parent: PlotWindow
         '''
+        self.parent = parent
         self.n_fit_fct = {  # number of fit functions (Lorentzian, Gaussian and Breit-Wigner-Fano)
             'Lorentz': 0,
             'Gauss': 0,
@@ -1509,7 +1509,7 @@ class FitOptionsDialog(QtWidgets.QDialog):
         }
         self.fit_fcts = {}
 
-        self.p_start = self.create_dialog()
+        self.p_start, self.p_bound = self.create_dialog()
 
     def create_dialog(self):
         self.layout = QtWidgets.QVBoxLayout()
@@ -1529,20 +1529,34 @@ class FitOptionsDialog(QtWidgets.QDialog):
         okbutton.clicked.connect(self.close)
         self.layout.addWidget(okbutton)
 
-        # Add input (QLineEdit) for background
-        hlayout = QtWidgets.QHBoxLayout()
-        layout1 = QtWidgets.QVBoxLayout()
-        layout2 = QtWidgets.QVBoxLayout()
-        layout3 = QtWidgets.QVBoxLayout()
-        layout1.addWidget(QtWidgets.QLabel('    '))
-        background = QtWidgets.QLineEdit()
-        layout2.addWidget(background)
-        background.setText('0.0')
-        layout3.addWidget(QtWidgets.QLabel('Background           '))
-        hlayout.addLayout(layout1)
-        hlayout.addLayout(layout2)
-        hlayout.addLayout(layout3)
-        self.layout.addLayout(hlayout)
+        # create table
+        self.table = QtWidgets.QTableWidget(1, 5)
+        self.table.itemChanged.connect(self.value_changed)
+
+        # set items in each cell
+        for r in range(self.table.rowCount()):
+            for c in range(self.table.columnCount()):
+                cell = QtWidgets.QTableWidgetItem('')
+                self.table.setItem(r, c, cell)
+
+        # set headers
+        self.hheaders = ['Fit Function', 'Parameter', 'Value', 'Lower Bound', 'Upper Bound']
+        self.table.setHorizontalHeaderLabels(self.hheaders)
+        self.vheaders = ['0']
+        self.table.setVerticalHeaderLabels(self.vheaders)
+
+        # background
+        self.table.item(0, 0).setFlags(Qt.NoItemFlags)        # no interaction with this cell
+        self.table.item(0, 1).setText('Background')
+        self.table.item(0, 1).setFlags(Qt.NoItemFlags)
+        background = self.table.item(0, 2)
+        background.setText(str(0.0))
+
+        # bounds
+        self.table.item(0, 3).setText(str(-np.inf))
+        self.table.item(0, 4).setText(str(np.inf))
+
+        self.layout.addWidget(self.table)
 
         self.setLayout(self.layout)
         self.setWindowTitle("Fit Functions")
@@ -1553,6 +1567,25 @@ class FitOptionsDialog(QtWidgets.QDialog):
         parameter = {'Lorentz': [],
                      'Gauss': [],
                      'Breit-Wigner-Fano': []}
+
+        bg_low =  self.table.item(0, 3).text()
+        bg_up = self.table.item(0, 4).text()
+        if bg_low == '':
+            bg_low = -np.inf
+        else:
+            bg_low = float(bg_low)
+        if bg_up == '':
+            bg_up = np.inf
+        else:
+            bg_up = float(bg_up)
+        boundaries = [[bg_low], [bg_up]]
+        lower_boundaries = {'Lorentz': [],
+                     'Gauss': [],
+                     'Breit-Wigner-Fano': []}
+        upper_boundaries = {'Lorentz': [],
+                     'Gauss': [],
+                     'Breit-Wigner-Fano': []}
+
         for key in self.fit_fcts.keys():
             name_fct = self.fit_fcts[key]['fct'].currentText()
             parameter[name_fct].append(float(self.fit_fcts[key]['position'].text()))          # Peak position in cm^-1
@@ -1560,89 +1593,139 @@ class FitOptionsDialog(QtWidgets.QDialog):
             parameter[name_fct].append(float(self.fit_fcts[key]['FWHM'].text()))              # FWHM
             if name_fct == 'Breit-Wigner-Fano':
                 parameter[name_fct].append(float(self.fit_fcts[key]['additional'].text()))    # additional BWF parameter for asymmetry
+            for lb, ub in zip(self.fit_fcts[key]['lower boundaries'], self.fit_fcts[key]['upper boundaries']):
+                if lb.text() == '':
+                    lower_boundaries[name_fct].append(-np.inf)
+                else:
+                    lower_boundaries[name_fct].append(float(lb.text()))
+
+                if ub.text() == '':
+                    upper_boundaries[name_fct].append(np.inf)
+                else:
+                    upper_boundaries[name_fct].append(float(ub.text()))
             self.n_fit_fct[name_fct] += 1
+
         for p in parameter.values():
             p_start.extend(p)
-        return p_start
+
+        for lb, ub in zip(lower_boundaries.values(), upper_boundaries.values()):
+            boundaries[0].extend(lb)
+            boundaries[1].extend(ub)
+
+        return p_start, boundaries
 
     def add_function(self):
         # Add combobox to select fit function
         n = len(self.fit_fcts) + 1          #Number of functions
         self.fit_fcts.update({n: {}})
 
-        label = QtWidgets.QLabel('{}. Function'.format(n))
-        self.layout.addWidget(label)
+        self.table.setRowCount(self.table.rowCount()+3)
+        self.vheaders.extend([str(n), str(n), str(n)])
+        self.table.setVerticalHeaderLabels(self.vheaders)
+
+        rows = self.table.rowCount()
+
+        # set items in new cell
+        for r in range(rows-3, rows):
+            for c in range(self.table.columnCount()):
+                cell = QtWidgets.QTableWidgetItem()
+                self.table.setItem(r, c, cell)
+
+        # configurate cells
+        self.table.item(rows - 2, 0).setFlags(Qt.NoItemFlags)        # no interaction with this cell
+        self.table.item(rows - 1, 0).setFlags(Qt.NoItemFlags)
+        # postion
+        self.table.item(rows - 3, 1).setText('Position')
+        self.table.item(rows - 3, 1).setFlags(Qt.NoItemFlags)
+        self.table.item(rows - 3, 2).setText(str(520))
+        self.fit_fcts[n].update({'position': self.table.item(rows - 3, 2)})
+        # intensity
+        self.table.item(rows - 2, 1).setText('Intensity')
+        self.table.item(rows - 2, 1).setFlags(Qt.NoItemFlags)
+        self.table.item(rows - 2, 2).setText(str(100))
+        self.fit_fcts[n].update({'intensity': self.table.item(rows - 2, 2)})
+        # FWHM
+        self.table.item(rows - 1, 1).setText('FWHM')
+        self.table.item(rows - 1, 1).setFlags(Qt.NoItemFlags)
+        self.table.item(rows - 1, 2).setText(str(25))
+        self.fit_fcts[n].update({'FWHM': self.table.item(rows - 1, 2)})
+
+        # boundaries
+        # position
+        self.table.item(rows - 3, 3).setText('0')
+        self.table.item(rows - 3, 4).setText(str(np.inf))
+        # intensity
+        self.table.item(rows - 2, 3).setText('0')
+        self.table.item(rows - 2, 4).setText(str(np.inf))
+        # FWHM
+        self.table.item(rows - 1, 3).setText('0')
+        self.table.item(rows - 1, 4).setText(str(np.inf))
+        self.fit_fcts[n].update({'lower boundaries': [self.table.item(rows-3,3), self.table.item(rows-2,3),
+                                                      self.table.item(rows-1,3)]})
+        self.fit_fcts[n].update({'upper boundaries': [self.table.item(rows - 3, 4), self.table.item(rows - 2, 4),
+                                                      self.table.item(rows - 1, 4)]})
+
+        # add Combobox to select fit function
         cbox = QtWidgets.QComboBox(self)
         cbox.addItem("Lorentz")
         cbox.addItem("Gauss")
         cbox.addItem("Breit-Wigner-Fano")
         cbox.currentTextChanged.connect(lambda: self.fct_change(cbox.currentText(), n))
-        self.layout.addWidget(cbox)
-
+        self.table.setCellWidget(rows - 3, 0, cbox)
         self.fit_fcts[n].update({'fct': cbox})
-        self.fit_fcts[n].update({'label': label})
-
-        # Fitparameters
-        hlayout = QtWidgets.QHBoxLayout()
-        layout1 = QtWidgets.QVBoxLayout()
-        layout2 = QtWidgets.QVBoxLayout()
-        layout3 = QtWidgets.QVBoxLayout()
-
-        layout1.addWidget(QtWidgets.QLabel('    '))
-        pos = QtWidgets.QLineEdit()
-        layout2.addWidget(pos)
-        pos.setText('3250')
-        layout3.addWidget(QtWidgets.QLabel(r'Position in cm^-1'))
-        self.fit_fcts[n].update({'position': pos})
-
-        layout1.addWidget(QtWidgets.QLabel('    '))
-        intensity = QtWidgets.QLineEdit()
-        layout2.addWidget(intensity)
-        intensity.setText('150')
-        layout3.addWidget(QtWidgets.QLabel('Intensity'))
-        self.fit_fcts[n].update({'intensity': intensity})
-
-        layout1.addWidget(QtWidgets.QLabel('    '))
-        FWHM = QtWidgets.QLineEdit()
-        layout2.addWidget(FWHM)
-        FWHM.setText('300')
-        layout3.addWidget(QtWidgets.QLabel('FWHM'))
-        self.fit_fcts[n].update({'FWHM': FWHM})
-
-        hlayout.addLayout(layout1)
-        hlayout.addLayout(layout2)
-        hlayout.addLayout(layout3)
-        self.fit_fcts[n].update({'layout': [layout1, layout2, layout3]})
-        self.layout.addLayout(hlayout)
-
-        self.update()
 
     def remove_function(self):
-        last_key = list(self.fit_fcts.keys())[-1]
-        for l in self.fit_fcts[last_key]['layout']:
-            for i in reversed(range(l.count())):
-                l.itemAt(i).widget().setParent(None)
-            l.setParent(None)
-        self.fit_fcts[last_key]['label'].setParent(None)
-        self.fit_fcts[last_key]['fct'].setParent(None)
+        try:
+            last_key = list(self.fit_fcts.keys())[-1]
+        except IndexError:
+            return
+
+        row_indices = [i for i, x in enumerate(self.vheaders) if x == str(last_key)]
+        for j in reversed(row_indices):
+            del self.vheaders[j]
+            self.table.removeRow(j)
         del self.fit_fcts[last_key]
 
     def fct_change(self, fct_name, n):
         if fct_name == 'Breit-Wigner-Fano' and all(k != 'additional' for k in self.fit_fcts[n].keys() ):
-            BWF_parmeter = QtWidgets.QLineEdit()
-            BWF_parmeter.setText('-10')
-            self.fit_fcts[n]['layout'][0].addWidget(QtWidgets.QLabel('    '))
-            self.fit_fcts[n]['layout'][1].addWidget(BWF_parmeter)
-            self.fit_fcts[n]['layout'][2].addWidget(QtWidgets.QLabel('Additional parameter'))
-            self.fit_fcts[n].update({'additional': BWF_parmeter})
-            self.update()
+            row_index = self.vheaders.index(str(n)) + 3
+            self.table.insertRow(row_index)
+            self.vheaders.insert(row_index, str(n))
+            self.table.setVerticalHeaderLabels(self.vheaders)
+            # set items in new cell
+            for c in range(self.table.columnCount()):
+                cell = QtWidgets.QTableWidgetItem()
+                self.table.setItem(row_index, c, cell)
+            self.table.item(row_index, 1).setText('Additional Parameter')
+            self.table.item(row_index, 1).setFlags(Qt.NoItemFlags)
+            self.table.item(row_index, 2).setText(str(-10))
+            # boundaries
+            self.table.item(row_index, 3).setText('')
+            self.table.item(row_index, 4).setText('')
+            # update dictionary
+            self.fit_fcts[n]['lower boundaries'].append(self.table.item(row_index, 3))
+            self.fit_fcts[n]['upper boundaries'].append(self.table.item(row_index, 4))
+            self.fit_fcts[n].update({'additional': self.table.item(row_index, 2)})
         elif fct_name != 'Breit-Wigner-Fano' and any(k == 'additional' for k in self.fit_fcts[n].keys() ):
-            for l in self.fit_fcts[n]['layout']:
-                l.itemAt(3).widget().setParent(None)
+            row_index = self.vheaders.index(str(n)) + 3
+            del self.vheaders[row_index]
+            self.table.removeRow(row_index)
             del self.fit_fcts[n]['additional']
         else:
             pass
 
+    def value_changed(self, item):
+        if item.text() == '' or self.table.item(item.row(), 3).text() == '' or self.table.item(item.row(), 4).text() == '':
+            return
+        # check that lower bound is strictly less than upper bound
+        if item.column() == 3:
+            if float(item.text()) > float(self.table.item(item.row(), 4).text()):
+                self.parent.mw.show_statusbar_message('Lower bounds have to be strictly less than upper bounds', 4000, error_sound=True)
+                # add: replace item with old previous item
+        elif item.column() == 4:            # check that upper bound is strictly higher than lower bound
+            if float(item.text()) < float(self.table.item(item.row(), 3).text()):
+                self.parent.mw.show_statusbar_message('Upper bounds have to be strictly higher than lower bounds', 4000, error_sound=True)
+                # add: replace item with old previous item
 
 
 class MyCustomToolbar(NavigationToolbar2QT):
@@ -2197,8 +2280,9 @@ class PlotWindow(QMainWindow):
         self.SelectDataset()
         if self.selectedDatasetNumber != []:
             x_min, x_max = self.SelectArea()
-            fitdialog = FitOptionsDialog()
+            fitdialog = FitOptionsDialog(self)
             p_start = fitdialog.p_start
+            boundaries = fitdialog.p_bound
             self.n_fit_fct = fitdialog.n_fit_fct
 
         for n in self.selectedDatasetNumber:
@@ -2208,8 +2292,12 @@ class PlotWindow(QMainWindow):
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
             try:
-                popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0=p_start)
+                popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0=p_start, bounds=boundaries)
             except RuntimeError as e:
+                self.mw.show_statusbar_message(str(e), 4000)
+                self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
+                return
+            except ValueError as e:
                 self.mw.show_statusbar_message(str(e), 4000)
                 self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
                 return
@@ -2243,26 +2331,22 @@ class PlotWindow(QMainWindow):
             data_table = [['Background', popt[0], perr[0]]]
             data_table.append(['', '', ''])
             a = 1
+
             for key in self.n_fit_fct.keys():
                 for j in range(self.n_fit_fct[key]):
-                    data_table.append(['{} {}'.format(key, j + 1)])
+                    data_table.append(['{} {}'.format(key, j+1)])
+                    data_table.append(['Raman Shift in cm-1', popt[a], perr[a]])
+                    data_table.append(['Peak height in cps', popt[a+1], perr[a+1]])
+                    data_table.append(['FWHM in cm-1', popt[a+2], perr[a+2]])
                     if key != 'Breit-Wigner-Fano':
-                        data_table.append(['Raman Shift in cm-1', popt[j*3+a], perr[j*3+a]])
-                        data_table.append(['Peak height in cps', popt[j*3+a+1], perr[j*3+a+1]])
-                        data_table.append(['FWHM in cm-1', popt[j*3+a+2], perr[j*3+a+2]])
-                        data_table.append(['', '', ''])
                         a += 3
                     else:
-                        data_table.append(['Raman Shift in cm-1', popt[j*4+a], perr[j*4+a]])
-                        data_table.append(['Peak height in cps', popt[j*4+a+1], perr[j*4+a+1]])
-                        data_table.append(['FWHM in cm-1', popt[j*4+a+2], perr[j*4+a+2]])
-                        data_table.append(['', '', ''])
                         data_table.append(
-                            ['BWF Coupling Coefficient', popt[j*4+a+3], perr[j*3+a+3]])
+                            ['BWF Coupling Coefficient', popt[a+3], perr[a+3]])
                         a += 4
                     data_table.append(['', '', ''])
-            print('\n {} \n'.format(self.Spektrum[n].get_label()))
-            print(r'R^2={:.4f} \n'.format(r_squared))
+            print('\n {}'.format(self.Spektrum[n].get_label()))
+            print(r'R^2={:.4f}'.format(r_squared))
             print(tabulate(data_table, headers=['Parameters', 'Values', 'Errors']))
 
         self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
