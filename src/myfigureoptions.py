@@ -80,7 +80,8 @@ def figure_edit(axes, parent=None):
                (None, "<b>Axes settings</b>"),
                ('Label Size', int(axes.xaxis.label.get_fontsize())),
                ('Tick Size', _ticksize),
-               ('Show grid', axes.xaxis._gridOnMajor),
+               #('Show grid', axes.xaxis._gridOnMajor),
+               ('Show grid', axes.xaxis._major_tick_kw['gridOn']),
                sep,
                (None, "<b>X-Axis</b>"),
                ('Label', axes.get_xlabel()),
@@ -411,7 +412,10 @@ def figure_edit(axes, parent=None):
                 line.set_markerfacecolor(markerfacecolor)
                 line.set_markeredgecolor(markeredgecolor)
             if removeLine == True:
-                line.remove()
+                try:
+                    line.remove()
+                except ValueError as e:
+                    print(e)
 
         # Set / Errorbar Caplines
         for index, capline in enumerate(ebcaplines):
@@ -469,7 +473,8 @@ def figure_edit_brokenaxis(axes, parent = None):
                 (None, "<b>Axes settings</b>"),
                 ('Label Size', int(axes[0].xaxis.label.get_fontsize())),
                 ('Tick Size', _ticksize),
-                ('Show grid', axes[0].xaxis._gridOnMajor),
+                #('Show grid', axes[0].xaxis._gridOnMajor),
+                ('Show grid', axes[0].xaxis._major_tick_kw['gridOn']),
                 sep,
                 (None, "<b>X-Axis</b>"),
                 ('Label', axes[0].get_xlabel()),
