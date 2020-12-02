@@ -73,7 +73,7 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
         ----------
         event : QMouseEvent            #The mouse event.
         '''
-        item = self.itemAt(event.pos()) 
+        item = self.itemAt(event.pos())
         if item != None:
             self.itemDoubleClicked.emit(item)
         else:
@@ -431,7 +431,7 @@ class MainWindow(QMainWindow):
         if windowtype == 'Spreadsheet':
             ssd = windowcontent
             if ssd == None:
-                ssd = {'data0' : (np.full(9, np.nan),'A', 'X', None), 'data1' : (np.full(9, np.nan),'B', 'Y', None)}  #Spreadsheet- Data (for start only zeros)
+                ssd = {'data0' : [np.full(9, np.nan),'A', 'X', None], 'data1' : [np.full(9, np.nan),'B', 'Y', None]}  #Spreadsheet- Data (for start only zeros)
             else:
                 pass
             windowtypeInt = 1
@@ -613,24 +613,24 @@ def cellname(i, j):
     return '{}{}'.format(chr(ord('A')+j), i+1)
 
 class SpreadSheetDelegate(QItemDelegate):
-	def __init__(self, parent=None):
-		super(SpreadSheetDelegate, self).__init__(parent)
+    def __init__(self, parent=None):
+        super(SpreadSheetDelegate, self).__init__(parent)
 
-	def createEditor(self, parent, styleOption, index):
-		editor = QLineEdit(parent)
-		editor.editingFinished.connect(self.commitAndCloseEditor)
-		return editor
+    def createEditor(self, parent, styleOption, index):
+        editor = QLineEdit(parent)
+        editor.editingFinished.connect(self.commitAndCloseEditor)
+        return editor
 
-	def commitAndCloseEditor(self):
-		editor = self.sender()
-		self.commitData.emit(editor)
-		self.closeEditor.emit(editor, QItemDelegate.NoHint)
+    def commitAndCloseEditor(self):
+        editor = self.sender()
+        self.commitData.emit(editor)
+        self.closeEditor.emit(editor, QItemDelegate.NoHint)
 
-	def setEditorData(self, editor, index):
-		editor.setText(index.model().data(index, Qt.EditRole))
+    def setEditorData(self, editor, index):
+        editor.setText(index.model().data(index, Qt.EditRole))
 
-	def setModelData(self, editor, model, index):
-		model.setData(index, editor.text())
+    def setModelData(self, editor, model, index):
+        model.setData(index, editor.text())
 
 
 class SpreadSheetItem(QTableWidgetItem):
@@ -763,7 +763,7 @@ class SpreadSheet(QMainWindow):
         self.create_menubar()
 
     def create_col_header(self):
-        headers = [self.d[j][1] + '(' + self.d[j][2] + ')' for j in self.d.keys()]
+        headers = ['{} ({})'.format(self.d[j][1], self.d[j][2]) for j in self.d.keys()]
         self.table.setHorizontalHeaderLabels(headers)
 
         ### open header_menu with right mouse click ###
@@ -800,17 +800,18 @@ class SpreadSheet(QMainWindow):
         self.headerline.setHidden(True)
         newHeader = str(self.headerline.text())
         data_zs = self.d['data%i'%self.sectionedit]
-        self.d.update({'data%i'%self.sectionedit : (data_zs[0], newHeader, data_zs[2], data_zs[3])})
-        self.table.horizontalHeaderItem(self.sectionedit).setText(self.d['data%i'%self.sectionedit][1] + '(' + self.d['data%i'%self.sectionedit][2] + ')')
+        self.d.update({'data%i'%self.sectionedit : [data_zs[0], newHeader, data_zs[2], data_zs[3]]})
+        self.table.horizontalHeaderItem(self.sectionedit).setText('{} ({})'.format(self.d['data%i'%self.sectionedit][1], self.d['data%i'%self.sectionedit][2]))
 
     def show_header_context_menu(self, position):
         selected_column = self.headers.logicalIndexAt(position)
         header_menu = QMenu()
-        delete_column = header_menu.addAction('Delete this column?')
+        delete_column = header_menu.addAction('Delete this column')
         set_xy   = header_menu.addMenu('Set as:')
         set_x    = set_xy.addAction('X')
         set_y    = set_xy.addAction('Y')
         set_yerr = set_xy.addAction('Yerr')
+        per_cm_to_nm = header_menu.addAction("cm^-1 to nm")
         ac = header_menu.exec_(self.table.mapToGlobal(position))
         # Delete selected colums
         if ac == delete_column:
@@ -825,19 +826,56 @@ class SpreadSheet(QMainWindow):
                 self.cols = self.cols - 1
         if ac == set_x:
             data_zs = self.d['data%i'%selected_column]
-            self.d.update({'data%i'%selected_column : (data_zs[0], data_zs[1], 'X', data_zs[3])})
+            self.d.update({'data%i'%selected_column : [data_zs[0], data_zs[1], 'X', data_zs[3]]})
             headers = [self.d[j][1] + '(' + self.d[j][2] + ')' for j in self.d.keys()]
             self.table.setHorizontalHeaderLabels(headers)
         if ac == set_y:
             data_zs = self.d['data%i'%selected_column]
-            self.d.update({'data%i'%selected_column : (data_zs[0], data_zs[1], 'Y', data_zs[3])})
+            self.d.update({'data%i'%selected_column : [data_zs[0], data_zs[1], 'Y', data_zs[3]]})
             headers = [self.d[j][1] + '(' + self.d[j][2] + ')' for j in self.d.keys()]
             self.table.setHorizontalHeaderLabels(headers)
         if ac == set_yerr:
             data_zs = self.d['data%i'%selected_column]
-            self.d.update({'data%i'%selected_column : (data_zs[0], data_zs[1], 'Yerr', data_zs[3])})
+            self.d.update({'data%i'%selected_column : [data_zs[0], data_zs[1], 'Yerr', data_zs[3]]})
             headers = [self.d[j][1] + '(' + self.d[j][2] + ')' for j in self.d.keys()]
             self.table.setHorizontalHeaderLabels(headers)
+        if ac == per_cm_to_nm:
+            dialog_wavelength = QDialog()
+            layout = QtWidgets.QGridLayout()
+            cbox = QtWidgets.QComboBox()
+            cbox.addItem("325")
+            cbox.addItem("442")
+            cbox.addItem("532")
+            cbox.addItem("633")
+            cbox.addItem("785")
+            layout.addWidget(cbox)
+            dialog_wavelength.setLayout(layout)
+            dialog_wavelength.setWindowTitle("Select a Wavelength")
+            dialog_wavelength.setWindowModality(Qt.ApplicationModal)
+            dialog_wavelength.exec_()
+            wl0 = float(cbox.currentText())
+            self.table.insertColumn(selected_column+1)
+
+            # Rename the data, so there is no gap in the numbering
+            for k in range(self.cols, selected_column+1, -1):
+                self.d['data{}'.format(k)] = self.d.pop('data{}'.format(k-1))
+            self.cols = self.cols + 1
+            self.d['data{}'.format(selected_column + 1)] = self.d['data{}'.format(selected_column)].copy()
+            self.d['data{}'.format(selected_column + 1)][0] = self.d['data{}'.format(selected_column)][0].copy()
+            #Rename
+            self.d['data{}'.format(selected_column + 1)][1] = '{} in nm'.format(self.d['data{}'.format(selected_column + 1)][1])
+            self.d = dict(sorted(self.d.items()))
+            headers = ['{} ({})'.format(self.d[j][1], self.d[j][2]) for j in self.d.keys()]
+            self.table.setHorizontalHeaderLabels(headers)
+            rs_nm = []
+            for k in range(len(self.d['data{}'.format(selected_column+1)][0])):
+                rs = self.d['data{}'.format(selected_column + 1)][0][k]
+                wl1 = wl0/(1-rs*10**(-7)*wl0)
+                rs_nm.append(wl1)
+                cell = SpreadSheetItem(self.cells, wl1)
+                self.cells[cellname(k, selected_column+1)] = cell
+                self.table.setItem(k, selected_column+1, cell)
+            self.d['data{}'.format(selected_column + 1)][0] = rs_nm
 
     def create_row_header(self):
          ### opens header_menu with right mouse click###
@@ -910,7 +948,6 @@ class SpreadSheet(QMainWindow):
 
         data = np.transpose(data)
 
-
         if SaveFileName[-4:] == '.txt':
             pass
         else:
@@ -918,7 +955,7 @@ class SpreadSheet(QMainWindow):
 
         self.pHomeTxt = SaveFileName
 
-        np.savetxt(SaveFileName, data, fmt = formattyp)	
+        np.savetxt(SaveFileName, data, fmt=formattyp)
 
     def load_file(self):
         #In case there already is data in the spreadsheet, ask if replace or added
@@ -981,14 +1018,14 @@ class SpreadSheet(QMainWindow):
                 data_name = 'data%i'%(j+self.cols)			
                 if j == 0:
                     if header[k] == None:   # if header is None, use Filename as header
-                        self.d.update({data_name : (data[k][j], str(FileName[k]), 'X', newFiles[k])})
+                        self.d.update({data_name : [data[k][j], str(FileName[k]), 'X', newFiles[k]]})
                     else:
-                        self.d.update({data_name: (data[k][j], header[k][j], 'X', newFiles[k])})
+                        self.d.update({data_name: [data[k][j], header[k][j], 'X', newFiles[k]]})
                 else:
                     if header[k] == None:
-                        self.d.update({data_name : (data[k][j], str(FileName[k]), 'Y', newFiles[k])})
+                        self.d.update({data_name : [data[k][j], str(FileName[k]), 'Y', newFiles[k]]})
                     else:
-                        self.d.update({data_name: (data[k][j], header[k][j], 'Y', newFiles[k])})
+                        self.d.update({data_name: [data[k][j], header[k][j], 'Y', newFiles[k]]})
             self.cols = self.cols + lines[k]
 
         self.rows = max([len(self.d[j][0]) for j in self.d.keys()])
@@ -996,7 +1033,7 @@ class SpreadSheet(QMainWindow):
         self.table.setColumnCount(self.cols)
         self.table.setRowCount(self.rows)
         
-        headers = [self.d[j][1] + '(' + self.d[j][2] + ')' for j in self.d.keys()]
+        headers = ['{} ({})'.format(self.d[j][1], self.d[j][2]) for j in self.d.keys()]
         self.table.setHorizontalHeaderLabels(headers)
 
         for j in range(self.cols):
@@ -1009,19 +1046,26 @@ class SpreadSheet(QMainWindow):
         self.pHomeTxt = FileName[0]
 
     def update_data(self, item):
+        # if content of spreadsheet cell is changed, data stored in variable self.d is also changed
         new_cell_content = item.text()
         col = item.column()
         row = item.row()
         if new_cell_content == '':
             self.table.takeItem(row, col)
-            self.d['data{}'.format(col)][0][row]= np.nan
+            new_cell_content = np.nan
         else:
+            pass
+
+        try:
             self.d['data{}'.format(col)][0][row] = new_cell_content
+        except IndexError:    # occurs if index is out of bounds
+            self.d['data{}'.format(col)][0] = np.append(self.d['data{}'.format(col)][0], new_cell_content)
 
     def new_col(self):
+        # adds a new column at end of table
         self.cols = self.cols + 1
         self.table.setColumnCount(self.cols)
-        self.d.update({'data%i'%(self.cols-1) : (np.zeros(self.rows), str(chr(ord('A') + self.cols - 1)), 'Y', '')})
+        self.d.update({'data%i'%(self.cols-1) : [np.zeros(self.rows), str(chr(ord('A') + self.cols - 1)), 'Y', '']})
         headers = [self.d[j][1] + '(' + self.d[j][2] + ')' for j in self.d.keys()]  
         self.table.setHorizontalHeaderLabels(headers)
         for i in range(self.rows):
@@ -1033,7 +1077,6 @@ class SpreadSheet(QMainWindow):
         # get data from selected columns and prepares data for plot
 
         self.plot_data = []     # [X-data, Y-data, label, file, yerr, plottype]  # in newer projected additional entry: self
-
 
         selCol = sorted(set(index.column() for index in self.table.selectedIndexes()))  #selected Columns
 
