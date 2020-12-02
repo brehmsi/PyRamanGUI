@@ -126,7 +126,7 @@ class BrokenAxes:
             leg_draggable = old_legend._draggable is not None
             leg_ncol = old_legend._ncol
             leg_fontsize = int(old_legend._fontsize)
-            leg_frameon = old_legend._drawFrame
+            leg_frameon = old_legend.get_frame_on()
             leg_shadow = old_legend.shadow
             leg_fancybox = type(old_legend.legendPatch.get_boxstyle())
             leg_framealpha = old_legend.get_frame().get_alpha()
