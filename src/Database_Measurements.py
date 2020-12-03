@@ -1,21 +1,14 @@
 # Autor: Simon Brehm
 
-import numpy as np
 import os
 import platform
-import sys
 import sqlite3
 import subprocess
 from os.path import join as pjoin
-from collections import ChainMap
 from PyQt5 import QtGui, QtCore, QtWidgets
 from PyQt5.QtCore import Qt, pyqtSlot
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QTableWidget, QVBoxLayout, QSizePolicy, QMessageBox,
-                             QPushButton,
-                             QTableWidgetItem, QItemDelegate, QLineEdit, QPushButton, QWidget, QMenu, QAction,
-                             QFileDialog, QInputDialog)
-from PyQt5.QtGui import QIcon
-from tabulate import tabulate
+from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QSizePolicy, QMessageBox,
+                             QPushButton, QLineEdit, QPushButton, QWidget)
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from datetime import date
@@ -32,7 +25,7 @@ class DatabaseMeasurements(QMainWindow):
         self.materialclass = 'MgAlON'
         self.wavelength = '532nm'
         self.donor = 'Martin Rudolph'
-        self.loc = '/Daten/SFB920'  # memory location
+        self.loc = 'C:/Users/Simon/Desktop/ITP_Computer/Daten/SFB920'  # memory location
 
         self.setWindowTitle('Data base Raman measurements')
         self.entries()
@@ -179,9 +172,7 @@ class DatabaseMeasurements(QMainWindow):
     def onItemClicked(self, item, col):
         # opens file folder of clicked path
         if col == 6:
-            path_start = r'C:\Users\Simon\Desktop\ITP_Computer'
-            path_end = item.text(col)
-            path = path_start + path_end
+            path = item.text(col)
             if platform.system() == "Windows":
                 try:
                     os.startfile(path)
