@@ -1151,6 +1151,9 @@ class SpreadSheet(QMainWindow):
 ### 4. Plot
 #####################################################################################################################################################
 class Functions:
+    '''
+    Fit functions
+    '''
     def __init__(self, pw):
         self.pw = pw
 
@@ -1183,14 +1186,17 @@ class Functions:
                        np.sum([self.GaussianFct(x, p[i*3+pG], p[i*3+1+pG], p[i*3+2+pG]) for i in range(b)], axis=0) + 
                        np.sum([self.BreitWignerFct(x, p[i*4+pB], p[i*4+1+pB], p[i*4+2+pB], p[i*4+3+pB]) for i in range(c)], axis=0))
 
-# Plotting a vertical line in plot, e.g. to define area for fit
+
 class LineBuilder:
+    '''
+    Plotting a vertical line in plot, e.g. to define area for fit
+    '''
     def __init__(self, line):
         self.line = line
         self.xs = line.get_xdata()[0]
         self.line.set_visible(True)
         self.cid = line.figure.canvas.mpl_connect('button_press_event', self)
-        line.figure.canvas.start_event_loop(timeout=10000)
+        self.line.figure.canvas.start_event_loop(timeout=10000)
     def __call__(self, event):
         if event.inaxes!=self.line.axes: return
         elif event.button == 1:
@@ -1202,6 +1208,65 @@ class LineBuilder:
             self.line.figure.canvas.stop_event_loop(self)
         else:
             pass
+
+class MovingLines:
+    def __init__(self, line, scaling=False):
+        '''
+        Class to move lines
+        Parameters
+        ----------
+        line: Line2D
+        '''
+
+        self.line = line
+        self.scaling = scaling
+        self.x = line.get_xdata()
+        self.y = line.get_ydata()
+        self.fig = self.line.figure
+        self.c = self.fig.canvas
+
+        self.move_line = False      # check if right line is selected
+
+        self.cid1 = self.c.mpl_connect('pick_event', self.onpick)
+        self.cid2 = self.c.mpl_connect('motion_notify_event', self.onmove)
+        self.cid3 = self.c.mpl_connect('button_release_event', self.onrelease)
+
+        self.fig.canvas.start_event_loop(timeout=10000)
+
+    def onpick(self, event):
+        if event.artist != self.line:
+            return
+        self.move_line = True
+
+    def onmove(self, event):
+        if self.move_line !=True:
+            return
+        # the click locations
+        x_click = event.xdata
+        y_click = event.ydata
+
+        if x_click == None or y_click == None:
+            return
+
+        # get index of nearest point
+        ind = min(range(len(self.x)), key=lambda i: abs(self.x[i] - x_click))
+
+        if self.scaling == False:
+            shift_factor = y_click - self.y[ind]
+            self.y = self.y + shift_factor
+        else:
+            scale_factor = y_click / self.y[ind]
+            self.y = self.y*scale_factor
+
+        self.line.set_ydata(self.y)
+        self.fig.canvas.draw()
+
+    def onrelease(self, event):
+        if self.move_line == True:
+            self.fig.canvas.mpl_disconnect(self.cid1)
+            self.fig.canvas.mpl_disconnect(self.cid2)
+            self.fig.canvas.mpl_disconnect(self.cid3)
+            self.fig.canvas.stop_event_loop(self)
 
 #idea: https://github.com/yuma-m/matplotlib-draggable-plot
 class LineDrawer:
@@ -1534,7 +1599,8 @@ class DataSetSelecter(QtWidgets.QDialog):
 
 
 
-class FitOptionsDialog(QtWidgets.QDialog):
+class FitOptionsDialog(QMainWindow):
+    closeSignal = QtCore.pyqtSignal()  # Signal in case Fit-parameter window is closed
     def __init__(self, parent):
         super(FitOptionsDialog, self).__init__(parent=parent)
         '''
@@ -1551,15 +1617,18 @@ class FitOptionsDialog(QtWidgets.QDialog):
             'Breit-Wigner-Fano': 0
         }
         self.fit_fcts = {}
+        self.continue_fit = False
 
-        self.p_start, self.p_bound = self.create_dialog()
+        self.create_dialog()
+        self.create_menubar()
 
     def create_dialog(self):
         self.layout = QtWidgets.QVBoxLayout()
 
         # Button to add Fit function
         addbutton = QPushButton("Add Function")
-        addbutton.clicked.connect(self.add_function)
+        addbutton.clicked.connect(lambda: self.add_function('Lorentz',
+                                                            [[520, 0, np.inf], [100, 0, np.inf], [25, 0, np.inf]]))
         self.layout.addWidget(addbutton)
 
         # Button to remove fit funtion
@@ -1569,7 +1638,7 @@ class FitOptionsDialog(QtWidgets.QDialog):
 
         # OK Button => accept start values for fit
         okbutton = QPushButton("OK")
-        okbutton.clicked.connect(self.close)
+        okbutton.clicked.connect(self.ok_press)
         self.layout.addWidget(okbutton)
 
         # create table
@@ -1592,8 +1661,8 @@ class FitOptionsDialog(QtWidgets.QDialog):
         self.table.item(0, 0).setFlags(Qt.NoItemFlags)        # no interaction with this cell
         self.table.item(0, 1).setText('Background')
         self.table.item(0, 1).setFlags(Qt.NoItemFlags)
-        background = self.table.item(0, 2)
-        background.setText(str(0.0))
+        self.background = self.table.item(0, 2)
+        self.background.setText(str(0.0))
 
         # bounds
         self.table.item(0, 3).setText(str(-np.inf))
@@ -1601,121 +1670,96 @@ class FitOptionsDialog(QtWidgets.QDialog):
 
         self.layout.addWidget(self.table)
 
-        self.setLayout(self.layout)
+        widget = QtWidgets.QWidget()
+        widget.setLayout(self.layout)
+        self.setCentralWidget(widget)
         self.setWindowTitle("Fit Functions")
         self.setWindowModality(Qt.ApplicationModal)
-        self.exec_()
 
-        p_start = [float(background.text())]                                      # Background
-        parameter = {'Lorentz': [],
-                     'Gauss': [],
-                     'Breit-Wigner-Fano': []}
+    def create_menubar(self):
+        self.menubar = self.menuBar()
+        fileMenu = self.menubar.addMenu('File')
+        fileMenu.addAction('Save Start Parameter', self.save_start_parameter)
+        fileMenu.addAction('Load Start Parameter', self.load_start_parameter)
 
-        bg_low =  self.table.item(0, 3).text()
-        bg_up = self.table.item(0, 4).text()
-        if bg_low == '':
-            bg_low = -np.inf
-        else:
-            bg_low = float(bg_low)
-        if bg_up == '':
-            bg_up = np.inf
-        else:
-            bg_up = float(bg_up)
-        boundaries = [[bg_low], [bg_up]]
-        lower_boundaries = {'Lorentz': [],
-                     'Gauss': [],
-                     'Breit-Wigner-Fano': []}
-        upper_boundaries = {'Lorentz': [],
-                     'Gauss': [],
-                     'Breit-Wigner-Fano': []}
+    def add_function(self, fct_name, fct_values):
+        '''
+        add fit function to table
+        '''
 
-        for key in self.fit_fcts.keys():
-            name_fct = self.fit_fcts[key]['fct'].currentText()
-            parameter[name_fct].append(float(self.fit_fcts[key]['position'].text()))          # Peak position in cm^-1
-            parameter[name_fct].append(float(self.fit_fcts[key]['intensity'].text()))         # Intensity
-            parameter[name_fct].append(float(self.fit_fcts[key]['FWHM'].text()))              # FWHM
-            if name_fct == 'Breit-Wigner-Fano':
-                parameter[name_fct].append(float(self.fit_fcts[key]['additional'].text()))    # additional BWF parameter for asymmetry
-            for lb, ub in zip(self.fit_fcts[key]['lower boundaries'], self.fit_fcts[key]['upper boundaries']):
-                if lb.text() == '':
-                    lower_boundaries[name_fct].append(-np.inf)
-                else:
-                    lower_boundaries[name_fct].append(float(lb.text()))
-
-                if ub.text() == '':
-                    upper_boundaries[name_fct].append(np.inf)
-                else:
-                    upper_boundaries[name_fct].append(float(ub.text()))
-            self.n_fit_fct[name_fct] += 1
-
-        for p in parameter.values():
-            p_start.extend(p)
-
-        for lb, ub in zip(lower_boundaries.values(), upper_boundaries.values()):
-            boundaries[0].extend(lb)
-            boundaries[1].extend(ub)
-
-        return p_start, boundaries
-
-    def add_function(self):
-        # Add combobox to select fit function
         n = len(self.fit_fcts) + 1          #Number of functions
         self.fit_fcts.update({n: {}})
 
-        self.table.setRowCount(self.table.rowCount()+3)
+        if fct_name == 'Breit-Wigner-Fano':
+            add_rows = 4
+        else:
+            add_rows = 3
+
+        self.table.setRowCount(self.table.rowCount() + add_rows)
         self.vheaders.extend([str(n), str(n), str(n)])
         self.table.setVerticalHeaderLabels(self.vheaders)
 
         rows = self.table.rowCount()
 
         # set items in new cell
-        for r in range(rows-3, rows):
+        for r in range(rows - add_rows, rows):
             for c in range(self.table.columnCount()):
                 cell = QtWidgets.QTableWidgetItem()
                 self.table.setItem(r, c, cell)
-
-        # configurate cells
-        self.table.item(rows - 2, 0).setFlags(Qt.NoItemFlags)        # no interaction with this cell
-        self.table.item(rows - 1, 0).setFlags(Qt.NoItemFlags)
-        # postion
-        self.table.item(rows - 3, 1).setText('Position')
-        self.table.item(rows - 3, 1).setFlags(Qt.NoItemFlags)
-        self.table.item(rows - 3, 2).setText(str(520))
-        self.fit_fcts[n].update({'position': self.table.item(rows - 3, 2)})
-        # intensity
-        self.table.item(rows - 2, 1).setText('Intensity')
-        self.table.item(rows - 2, 1).setFlags(Qt.NoItemFlags)
-        self.table.item(rows - 2, 2).setText(str(100))
-        self.fit_fcts[n].update({'intensity': self.table.item(rows - 2, 2)})
-        # FWHM
-        self.table.item(rows - 1, 1).setText('FWHM')
-        self.table.item(rows - 1, 1).setFlags(Qt.NoItemFlags)
-        self.table.item(rows - 1, 2).setText(str(25))
-        self.fit_fcts[n].update({'FWHM': self.table.item(rows - 1, 2)})
-
-        # boundaries
-        # position
-        self.table.item(rows - 3, 3).setText('0')
-        self.table.item(rows - 3, 4).setText(str(np.inf))
-        # intensity
-        self.table.item(rows - 2, 3).setText('0')
-        self.table.item(rows - 2, 4).setText(str(np.inf))
-        # FWHM
-        self.table.item(rows - 1, 3).setText('0')
-        self.table.item(rows - 1, 4).setText(str(np.inf))
-        self.fit_fcts[n].update({'lower boundaries': [self.table.item(rows-3,3), self.table.item(rows-2,3),
-                                                      self.table.item(rows-1,3)]})
-        self.fit_fcts[n].update({'upper boundaries': [self.table.item(rows - 3, 4), self.table.item(rows - 2, 4),
-                                                      self.table.item(rows - 1, 4)]})
 
         # add Combobox to select fit function
         cbox = QtWidgets.QComboBox(self)
         cbox.addItem("Lorentz")
         cbox.addItem("Gauss")
         cbox.addItem("Breit-Wigner-Fano")
+        cbox.setCurrentText(fct_name)
         cbox.currentTextChanged.connect(lambda: self.fct_change(cbox.currentText(), n))
-        self.table.setCellWidget(rows - 3, 0, cbox)
+        self.table.setCellWidget(rows - add_rows, 0, cbox)
         self.fit_fcts[n].update({'fct': cbox})
+
+        # configurate cells
+        self.table.item(rows - 2, 0).setFlags(Qt.NoItemFlags)               # no interaction with these cells
+        self.table.item(rows - 1, 0).setFlags(Qt.NoItemFlags)
+        # postion
+        self.table.item(rows - add_rows, 1).setText('Position')
+        self.table.item(rows - add_rows, 1).setFlags(Qt.NoItemFlags)
+        self.table.item(rows - add_rows, 2).setText(str(fct_values[0][0]))         # starting value
+        self.table.item(rows - add_rows, 3).setText(str(fct_values[0][1]))         # lower bound
+        self.table.item(rows - add_rows, 4).setText(str(fct_values[0][2]))         # upper bound
+        self.fit_fcts[n].update({'position': self.table.item(rows - add_rows, 2)})
+
+        # intensity
+        self.table.item(rows - add_rows + 1, 1).setText('Intensity')
+        self.table.item(rows - add_rows + 1, 1).setFlags(Qt.NoItemFlags)
+        self.table.item(rows - add_rows + 1, 2).setText(str(fct_values[1][0]))         # starting value
+        self.table.item(rows - add_rows + 1, 3).setText(str(fct_values[1][1]))         # lower bound
+        self.table.item(rows - add_rows + 1, 4).setText(str(fct_values[1][2]))         # upper bound
+        self.fit_fcts[n].update({'intensity': self.table.item(rows - add_rows + 1, 2)})
+        # FWHM
+        self.table.item(rows - add_rows + 2, 1).setText('FWHM')
+        self.table.item(rows - add_rows + 2, 1).setFlags(Qt.NoItemFlags)
+        self.table.item(rows - add_rows + 2, 2).setText(str(fct_values[2][0]))         # starting value
+        self.table.item(rows - add_rows + 2, 3).setText(str(fct_values[2][1]))         # lower bound
+        self.table.item(rows - add_rows + 2, 4).setText(str(fct_values[2][2]))         # upper bound
+        self.fit_fcts[n].update({'FWHM': self.table.item(rows - add_rows + 2, 2)})
+
+        if fct_name == 'Breit-Wigner-Fano':
+            # additional parameter
+            self.table.item(rows - add_rows + 3, 1).setText('Additional Parameter')
+            self.table.item(rows - add_rows + 3, 1).setFlags(Qt.NoItemFlags)
+            self.table.item(rows - add_rows + 3, 2).setText(str(fct_values[3][0]))  # starting value
+            self.table.item(rows - add_rows + 3, 3).setText(str(fct_values[3][1]))  # lower bound
+            self.table.item(rows - add_rows + 3, 4).setText(str(fct_values[3][2]))  # upper bound
+            self.fit_fcts[n].update({'additional': self.table.item(rows - add_rows + 3, 2)})
+
+        # boundaries
+        low_bounds = []
+        up_bounds = []
+        for j in range(rows-add_rows, rows):
+            low_bounds.append(self.table.item(j, 3))
+            up_bounds.append(self.table.item(j, 4))
+        self.fit_fcts[n].update({'lower boundaries': low_bounds})
+        self.fit_fcts[n].update({'upper boundaries': up_bounds})
 
     def remove_function(self):
         try:
@@ -1743,8 +1787,8 @@ class FitOptionsDialog(QtWidgets.QDialog):
             self.table.item(row_index, 1).setFlags(Qt.NoItemFlags)
             self.table.item(row_index, 2).setText(str(-10))
             # boundaries
-            self.table.item(row_index, 3).setText('')
-            self.table.item(row_index, 4).setText('')
+            self.table.item(row_index, 3).setText(str(-np.inf))
+            self.table.item(row_index, 4).setText(str(np.inf))
             # update dictionary
             self.fit_fcts[n]['lower boundaries'].append(self.table.item(row_index, 3))
             self.fit_fcts[n]['upper boundaries'].append(self.table.item(row_index, 4))
@@ -1769,6 +1813,119 @@ class FitOptionsDialog(QtWidgets.QDialog):
             if float(item.text()) < float(self.table.item(item.row(), 3).text()):
                 self.parent.mw.show_statusbar_message('Upper bounds have to be strictly higher than lower bounds', 4000, error_sound=True)
                 # add: replace item with old previous item
+
+    def save_start_parameter(self):
+        SaveFileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Save File')
+        if SaveFileName[0] != '':
+            filename = SaveFileName[0]
+        else:
+            return
+
+        param = []
+        for col in range(self.table.columnCount()):
+            colparam = []
+            for row in range(self.table.rowCount()):
+                item = self.table.item(row, col)
+                widget = self.table.cellWidget(row, col)
+                if widget != None and isinstance(widget, QtWidgets.QComboBox):
+                    colparam.append(widget.currentText())
+                elif item != None:
+                    colparam.append(item.text())
+                else:
+                    colparam.append(np.nan)
+            param.append(colparam)
+
+        param = np.array(param)
+
+        np.savetxt(filename, param.T, fmt='%s', delimiter=', ')
+
+    def load_start_parameter(self):
+        load_filename = QtWidgets.QFileDialog.getOpenFileName(self, 'Load starting parameter')
+        if load_filename[0] != '':
+            filename = load_filename[0]
+        else:
+            return
+
+        tablecontent = np.genfromtxt(filename, dtype='str', delimiter=', ')
+
+        # set Background
+        self.table.item(0, 2).setText(str(tablecontent[0][2]))      # starting parameter
+        self.table.item(0, 3).setText(str(tablecontent[0][3]))      # lower bound
+        self.table.item(0, 4).setText(str(tablecontent[0][4]))      # upper bound
+
+        # delete background from tablecontent
+        tablecontent = np.delete(tablecontent, 0, axis=0)
+
+        fct_value = []
+        for j in tablecontent:
+            if j[0] != '' and fct_value != []:
+                self.add_function(fct_name, fct_value)
+                fct_value = []
+                fct_name = j[0]
+            elif j[0] != '':
+                fct_name = j[0]
+            else:
+                pass
+            fct_value.append([j[2], j[3], j[4]])
+        self.add_function(fct_name, fct_value)
+
+    def ok_press(self):
+        self.p_start = [float(self.background.text())]  # Background
+        parameter = {'Lorentz': [],
+                     'Gauss': [],
+                     'Breit-Wigner-Fano': []}
+
+        bg_low = self.table.item(0, 3).text()
+        bg_up = self.table.item(0, 4).text()
+        if bg_low == '':
+            bg_low = -np.inf
+        else:
+            bg_low = float(bg_low)
+        if bg_up == '':
+            bg_up = np.inf
+        else:
+            bg_up = float(bg_up)
+        self.boundaries = [[bg_low], [bg_up]]
+        lower_boundaries = {'Lorentz': [],
+                            'Gauss': [],
+                            'Breit-Wigner-Fano': []}
+        upper_boundaries = {'Lorentz': [],
+                            'Gauss': [],
+                            'Breit-Wigner-Fano': []}
+
+        for key in self.fit_fcts.keys():
+            name_fct = self.fit_fcts[key]['fct'].currentText()
+            parameter[name_fct].append(float(self.fit_fcts[key]['position'].text()))  # Peak position in cm^-1
+            parameter[name_fct].append(float(self.fit_fcts[key]['intensity'].text()))  # Intensity
+            parameter[name_fct].append(float(self.fit_fcts[key]['FWHM'].text()))  # FWHM
+            if name_fct == 'Breit-Wigner-Fano':
+                parameter[name_fct].append(
+                    float(self.fit_fcts[key]['additional'].text()))  # additional BWF parameter for asymmetry
+            for lb, ub in zip(self.fit_fcts[key]['lower boundaries'], self.fit_fcts[key]['upper boundaries']):
+                if lb.text() == '':
+                    lower_boundaries[name_fct].append(-np.inf)
+                else:
+                    lower_boundaries[name_fct].append(float(lb.text()))
+
+                if ub.text() == '':
+                    upper_boundaries[name_fct].append(np.inf)
+                else:
+                    upper_boundaries[name_fct].append(float(ub.text()))
+            self.n_fit_fct[name_fct] += 1
+
+        for p in parameter.values():
+            self.p_start.extend(p)
+
+        for lb, ub in zip(lower_boundaries.values(), upper_boundaries.values()):
+            self.boundaries[0].extend(lb)
+            self.boundaries[1].extend(ub)
+
+        self.continue_fit = True
+        self.close()
+
+    def closeEvent(self, event):
+        self.closeSignal.emit()
+        event.accept
 
 
 class MyCustomToolbar(NavigationToolbar2QT):
@@ -2324,9 +2481,19 @@ class PlotWindow(QMainWindow):
         if self.selectedDatasetNumber != []:
             x_min, x_max = self.SelectArea()
             fitdialog = FitOptionsDialog(self)
+            fitdialog.show()
+            loop = QtCore.QEventLoop()
+            fitdialog.closeSignal.connect(loop.quit)
+            loop.exec_()
+            continue_fit = fitdialog.continue_fit
+            if continue_fit == True:
+                pass
+            else:
+                return
             p_start = fitdialog.p_start
-            boundaries = fitdialog.p_bound
+            boundaries = fitdialog.boundaries
             self.n_fit_fct = fitdialog.n_fit_fct
+
 
         for n in self.selectedDatasetNumber:
             xs = self.Spektrum[n].get_xdata()
@@ -2363,7 +2530,7 @@ class PlotWindow(QMainWindow):
 
             self.fig.canvas.draw()
 
-            #Calculate Errors and R square
+            # Calculate Errors and R square
             perr = np.sqrt(np.diag(pcov))
             residuals = y - self.functions.FctSumme(x, *popt)
             ss_res = numpy.sum(residuals**2)
@@ -2390,9 +2557,24 @@ class PlotWindow(QMainWindow):
                     data_table.append(['', '', ''])
             print('\n {}'.format(self.Spektrum[n].get_label()))
             print(r'R^2={:.4f}'.format(r_squared))
-            print(tabulate(data_table, headers=['Parameters', 'Values', 'Errors']))
+            save_data = tabulate(data_table, headers=['Parameters', 'Values', 'Errors'])
+            print(save_data)
 
         self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
+
+        # Save fit parameter in file
+        filename = self.Spektrum[n].get_label()
+        startFileDirName = os.path.dirname(self.selectedData[n][3])
+        filename = '{}/{}_fitparameter.txt'.format(startFileDirName, filename)
+
+        filename = QtWidgets.QFileDialog.getSaveFileName(self, 'Save fit parameter',
+                                                         filename, 'All Files (*);;Text Files (*.txt)')
+
+        if filename[0] != '':                       # if fileName is not empty save in pHomeRmn
+            filename = filename[0]
+            self.save_to_file('Save fit parameter in file', filename, save_data)
+        else:
+            pass
 
     def DefineArea(self):
         self.SelectDataset()
@@ -2424,7 +2606,7 @@ class PlotWindow(QMainWindow):
         self.fig.canvas.draw()
         self.ax.autoscale(True)
         return x_min, x_max
-	
+
     def menu_baseline_als(self):
         self.SelectDataset()
         x_min, x_max = self.SelectArea()
@@ -2896,53 +3078,17 @@ class PlotWindow(QMainWindow):
         self.check_if_line_was_removed()
         self.SelectDataset(True)
         for n in self.selectedDatasetNumber:
-            ys = self.Spektrum[n].get_ydata()
-            self.cid_scale = self.fig.canvas.mpl_connect('button_release_event', self.scale_click)
-            self.ax.figure.canvas.start_event_loop(timeout=10000)
-            ys = ys*self.scale_factor
-            self.data[n][1] = ys
-            self.Spektrum[n].set_ydata(ys)
-            self.fig.canvas.draw()
-            
-    def scale_click(self, event):
-        if event.button == 1:
-            for n in self.selectedDatasetNumber:
-                xs = self.Spektrum[n].get_xdata()
-                ys = self.Spektrum[n].get_ydata()
-                x = event.xdata
-                y = event.ydata
-                ind = min(range(len(xs)), key=lambda i: abs(xs[i]-x))
-                self.scale_factor = y/ys[ind]
-                self.fig.canvas.mpl_disconnect(self.cid_scale)
-                self.fig.canvas.stop_event_loop(self)
-        else:
-            pass
+            ms = MovingLines(self.Spektrum[n], scaling=True)
+            self.Spektrum[n] = ms.line
+            self.data[n][1] = ms.y
 
     def shift_spectrum(self):
         self.check_if_line_was_removed()
         self.SelectDataset(True)
         for n in self.selectedDatasetNumber:
-            ys = self.Spektrum[n].get_ydata()
-            self.cid_shift = self.fig.canvas.mpl_connect('button_release_event', self.shift_click)
-            self.ax.figure.canvas.start_event_loop(timeout=10000)
-            ys = ys + self.shift_factor
-            self.data[n][1] = ys
-            self.Spektrum[n].set_ydata(ys)
-            self.fig.canvas.draw()
-
-    def shift_click(self, event):
-        if event.button == 1:
-            for n in self.selectedDatasetNumber:
-                xs = self.Spektrum[n].get_xdata()
-                ys = self.Spektrum[n].get_ydata()
-                x = event.xdata
-                y = event.ydata
-                ind = min(range(len(xs)), key=lambda i: abs(xs[i]-x))
-                self.shift_factor = y - ys[ind]
-                self.fig.canvas.mpl_disconnect(self.cid_shift)
-                self.fig.canvas.stop_event_loop(self)
-        else:
-            pass
+            ms = MovingLines(self.Spektrum[n])
+            self.Spektrum[n] = ms.line
+            self.data[n][1] = ms.y
 
     def pick_points_for_arrow(self, event):
         self.selected_points.append([event.xdata, event.ydata])
