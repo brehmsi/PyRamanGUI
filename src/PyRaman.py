@@ -1929,6 +1929,7 @@ class FitOptionsDialog(QMainWindow):
 
 
 class MyCustomToolbar(NavigationToolbar2QT):
+    signal_remove_line = QtCore.pyqtSignal(object)
     toolitems = [t for t in NavigationToolbar2QT.toolitems]
     # Add new toolitem at last position
 
@@ -2049,9 +2050,16 @@ class PlotWindow(QMainWindow):
                 else:
                     pass
             self.ax.get_legend()
-        self.addToolBar(MyCustomToolbar(self.Canvas))
+        toolbar = MyCustomToolbar(self.Canvas)
+        toolbar.signal_remove_line.connect(self.remove_line)
+        self.addToolBar(toolbar)
 
         self.ax.get_legend().set_picker(5)
+
+    def remove_line(self, line):
+        i = self.Spektrum.index(line)
+        self.data.pop(i)
+        self.Spektrum.pop(i)
 
     def add_plot(self, new_data):
         ls = self.Spektrum[0].get_linestyle()
@@ -2570,7 +2578,7 @@ class PlotWindow(QMainWindow):
         filename = QtWidgets.QFileDialog.getSaveFileName(self, 'Save fit parameter',
                                                          filename, 'All Files (*);;Text Files (*.txt)')
 
-        if filename[0] != '':                       # if fileName is not empty save in pHomeRmn
+        if filename[0] != '':
             filename = filename[0]
             self.save_to_file('Save fit parameter in file', filename, save_data)
         else:
@@ -3049,33 +3057,8 @@ class PlotWindow(QMainWindow):
         filename = '{}/{}'.format(filepath, filename)
         self.save_to_file('Save calculated ratios in file', filename, save_data)
 
-
-
     ########## Functions of toolbar ##########
-    def check_if_line_was_removed(self):
-        lines = self.ax.get_lines()
-        if len(lines) != len(self.data):
-            line_ydata = []
-            not_deleted = []
-            for line in lines:
-                line_ydata.append(line.get_ydata())
-            for d in self.data:
-                for lydata in line_ydata:
-                    if (lydata == d[1]).all():
-                        not_deleted.append(d[2])
-
-            for j in range(len(self.data)):
-                if self.data[j][2] in not_deleted:
-                    pass
-                else:
-                    self.data.pop(j)
-                    self.Spektrum.pop(j)
-                    return
-        else:
-            return
-
     def scale_spectrum(self):
-        self.check_if_line_was_removed()
         self.SelectDataset(True)
         for n in self.selectedDatasetNumber:
             ms = MovingLines(self.Spektrum[n], scaling=True)
@@ -3083,7 +3066,6 @@ class PlotWindow(QMainWindow):
             self.data[n][1] = ms.y
 
     def shift_spectrum(self):
-        self.check_if_line_was_removed()
         self.SelectDataset(True)
         for n in self.selectedDatasetNumber:
             ms = MovingLines(self.Spektrum[n])
