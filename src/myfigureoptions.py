@@ -413,6 +413,7 @@ def figure_edit(axes, parent=None):
                 line.set_markeredgecolor(markeredgecolor)
             if removeLine == True:
                 try:
+                    parent.signal_remove_line.emit(line)
                     line.remove()
                 except ValueError as e:
                     print(e)
@@ -853,6 +854,7 @@ def figure_edit_brokenaxis(axes, parent = None):
                     line.set_markerfacecolor(markerfacecolor)
                     line.set_markeredgecolor(markeredgecolor)
                 if removeLine == True:
+                    parent.signal_remove_line.emit(line)
                     line.remove()
 
         # Set / Errorbar Caplines
