@@ -2056,11 +2056,6 @@ class PlotWindow(QMainWindow):
 
         self.ax.get_legend().set_picker(5)
 
-    def remove_line(self, line):
-        i = self.Spektrum.index(line)
-        self.data.pop(i)
-        self.Spektrum.pop(i)
-
     def add_plot(self, new_data):
         ls = self.Spektrum[0].get_linestyle()
         ma = self.Spektrum[0].get_marker()
@@ -2093,6 +2088,15 @@ class PlotWindow(QMainWindow):
             self.fig.canvas.draw()
         else:
             pass
+
+    def remove_line(self, line):
+        '''
+        remove data from self.Spektrum and self.data after line was removed
+        in figureoptions
+        '''
+        i = self.Spektrum.index(line)
+        self.data.pop(i)
+        self.Spektrum.pop(i)
 
     def pickEvent(self, event):
         if event.mouseevent.dblclick == True and event.artist == self.ax.get_legend():
@@ -2175,13 +2179,20 @@ class PlotWindow(QMainWindow):
 
         ### 2. menu item: Edit  ###
         editMenu = menubar.addMenu('&Edit')
+
         editMenu.addAction('Delete broken pixel - LabRam', self.delete_datapoint)
+
         editDeletePixel = editMenu.addAction('Delete single pixel', self.delete_pixel)
         editDeletePixel.setStatusTip('Delete selected data point with Enter, Move with arrow keys, Press c to leave Delete-Mode')
+
         editSelectArea = editMenu.addAction('Define data area', self.DefineArea)
         editSelectArea.setStatusTip('Move area limit with left mouse click, set it fix with right mouse click')        
+
         editNormAct = editMenu.addAction('Normalize Spectrum', self.normalize)
         editNormAct.setStatusTip('Normalizes highest peak to 1')
+
+        editAddSubAct = editMenu.addAction('Add up or subtract two spectra', self.add_subtract_spectra)
+
 
         ### 3. menu: Analysis  ###
         analysisMenu = menubar.addMenu('&Analysis')
@@ -2386,6 +2397,72 @@ class PlotWindow(QMainWindow):
             save_data = [self.data[n][0], self.data[n][1]]
             save_data = np.transpose(save_data)
             self.save_to_file('Save normalized data in file', startFileName, save_data)
+
+    def add_subtract_spectra(self):
+        '''
+        function to add or subtract a spectrum from an other spectrum
+        '''
+        self.dialog_add_sub = QDialog()
+        vlayout = QtWidgets.QVBoxLayout()
+        hlayout = QtWidgets.QHBoxLayout()
+
+        cbox_spectrum1 = QtWidgets.QComboBox(self.dialog_add_sub)
+        for s in self.Spektrum:
+            cbox_spectrum1.addItem(s.get_label())
+        hlayout.addWidget(cbox_spectrum1)
+
+        cbox_operation = QtWidgets.QComboBox(self.dialog_add_sub)
+        cbox_operation.addItem('+')
+        cbox_operation.addItem('-')
+        hlayout.addWidget(cbox_operation)
+
+        cbox_spectrum2 = QtWidgets.QComboBox(self.dialog_add_sub)
+        for s in self.Spektrum:
+            cbox_spectrum2.addItem(s.get_label())
+        hlayout.addWidget(cbox_spectrum2)
+
+        vlayout.addLayout(hlayout)
+
+        ok_button = QtWidgets.QPushButton('Ok')
+        ok_button.setFixedWidth(100)
+        vlayout.addWidget(ok_button)
+
+        ok_button.clicked.connect(self.dialog_add_sub.close)
+
+        self.dialog_add_sub.setLayout(vlayout)
+        self.dialog_add_sub.exec_()
+
+
+        sp1 = cbox_spectrum1.currentText()
+        i1  = cbox_spectrum1.currentIndex()
+        sp2 = cbox_spectrum2.currentText()
+        i2  = cbox_spectrum2.currentIndex()
+        op  = cbox_operation.currentText()
+
+        x1 = self.Spektrum[i1].get_xdata()
+        x2 = self.Spektrum[i2].get_xdata()
+
+        # check that x data is the same
+        if (x1 == x2).all():
+            pass
+        else:
+            self.mw.show_statusbar_message('Not the same x data', 4000)
+            return
+
+        y1 = self.Spektrum[i1].get_ydata()
+        y2 = self.Spektrum[i2].get_ydata()
+
+        if op == '+':
+            y = y1 + y2
+        elif op == '-':
+            y = y1 - y2
+        else:
+            return
+
+        line = self.ax.plot(x1, y, label='subtracted Spectrum')
+        self.Spektrum.append(line)
+
+        self.fig.canvas.draw()
 
     def get_start_values(self):
         self.Dialog_FitParameter = QDialog()
