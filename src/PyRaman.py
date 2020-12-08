@@ -2282,7 +2282,7 @@ class PlotWindow(QMainWindow):
 
     def SelectDataset(self, select_only_one=False):
         data_sets_name = []
-        for j in self.ax.get_lines():
+        for j in self.Spektrum:
             data_sets_name.append(j.get_label())
         DSS = DataSetSelecter(data_sets_name, select_only_one)
         self.selectedData = []
@@ -2304,8 +2304,7 @@ class PlotWindow(QMainWindow):
 
     def save_to_file(self, WindowName , startFileName, data):
         SaveFileName = QFileDialog.getSaveFileName(self, WindowName, startFileName, "All Files (*);;Text Files (*.txt)")
-
-        if SaveFileName:
+        if SaveFileName[0] != '':
             SaveFileName = SaveFileName[0]
             if SaveFileName[-4:] == '.txt':
                 pass
@@ -2578,6 +2577,8 @@ class PlotWindow(QMainWindow):
             p_start = fitdialog.p_start
             boundaries = fitdialog.boundaries
             self.n_fit_fct = fitdialog.n_fit_fct
+        else:
+            return
 
 
         for n in self.selectedDatasetNumber:
@@ -2645,21 +2646,14 @@ class PlotWindow(QMainWindow):
             save_data = tabulate(data_table, headers=['Parameters', 'Values', 'Errors'])
             print(save_data)
 
-        self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
+            # Save fit parameter in file
+            filename = self.Spektrum[n].get_label()
+            startFileDirName = os.path.dirname(self.data[n][3])
+            filename = '{}/{}_fitparameter.txt'.format(startFileDirName, filename)
 
-        # Save fit parameter in file
-        filename = self.Spektrum[n].get_label()
-        startFileDirName = os.path.dirname(self.selectedData[n][3])
-        filename = '{}/{}_fitparameter.txt'.format(startFileDirName, filename)
-
-        filename = QtWidgets.QFileDialog.getSaveFileName(self, 'Save fit parameter',
-                                                         filename, 'All Files (*);;Text Files (*.txt)')
-
-        if filename[0] != '':
-            filename = filename[0]
             self.save_to_file('Save fit parameter in file', filename, save_data)
-        else:
-            pass
+
+        self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
 
     def DefineArea(self):
         self.SelectDataset()
@@ -2759,9 +2753,9 @@ class PlotWindow(QMainWindow):
             self.Dialog_BaselineParameter.close()
         elif self.finishbutton.isChecked():
             xb, yb, zb = self.baseline_als(x, y, p, lam)
+            self.Spektrum.append(self.ax.plot(xb, yb, 'c-', label = '{} (baseline-corrected)'.format(name))[0])
             self.baseline,    = self.ax.plot(xb, zb, 'c--', label = 'baseline ({})'.format(name))
-            self.Spektrum.append(self.ax.plot(xb, yb, 'c-', label = 'baseline-corrected ({})'.format(name)[0]))
-            
+
             ### Save background-corrected data ###
             (fileBaseName, fileExtension) = os.path.splitext(name)
             startFileDirName = os.path.dirname(self.selectedData[0][3])
@@ -2770,9 +2764,10 @@ class PlotWindow(QMainWindow):
             save_data = [xb, yb, zb, x, y]
             save_data = np.transpose(save_data)
             self.save_to_file('Save background-corrected data in file', startFileName, save_data)
-            
-            ### Append data ###        
+
+            ### Append data ###
             self.data.append([xb, yb, fileBaseName+'_backgroundCorr', startFileName, '-', 0])
+
             self.Dialog_BaselineParameter.close()
         else:
             xb, yb, zb = self.baseline_als(x, y, p, lam)
