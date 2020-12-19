@@ -537,7 +537,7 @@ class MainWindow(QMainWindow):
     def add_Plot(self, pw_name, plotData):
         # add spectrum to existing plotwindow
         for j in plotData:
-            j[4] = self.window['Plotwindow'][pw_name].Spektrum[0].get_linestyle()
+            j[4] = self.window['Plotwindow'][pw_name].spectrum[0].get_linestyle()
         self.window['Plotwindow'][pw_name].add_plot(plotData)
 
     def close_window(self, windowtype, title):
@@ -2030,7 +2030,7 @@ class PlotWindow(QMainWindow):
         self.data = plot_data
         self.mw = parent
         self.backup_data = plot_data
-        self.Spektrum = []
+        self.spectrum = []
         self.ErrorBar = []
         self.functions = Functions(self)
         self.inserted_text = []                          # Storage for text inserted in the plot
@@ -2059,7 +2059,7 @@ class PlotWindow(QMainWindow):
         tickfontsize = 18
 
         if self.fig == None:            #new Plot
-            self.fig = Figure(figsize=(15,9))
+            self.fig = Figure(figsize=(15, 9))
             self.ax = self.fig.add_subplot(111)
             self.Canvas = FigureCanvasQTAgg(self.fig)
             layout.addWidget(self.Canvas)
@@ -2068,28 +2068,29 @@ class PlotWindow(QMainWindow):
                 if isinstance(j[5], (np.ndarray, np.generic)):
                     (spect, capline, barlinecol) = self.ax.errorbar(j[0], j[1], yerr=j[5], fmt=j[4],
                         picker=5, capsize=3)
-                    self.Spektrum.append(spect)
+                    self.spectrum.append(spect)
                     spect.set_label(j[2])
                     capline[0].set_label('_Hidden capline bottom ' + j[2])
                     capline[1].set_label('_Hidden capline top ' + j[2])
                     barlinecol[0].set_label('_Hidden barlinecol ' + j[2])
                 else:
-                    self.Spektrum.append(self.ax.plot(j[0], j[1], j[4], label = j[2], picker = 5)[0])
+                    self.spectrum.append(self.ax.plot(j[0], j[1], j[4], label = j[2], picker = 5)[0])
             self.ax.legend(fontsize = legendfontsize)
             self.ax.set_xlabel(r'Raman shift / cm$^{-1}$', fontsize = labelfontsize)
             self.ax.set_ylabel(r'Intensity / cts/s', fontsize = labelfontsize)
             self.ax.xaxis.set_tick_params(labelsize=tickfontsize)
             self.ax.yaxis.set_tick_params(labelsize=tickfontsize)
         else:                       #loaded Plot
+            #self.fig._remove_ax = lambda: None
             self.ax = self.fig.axes[0]
             self.Canvas = FigureCanvasQTAgg(self.fig)
             layout.addWidget(self.Canvas)
             for j in self.ax.lines:
-                self.Spektrum.append(j)
+                self.spectrum.append(j)
             for j in self.ax.get_children():
                 if type(j) == mpatches.FancyArrowPatch:             # all drawn lines and arrows
                     self.drawn_line.append(LineDrawer(j))
-                elif type(j)== matplotlib.text.Annotation:          # all inserted texts
+                elif type(j) == matplotlib.text.Annotation:          # all inserted texts
                     self.inserted_text.append(InsertText(j))
                 else:
                     pass
@@ -2101,20 +2102,20 @@ class PlotWindow(QMainWindow):
         self.ax.get_legend().set_picker(5)
 
     def add_plot(self, new_data):
-        ls = self.Spektrum[0].get_linestyle()
-        ma = self.Spektrum[0].get_marker()
+        ls = self.spectrum[0].get_linestyle()
+        ma = self.spectrum[0].get_marker()
         for j in new_data:
             self.data.append(j)
             if isinstance(j[5], (np.ndarray, np.generic)):
                 (spect, capline, barlinecol) = self.ax.errorbar(j[0], j[1], yerr=j[5], picker=5, capsize=3)
-                self.Spektrum.append(spect)
+                self.spectrum.append(spect)
                 spect.set_label(j[2])
                 capline[0].set_label('_Hidden capline bottom ' + j[2])
                 capline[1].set_label('_Hidden capline top ' + j[2])
                 barlinecol[0].set_label('_Hidden barlinecol ' + j[2])
             else:
                 spect = self.ax.plot(j[0], j[1], label = j[2], picker = 5)[0]
-                self.Spektrum.append(spect)
+                self.spectrum.append(spect)
             spect.set_linestyle(ls)
             spect.set_marker(ma)
         handles, labels = self.ax.get_legend_handles_labels()
@@ -2126,8 +2127,8 @@ class PlotWindow(QMainWindow):
         if key == (Qt.Key_Control and Qt.Key_Z):
             k = 0
             for j in self.backup_data:
-                self.Spektrum[k].set_xdata(j[0])
-                self.Spektrum[k].set_ydata(j[1])
+                self.spectrum[k].set_xdata(j[0])
+                self.spectrum[k].set_ydata(j[1])
                 k = k+1
             self.fig.canvas.draw()
         else:
@@ -2135,12 +2136,12 @@ class PlotWindow(QMainWindow):
 
     def remove_line(self, line):
         '''
-        remove data from self.Spektrum and self.data after line was removed
+        remove data from self.spectrum and self.data after line was removed
         in figureoptions
         '''
-        i = self.Spektrum.index(line)
+        i = self.spectrum.index(line)
         self.data.pop(i)
-        self.Spektrum.pop(i)
+        self.spectrum.pop(i)
 
     def pickEvent(self, event):
         if event.mouseevent.dblclick == True and event.artist == self.ax.get_legend():
@@ -2174,7 +2175,7 @@ class PlotWindow(QMainWindow):
 
             self.update_legend(new_handles, new_labels)
             self.ax.figure.canvas.draw()
-        elif event.artist in self.Spektrum and event.mouseevent.button == 3:
+        elif event.artist in self.spectrum and event.mouseevent.button == 3:
             self.lineDialog = QMenu()
             self.lineDialog.addAction("Go to Spreadsheet",lambda: self.go_to_spreadsheet(event.artist))
             point = self.mapToGlobal(QtCore.QPoint(event.mouseevent.x, self.frameGeometry().height() - event.mouseevent.y))
@@ -2299,7 +2300,7 @@ class PlotWindow(QMainWindow):
 
     ########## Functions and other stuff ##########
     def go_to_spreadsheet(self, line):
-        line_index = self.Spektrum.index(line)
+        line_index = self.spectrum.index(line)
         if len(self.data[line_index]) == 7:
             spreadsheet_name = self.data[line_index][6]
             item = self.mw.treeWidget.findItems(spreadsheet_name, Qt.MatchFixedString | Qt.MatchRecursive)
@@ -2326,7 +2327,7 @@ class PlotWindow(QMainWindow):
 
     def SelectDataset(self, select_only_one=False):
         data_sets_name = []
-        for j in self.Spektrum:
+        for j in self.spectrum:
             data_sets_name.append(j.get_label())
         DSS = DataSetSelecter(data_sets_name, select_only_one)
         self.selectedData = []
@@ -2370,14 +2371,14 @@ class PlotWindow(QMainWindow):
             controll_delete_parameter = True
             while controll_delete_parameter == True:
                 self.selectedPoint, = self.ax.plot(self.data[j][0][0], self.data[j][1][0], 'o', ms=12, alpha=0.4, color='yellow', visible=True)  #Yellow point to mark selected Data points
-                pickDP = DataPointPicker(self.Spektrum[j], self.selectedPoint, 0)
+                pickDP = DataPointPicker(self.spectrum[j], self.selectedPoint, 0)
                 a = pickDP.lastind
                 controll_delete_parameter = pickDP.controll_delete_parameter
                 self.selectedPoint.set_visible(False)
                 self.ax.figure.canvas.draw()
                 self.data[j][0] = np.delete(self.data[j][0], a)
                 self.data[j][1] = np.delete(self.data[j][1], a)
-                self.Spektrum[j].set_data(self.data[j][0], self.data[j][1])
+                self.spectrum[j].set_data(self.data[j][0], self.data[j][1])
                 self.fig.canvas.draw()
                 controll_delete_parameter = pickDP.controll_delete_parameter
             else:
@@ -2398,7 +2399,7 @@ class PlotWindow(QMainWindow):
                     QMessageBox.about(self, "Title", 
                         "Please select this data point manually (around %d in the data set %s)"%(self.data[j][0][a], self.data[j][2]))
                     self.selectedPoint, = self.ax.plot(self.data[j][0][a], self.data[j][1][a], 'o', ms=12, alpha=0.4, color='yellow', visible=False)  #Yellow point to mark selected Data points
-                    pickDP = DataPointPicker(self.Spektrum[j], self.selectedPoint, a) 
+                    pickDP = DataPointPicker(self.spectrum[j], self.selectedPoint, a)
                     a = pickDP.lastind
                     controll_delete_parameter = pickDP.controll_delete_parameter
                     self.selectedPoint.set_visible(False)
@@ -2415,7 +2416,7 @@ class PlotWindow(QMainWindow):
                     pass
                 a = a + 957
                   
-            self.Spektrum[j].set_data(self.data[j][0], self.data[j][1])            
+            self.spectrum[j].set_data(self.data[j][0], self.data[j][1])
             self.setFocus() 
             self.fig.canvas.draw()
 
@@ -2430,7 +2431,7 @@ class PlotWindow(QMainWindow):
         self.SelectDataset()
         for n in self.selectedDatasetNumber:
             self.data[n][1] = self.data[n][1]/numpy.amax(self.data[n][1])
-            self.Spektrum[n].set_data(self.data[n][0], self.data[n][1])
+            self.spectrum[n].set_data(self.data[n][0], self.data[n][1])
             self.fig.canvas.draw()
             ### Save normalized data ###
             (fileBaseName, fileExtension) = os.path.splitext(self.data[n][2])
@@ -2450,7 +2451,7 @@ class PlotWindow(QMainWindow):
         hlayout = QtWidgets.QHBoxLayout()
 
         cbox_spectrum1 = QtWidgets.QComboBox(self.dialog_add_sub)
-        for s in self.Spektrum:
+        for s in self.spectrum:
             cbox_spectrum1.addItem(s.get_label())
         hlayout.addWidget(cbox_spectrum1)
 
@@ -2460,7 +2461,7 @@ class PlotWindow(QMainWindow):
         hlayout.addWidget(cbox_operation)
 
         cbox_spectrum2 = QtWidgets.QComboBox(self.dialog_add_sub)
-        for s in self.Spektrum:
+        for s in self.spectrum:
             cbox_spectrum2.addItem(s.get_label())
         hlayout.addWidget(cbox_spectrum2)
 
@@ -2482,8 +2483,8 @@ class PlotWindow(QMainWindow):
         i2  = cbox_spectrum2.currentIndex()
         op  = cbox_operation.currentText()
 
-        x1 = self.Spektrum[i1].get_xdata()
-        x2 = self.Spektrum[i2].get_xdata()
+        x1 = self.spectrum[i1].get_xdata()
+        x2 = self.spectrum[i2].get_xdata()
 
         # check that x data is the same
         if (x1 == x2).all():
@@ -2492,8 +2493,8 @@ class PlotWindow(QMainWindow):
             self.mw.show_statusbar_message('Not the same x data', 4000)
             return
 
-        y1 = self.Spektrum[i1].get_ydata()
-        y2 = self.Spektrum[i2].get_ydata()
+        y1 = self.spectrum[i1].get_ydata()
+        y2 = self.spectrum[i2].get_ydata()
 
         if op == '+':
             y = y1 + y2
@@ -2503,7 +2504,7 @@ class PlotWindow(QMainWindow):
             return
 
         line = self.ax.plot(x1, y, label='subtracted Spectrum')
-        self.Spektrum.append(line)
+        self.spectrum.append(line)
 
         self.fig.canvas.draw()
 
@@ -2585,8 +2586,8 @@ class PlotWindow(QMainWindow):
             return
 
         for j in self.selectedDatasetNumber:
-            xs = self.Spektrum[j].get_xdata()
-            ys = self.Spektrum[j].get_ydata()
+            xs = self.spectrum[j].get_xdata()
+            ys = self.spectrum[j].get_ydata()
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
@@ -2595,7 +2596,7 @@ class PlotWindow(QMainWindow):
             self.ax.plot(x1, self.functions.FctSumme(x1, *popt), '-r')
             self.fig.canvas.draw()
 
-            print('\n {} {}'.format(self.Spektrum[j].get_label(), q.text()))
+            print('\n {} {}'.format(self.spectrum[j].get_label(), q.text()))
             parmeter_name = ['Background', r'Raman Shift in cm^-1', 'Intensity', 'FWHM', 'additional Parameter']
             print_param = []
             for idx, p in enumerate(popt):
@@ -2626,8 +2627,8 @@ class PlotWindow(QMainWindow):
 
 
         for n in self.selectedDatasetNumber:
-            xs = self.Spektrum[n].get_xdata()
-            ys = self.Spektrum[n].get_ydata()
+            xs = self.spectrum[n].get_xdata()
+            ys = self.spectrum[n].get_ydata()
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
@@ -2685,13 +2686,13 @@ class PlotWindow(QMainWindow):
                             ['BWF Coupling Coefficient', popt[a+3], perr[a+3]])
                         a += 4
                     data_table.append(['', '', ''])
-            print('\n {}'.format(self.Spektrum[n].get_label()))
+            print('\n {}'.format(self.spectrum[n].get_label()))
             print(r'R^2={:.4f}'.format(r_squared))
             save_data = tabulate(data_table, headers=['Parameters', 'Values', 'Errors'])
             print(save_data)
 
             # Save fit parameter in file
-            filename = self.Spektrum[n].get_label()
+            filename = self.spectrum[n].get_label()
             startFileDirName = os.path.dirname(self.data[n][3])
             filename = '{}/{}_fitparameter.txt'.format(startFileDirName, filename)
 
@@ -2702,7 +2703,7 @@ class PlotWindow(QMainWindow):
     def DefineArea(self):
         self.SelectDataset()
         for n in self.selectedDatasetNumber:
-            spct = self.Spektrum[n]
+            spct = self.spectrum[n]
             xs = spct.get_xdata()
             ys = spct.get_ydata()
             x_min, x_max = self.SelectArea()
@@ -2710,7 +2711,7 @@ class PlotWindow(QMainWindow):
             y = ys[np.where((xs > x_min)&(xs < x_max))]
 
             self.data.append([x, y, '{}_cut'.format(spct.get_label()), self.selectedData[0][3]])
-            self.Spektrum.append(self.ax.plot(x, y, label='{}_cut'.format(spct.get_label()), picker=5))
+            self.spectrum.append(self.ax.plot(x, y, label='{}_cut'.format(spct.get_label()), picker=5))
 
     def SelectArea(self):
         self.ax.autoscale(False)
@@ -2736,7 +2737,7 @@ class PlotWindow(QMainWindow):
         p_start = '0.001'
         lam_start = '10000000'
         for n in self.selectedDatasetNumber:
-            spct = self.Spektrum[n]
+            spct = self.spectrum[n]
             xs = spct.get_xdata()
             ys = spct.get_ydata()
 
@@ -2797,7 +2798,7 @@ class PlotWindow(QMainWindow):
             self.Dialog_BaselineParameter.close()
         elif self.finishbutton.isChecked():
             xb, yb, zb = self.baseline_als(x, y, p, lam)
-            self.Spektrum.append(self.ax.plot(xb, yb, 'c-', label = '{} (baseline-corrected)'.format(name))[0])
+            self.spectrum.append(self.ax.plot(xb, yb, 'c-', label ='{} (baseline-corrected)'.format(name))[0])
             self.baseline,    = self.ax.plot(xb, zb, 'c--', label = 'baseline ({})'.format(name))
 
             ### Save background-corrected data ###
@@ -2913,16 +2914,16 @@ class PlotWindow(QMainWindow):
 
         # iterate through all selected data sets
         for n in self.selectedDatasetNumber:
-            x = self.Spektrum[n].get_xdata()
-            y = self.Spektrum[n].get_ydata()
+            x = self.spectrum[n].get_xdata()
+            y = self.spectrum[n].get_ydata()
       
             #Limit data to fit range
             working_x = x[np.where((x > x_min)&(x < x_max))]
             working_y = y[np.where((x > x_min)&(x < x_max))]
 
             xb, yb, zb = self.baseline_als(working_x, working_y, p, lam)
-            self.baseline,    = self.ax.plot(xb, zb, 'c--', label = 'baseline ({})'.format(self.Spektrum[n].get_label()))
-            self.blcSpektrum, = self.ax.plot(xb, yb, 'c-', label = 'baseline-corrected ({})'.format(self.Spektrum[n].get_label()))
+            self.baseline,    = self.ax.plot(xb, zb, 'c--', label = 'baseline ({})'.format(self.spectrum[n].get_label()))
+            self.blcSpektrum, = self.ax.plot(xb, yb, 'c-', label = 'baseline-corrected ({})'.format(self.spectrum[n].get_label()))
             self.fig.canvas.draw()
 
             #limit data to fitarea
@@ -3083,10 +3084,10 @@ class PlotWindow(QMainWindow):
 
             save_data = r'R^2=%.6f \n'%r_squared + 'Lorentz 1 = D-Bande, BWF (Breit-Wigner-Fano) 1 = G-Bande \n' + tabulate(data_table, headers = ['Parameters', 'Values', 'Errors'])
             print('\n')
-            print(self.Spektrum[n].get_label())
+            print(self.spectrum[n].get_label())
             print(save_data)
 
-            (fileBaseName, fileExtension) = os.path.splitext(self.Spektrum[n].get_label())
+            (fileBaseName, fileExtension) = os.path.splitext(self.spectrum[n].get_label())
             startFileDirName = os.path.dirname(self.selectedData[0][3])
             file_cluster = open(startFileDirName + "/Clustersize.txt", "a")
             file_cluster.write('\n'+str(fileBaseName) + '   %.4f'%L_a + '   %.4f'%L_a_err)
@@ -3123,7 +3124,7 @@ class PlotWindow(QMainWindow):
         self.SelectDataset()
         save_data = []
         for n in self.selectedDatasetNumber:
-            spct = self.Spektrum[n]
+            spct = self.spectrum[n]
             xs = spct.get_xdata()
             ys = spct.get_ydata()
 
@@ -3177,15 +3178,15 @@ class PlotWindow(QMainWindow):
     def scale_spectrum(self):
         self.SelectDataset(True)
         for n in self.selectedDatasetNumber:
-            ms = MovingLines(self.Spektrum[n], scaling=True)
-            self.Spektrum[n] = ms.line
+            ms = MovingLines(self.spectrum[n], scaling=True)
+            self.spectrum[n] = ms.line
             self.data[n][1] = ms.y
 
     def shift_spectrum(self):
         self.SelectDataset(True)
         for n in self.selectedDatasetNumber:
-            ms = MovingLines(self.Spektrum[n])
-            self.Spektrum[n] = ms.line
+            ms = MovingLines(self.spectrum[n])
+            self.spectrum[n] = ms.line
             self.data[n][1] = ms.y
 
     def pick_points_for_arrow(self, event):
