@@ -124,12 +124,22 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
         super(RamanTreeWidget, self).mousePressEvent(event)
 
     def startDrag(self, action):
+        """
+        Parameters
+        ----------
+        action : Qt.DropAction
+        """
         self.dragged_item = self.selectedItems()[0]
 
         # keep the default behaviour
         super(RamanTreeWidget, self).startDrag(action)
 
     def dropEvent(self, event):
+        '''
+        Paramters
+        ---------
+        event : QDropEvent
+        '''
         itemAtDropLocation = self.itemAt(event.pos())
         if itemAtDropLocation != None and itemAtDropLocation.type() == 0:
             self.itemDropped.emit(self.dragged_item, itemAtDropLocation)
