@@ -15,11 +15,9 @@ import sys
 import time
 from datetime import datetime
 
-#import collections
 from collections import ChainMap
 from matplotlib import *
 from matplotlib.figure import Figure
-from matplotlib.widgets import LassoSelector
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 import matplotlib.backends.qt_editor.figureoptions as figureoptions
@@ -53,12 +51,42 @@ import Database_Measurements #see file Database_Measurements
 class RamanTreeWidget(QtWidgets.QTreeWidget):
     """
     A reimplementation of the PyQt QTreeWidget.
+
+    the mouseDoubleClickEvent, mousePressEvent, startDrag and DropEvent are modified
+
+    Attributes
+    ----------
+    itemDoubleClicked : pyqtSignal
+        signal emitted by doubleclick on QTreeWidgetItem
+    itemClicked : pyqtSignal
+        signal emitted by click on QTreeWidgetItem
+    itemDropped : pyqtSignal
+        signal emitted by dropping QTreeWidgetItem
+    dragged_item : QTreeWidgetItem
+        QTreeWidgetItem, which was selected by a mouseclick
+
+    Methods
+    -------
+    mouseDoubleClickEvent(event)
+        emits signal if QTreeWidgetItem was doubleclicked
+    mousePressEvent(event)
+        emits signal if QTreeWidgetItem was clicked
+    startDrag(action)
+        assigns selected QTreeWidgetItem to drag_item
+    dropEvent(event)
+        emits pyqtSignal if QTreeWidgetItem is dropped
     """
     itemDoubleClicked = QtCore.pyqtSignal(object)
     itemClicked = QtCore.pyqtSignal(object, object)
     itemDropped = QtCore.pyqtSignal(object, object)
  
     def __init__(self, parent=None):
+        '''
+        Parameters
+        ----------
+        parent : class, optional
+            (default is None)
+        '''
         super(RamanTreeWidget, self).__init__(parent)
         self.setAcceptDrops(True)
         self.setHeaderHidden(True)
@@ -244,7 +272,13 @@ class MainWindow(QMainWindow):
                     self.newWindow(foldername, val[0], val[1], key)
 
     def save(self, q):
-        # function to save complete project in rmn-File with pickle
+        ''' function to save complete project in rmn-File with pickle
+
+        Parameters:
+        -----------
+        q: str
+
+        '''
 
         # Ask for directory, if none is deposite or 'Save Project As' was pressed
         if self.pHomeRmn == None or q == 'Save As':
