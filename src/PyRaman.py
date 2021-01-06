@@ -200,7 +200,9 @@ class MainWindow(QMainWindow):
         self.create_menubar()
 
     def create_menubar(self):
-        # create a menubar
+        '''
+        create a menubar
+        '''
         menu = self.menuBar()
         File = menu.addMenu('File')
         FileNew = File.addMenu('New')
@@ -282,7 +284,8 @@ class MainWindow(QMainWindow):
                     self.newWindow(foldername, val[0], val[1], key)
 
     def save(self, q):
-        ''' function to save complete project in rmn-File with pickle
+        '''
+        function to save complete project in rmn-File with pickle
 
         Parameters:
         -----------
@@ -479,7 +482,7 @@ class MainWindow(QMainWindow):
             else:
                 pass
             windowtypeInt = 1
-            self.window[windowtype][title] = SpreadSheet(self, ssd)
+            self.window[windowtype][title] = SpreadSheet(ssd, parent=self)
             newSS = self.window[windowtype][title]
             newSS.new_pw_signal.connect(lambda: self.newWindow(None, 'Plotwindow', [newSS.plot_data, None], None))
             newSS.add_pw_signal.connect(lambda pw_name: self.add_Plot(pw_name, newSS.plot_data))
@@ -649,7 +652,7 @@ class TextWindow(QMainWindow):
 ### 3. Spreadsheet
 #####################################################################################################################################################
 
-# teilweise (Class SpreadSheetDelegate and class SpreadSheetItem) geklaut von: 
+# partly (Class SpreadSheetDelegate and class SpreadSheetItem) stolen from:
 # http://negfeedback.blogspot.com/2017/12/a-simple-gui-spreadsheet-in-less-than.html 
 cellre = re.compile(r'\b[A-Z][0-9]\b')
 
@@ -746,16 +749,18 @@ class SpreadSheetItem(QTableWidgetItem):
         return str(self.value)
 
 class SpreadSheet(QMainWindow):
-
+    '''
+    creating QMainWindow containing the spreadsheet
+    '''
     new_pw_signal   = QtCore.pyqtSignal()
     add_pw_signal   = QtCore.pyqtSignal(str)
     closeWindowSignal = QtCore.pyqtSignal(str, str)
 
-    def __init__(self, mainwindow, data, parent = None):
+    def __init__(self, data, parent):
         super(SpreadSheet, self).__init__(parent)
         self.cells = {}
         self.d = data              # structure of data (dictionary) {'dataX with X = (0,1,2,..)' : actual data,'name of data', 'X, Y or Yerr', 'if loaded: filename')}
-        self.mw = mainwindow
+        self.mw = parent
         self.cols = len(self.d)	                                        # number of columns
         self.rows = max([len(self.d[j][0]) for j in self.d.keys()])     # number of rows
         self.pHomeTxt = None                                            # path of Txt-File
@@ -971,17 +976,21 @@ class SpreadSheet(QMainWindow):
             super(SpreadSheet, self).keyPressEvent(event)
 
     def file_save(self):
+        '''
+        save data from spreadsheet in txt-file
+        '''
         SaveFileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Save File', self.pHomeTxt)
-        if SaveFileName[0] == '':
+
+        if SaveFileName[0] != '':
             SaveFileName = SaveFileName[0]
         else:
             return
 
-        formattyp = '%.3f'
+        #formattyp = '%.3f'
         data = [self.d['data0'][0]]
         for j in range(1, self.cols):
             data.append(self.d['data%i'%j][0])
-            formattyp = formattyp + '	%.3f'
+            #formattyp = formattyp + '	%.3f'
         
         n = len(self.d['data0'][0])
         if all(len(x) == n for x in data):
@@ -992,16 +1001,19 @@ class SpreadSheet(QMainWindow):
 
         data = np.transpose(data)
 
-        if SaveFileName[-4:] == '.txt':
-            pass
-        else:
-            SaveFileName = str(SaveFileName) + '.txt'
+        if SaveFileName[-4:] != '.txt':
+            SaveFileName = '{}.txt'.format(SaveFileName)
 
         self.pHomeTxt = SaveFileName
 
-        np.savetxt(SaveFileName, data, fmt=formattyp)
+        #np.savetxt(SaveFileName, data, fmt=formattyp)
+        np.savetxt(SaveFileName, data, fmt='%.5f')
 
     def load_file(self):
+        '''
+        function to load data from a txt file into the spreadsheet
+        '''
+
         #In case there already is data in the spreadsheet, ask if replace or added
         if any(self.d[j][3] != None for j in self.d.keys()):
             FrageErsetzen = QtWidgets.QMessageBox()
