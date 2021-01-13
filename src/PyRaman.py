@@ -2714,16 +2714,16 @@ class PlotWindow(QMainWindow):
 
     def DefineArea(self):
         self.SelectDataset()
+        x_min, x_max = self.SelectArea()
         for n in self.selectedDatasetNumber:
             spct = self.spectrum[n]
             xs = spct.get_xdata()
             ys = spct.get_ydata()
-            x_min, x_max = self.SelectArea()
             x = xs[np.where((xs > x_min)&(xs < x_max))]
             y = ys[np.where((xs > x_min)&(xs < x_max))]
 
             self.data.append([x, y, '{}_cut'.format(spct.get_label()), self.selectedData[0][3]])
-            self.spectrum.append(self.ax.plot(x, y, label='{}_cut'.format(spct.get_label()), picker=5))
+            self.spectrum.append(self.ax.plot(x, y, label='{}_cut'.format(spct.get_label()), picker=5)[0])
 
     def SelectArea(self):
         self.ax.autoscale(False)
@@ -2810,15 +2810,16 @@ class PlotWindow(QMainWindow):
             self.Dialog_BaselineParameter.close()
         elif self.finishbutton.isChecked():
             xb, yb, zb = self.baseline_als(x, y, p, lam)
-            self.spectrum.append(self.ax.plot(xb, yb, 'c-', label ='{} (baseline-corrected)'.format(name))[0])
-            self.baseline,    = self.ax.plot(xb, zb, 'c--', label = 'baseline ({})'.format(name))
+            self.spectrum.append(self.ax.plot(xb, yb, 'c-', label='{} (baseline-corrected)'.format(name))[0])
+            self.baseline,    = self.ax.plot(xb, zb, 'c--', label='baseline ({})'.format(name))
 
             ### Save background-corrected data ###
             (fileBaseName, fileExtension) = os.path.splitext(name)
             startFileDirName = os.path.dirname(self.selectedData[0][3])
             startFileBaseName = startFileDirName + '/' + fileBaseName
             startFileName = startFileBaseName + '_backgroundCorr.txt'
-            save_data = [xb, yb, zb, x, y]
+            #save_data = [xb, yb, zb, x, y]
+            save_data = [xb, yb]
             save_data = np.transpose(save_data)
             self.save_to_file('Save background-corrected data in file', startFileName, save_data)
 
