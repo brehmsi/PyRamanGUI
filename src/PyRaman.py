@@ -1213,9 +1213,13 @@ class Functions:
     def __init__(self, pw):
         self.pw = pw
 
+    def LinearFct(self, x, a, b):
+        '''linear Function'''
+        return a*x + b
+
     ### definition of Lorentzian for fit process ###
     def LorentzFct(self, x, xc, h, b):
-        return  h/(1 + (2*(x - xc)/b)**2)
+        return h/(1 + (2*(x - xc)/b)**2)
         #return a2/pi*a1/((x-a0)*(x-a0)+a1*a1)
 
     ### definition of Gaussian for fit process ###
@@ -2269,7 +2273,10 @@ class PlotWindow(QMainWindow):
         analysisRoutine.addAction('D und G Bande', self.fit_D_G)
         analysisRoutine.addAction('Sulfur oxyanion ratios', self.ratio_H2O_sulfuroxyanion)
 
-        ### 3.2 Analysis base line correction
+        ### 3.2 Linear regression
+        analysisLinReg = analysisMenu.addAction('Linear regression', self.linear_regression)
+
+        ### 3.3 Analysis base line correction
         analysisMenu.addAction('Baseline Correction', self.menu_baseline_als)
 
         self.show()
@@ -2676,8 +2683,8 @@ class PlotWindow(QMainWindow):
             # Calculate Errors and R square
             perr = np.sqrt(np.diag(pcov))
             residuals = y - self.functions.FctSumme(x, *popt)
-            ss_res = numpy.sum(residuals**2)
-            ss_tot = numpy.sum((y - numpy.mean(y))**2)
+            ss_res = np.sum(residuals**2)
+            ss_tot = np.sum((y - np.mean(y))**2)
             r_squared = 1 - (ss_res / ss_tot)
 
             # bring data into printable form
@@ -2833,10 +2840,13 @@ class PlotWindow(QMainWindow):
             self.blcSpektrum, = self.ax.plot(xb, yb, 'c-', label='baseline-corrected ({})'.format(name))
         self.fig.canvas.draw()
 
-    # Baseline correction 
-    # based on: "Baseline Correction with Asymmetric Least SquaresSmoothing" from Eilers and Boelens
-    # also look at: https://stackoverflow.com/questions/29156532/python-baseline-correction-library
     def baseline_als(self, x, y, p, lam):
+        '''
+        Baseline correction
+        based on: "Baseline Correction with Asymmetric Least SquaresSmoothing" from Eilers and Boelens
+        also look at: https://stackoverflow.com/questions/29156532/python-baseline-correction-library
+        '''
+
         niter = 10
         #p = 0.001   			#asymmetry 0.001 <= p <= 0.1 is a good choice     recommended from Eilers and Boelens for Raman: 0.001    recommended from Simon: 0.0001
         #lam = 10000000			#smoothness 10^2 <= lambda <= 10^9                     recommended from Eilers and Boelens for Raman: 10^7      recommended from Simon: 10^7
@@ -2854,16 +2864,52 @@ class PlotWindow(QMainWindow):
 #        self.blcSpektrum, = self.ax.plot(x, y, 'c-', label = 'baseline-corrected '+ self.selectedData[0][2])
 #        self.fig.canvas.draw()
         return x, y, z          #x - Raman Shift, y - background-corrected Intensity-values, z - background
-	
-    # Partially based on Christian's Mathematica Notebook
-    # Fitroutine for D and G bands in spectra of carbon compounds
+
+    def linear_regression(self):
+        self.SelectDataset()
+        for n in self.selectedDatasetNumber:
+            spct = self.spectrum[n]
+            xs = spct.get_xdata()
+            ys = spct.get_ydata()
+
+
+            x = xs[np.logical_not(np.isnan(ys))]
+            y = ys[np.logical_not(np.isnan(ys))]
+
+            popt, pcov = curve_fit(self.functions.LinearFct, x, y)
+
+            # Errors and R**2
+            perr = np.sqrt(np.diag(pcov))
+            residuals = y - self.functions.LinearFct(x, *popt)
+            ss_res = np.sum(residuals ** 2)
+            ss_tot = np.sum((y - np.mean(y)) ** 2)
+            r_squared = 1 - (ss_res / ss_tot)
+
+            # Plot determined linear function
+            x1 = np.linspace(min(x), max(x), 1000)
+            self.ax.plot(x1, self.functions.LinearFct(x1, *popt), '-r')
+            self.fig.canvas.draw()
+
+            # Print results
+            print('\n {}'.format(spct.get_label()))
+            print(r'R^2={:.4f}'.format(r_squared))
+            parmeter_name = ['Slope', 'y-Intercept']
+            print_param = []
+            for i in range(len(popt)):
+                print_param.append([parmeter_name[i], popt[i], perr[i]])
+            print(tabulate(print_param, headers=['Parameters', 'Values', 'Errors']))
+
     def fit_D_G(self):
+        '''
+        Partially based on Christian's Mathematica Notebook
+        Fitroutine for D and G bands in spectra of carbon compounds
+        '''
         # Select which data set will be fitted
         self.SelectDataset()
         #if self.selectedData == []:
         #    return
 
-        #Limits for Backgroundcorrection
+        # Limits for Backgroundcorrection
         x_min =  200
         x_max = 4000
 
@@ -2876,9 +2922,9 @@ class PlotWindow(QMainWindow):
         x_min_fit = 850
         x_max_fit = 2000
 
-        #Fitprocess
-        #D-Band: Lorentz
-        #G-Band: BreitWignerFano
+        # Fitprocess
+        # D-Band: Lorentz
+        # G-Band: BreitWignerFano
         self.n_fit_fct['Lorentz'] = 1   # number of Lorentzian
         self.n_fit_fct['Gauss']   = 0   # number of Gaussian
         self.n_fit_fct['Breit-Wigner-Fano']     = 1   # number of Breit-Wigner-Fano
