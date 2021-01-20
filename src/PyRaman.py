@@ -1217,21 +1217,22 @@ class Functions:
         '''linear Function'''
         return a*x + b
 
-    ### definition of Lorentzian for fit process ###
     def LorentzFct(self, x, xc, h, b):
+        ''' definition of Lorentzian for fit process '''
         return h/(1 + (2*(x - xc)/b)**2)
-        #return a2/pi*a1/((x-a0)*(x-a0)+a1*a1)
 
-    ### definition of Gaussian for fit process ###
     def GaussianFct(self, x, xc, h, b):
+        ''' definition of Gaussian for fit process '''
         return h*np.exp(-4*math.log(2)*((x - xc)/b)*((x-xc)/b))
-        #return a2*np.exp(-(x-a0)*(x-a0)/(2*a1*a1))
 
-    ### definition of Breit-Wigner-Fano fucntion for fit process ###
-    #(look e.g. "Interpretation of Raman spectra of disordered and amorphous carbon" von Ferrari und Robertson)
-    #Q is BWF coupling coefficient
-    #For Q^-1->0: the Lorentzian line is recovered
+
     def BreitWignerFct(self, x, xc, h, b, Q):
+        '''definition of Breit-Wigner-Fano fucntion for fit process
+
+        (look e.g. "Interpretation of Raman spectra of disordered and amorphous carbon" von Ferrari und Robertson)
+        Q is BWF coupling coefficient
+        For Q^-1->0: the Lorentzian line is recovered
+        '''
         return h*(1+2*(x-xc)/(Q*b))**2/(1+(2*(x-xc)/b)**2)
 
     ### Summing up the fit functions ###
