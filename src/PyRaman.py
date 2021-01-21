@@ -1177,11 +1177,15 @@ class SpreadSheet(QMainWindow):
         # check that x and y have same length to avoid problems later:
         # append Spreadsheet instance
         for j in self.plot_data:
+            # delete all values, which are nan
+            j[0] = j[0][np.logical_not(np.isnan(j[1]))]
+            j[1] = j[1][np.logical_not(np.isnan(j[1]))]
             if len(j[0]) == len(j[1]):
                 j.append(self.windowTitle())
             else:
                 self.mw.show_statusbar_message('X and Y have different lengths')
                 return
+
 
 
         # emit signal to MainWindow to create new Plotwindow or add lines to existing plotwindow
@@ -2454,10 +2458,13 @@ class PlotWindow(QMainWindow):
             self.spectrum[n].set_data(self.data[n][0], self.data[n][1])
             self.fig.canvas.draw()
             ### Save normalized data ###
-            (fileBaseName, fileExtension) = os.path.splitext(self.data[n][2])
-            startFileDirName = os.path.dirname(self.data[n][3])
-            startFileBaseName = startFileDirName + '/' + fileBaseName
-            startFileName = startFileBaseName + '_norm.txt'
+            if self.data[n][3] !=None:
+                (fileBaseName, fileExtension) = os.path.splitext(self.data[n][2])
+                startFileDirName = os.path.dirname(self.data[n][3])
+                startFileBaseName = startFileDirName + '/' + fileBaseName
+                startFileName = startFileBaseName + '_norm.txt'
+            else:
+                startFileName = None
             save_data = [self.data[n][0], self.data[n][1]]
             save_data = np.transpose(save_data)
             self.save_to_file('Save normalized data in file', startFileName, save_data)
@@ -2873,10 +2880,11 @@ class PlotWindow(QMainWindow):
             xs = spct.get_xdata()
             ys = spct.get_ydata()
 
-
+            # delete all values, which are nan
             x = xs[np.logical_not(np.isnan(ys))]
             y = ys[np.logical_not(np.isnan(ys))]
 
+            # Fit
             popt, pcov = curve_fit(self.functions.LinearFct, x, y)
 
             # Errors and R**2
@@ -2993,7 +3001,7 @@ class PlotWindow(QMainWindow):
             popt, pcov = curve_fit(self.functions.FctSumme, working_x, working_y, p0 = p_start, bounds = p_bounds, absolute_sigma = False)
 
             ### Plot the Fit Data ###
-            x1  = np.linspace(min(working_x), max(working_x), 3000)
+            x1 = np.linspace(min(working_x), max(working_x), 3000)
             y_L = []
             for j in range(aL):
                 y_L.append(np.array(popt[0] + self.functions.LorentzFct(x1, popt[1+3*j], popt[2+3*j], popt[3+3*j])))
@@ -3029,7 +3037,7 @@ class PlotWindow(QMainWindow):
             #F_L = syp.integrate(a0 + h/(1 + (2*(r - xc)/b)**2), (r, x_min, x_max))
             #F_L = syp.simplify(F_L)
             #F_L = syp.trigsimp(F_L)
-            F_L = (x_max-x_min)*a0 - b*h*syp.atan(2*(xc - x_max)/b)/2 + b*h*syp.atan(2*(xc - x_min)/b)/2
+            F_L = (x_max_fit - x_min_fit)*a0 - b*h*syp.atan(2*(xc - x_max_fit)/b)/2 + b*h*syp.atan(2*(xc - x_min_fit)/b)/2
             Flam_L = lambdify([a0, xc, h, b], F_L)
 
             #Anti-Derivative of Gaussian Function
@@ -3037,8 +3045,8 @@ class PlotWindow(QMainWindow):
             #F_G = syp.integrate(f_G, (r, xmin, xmax))
             #F_G = syp.simplify(F_G)
             #F_G = syp.trigsimp(F_G)
-            F_G = (4*a0*(x_max - x_min)*syp.sqrt(syp.log(2)) - syp.sqrt(syp.pi)*b*h*syp.erf(2*(xc - x_max)*syp.sqrt(syp.log(2))/b) +
-                  syp.sqrt(syp.pi)*b*h*syp.erf(2*(xc - x_min)*syp.sqrt(syp.log(2))/b))/(4*syp.sqrt(syp.log(2)))
+            F_G = (4*a0*(x_max_fit - x_min_fit)*syp.sqrt(syp.log(2)) - syp.sqrt(syp.pi)*b*h*syp.erf(2*(xc - x_max_fit)*syp.sqrt(syp.log(2))/b) +
+                  syp.sqrt(syp.pi)*b*h*syp.erf(2*(xc - x_min_fit)*syp.sqrt(syp.log(2))/b))/(4*syp.sqrt(syp.log(2)))
             Flam_G = lambdify([a0, xc, h, b], F_G)
 
             #Anti-Derivative of Breit-Wigner-Fano Function
@@ -3046,15 +3054,16 @@ class PlotWindow(QMainWindow):
             #F_B = syp.integrate(f_B, (r, x_min, x_max))
             #F_B = syp.simplify(F_B)
             #F_B = syp.trigsimp(F_B)
-            F_B = (Q*b*h*(syp.log(b**2/4 + xc**2 - 2*xc*x_max + x_max**2) - syp.log(b**2/4 + xc**2 - 2*xc*x_min + x_min**2)) -
-                  b*h*(Q - 1)*(Q + 1)*syp.atan(2*(xc - x_max)/b) + b*h*(Q - 1)*(Q + 1)*syp.atan(2*(xc - x_min)/b) + 2*x_max*(Q**2*a0 + h) - 2*x_min*(Q**2*a0 + h))/(2*Q**2)
+            F_B = (Q*b*h*(syp.log(b**2/4 + xc**2 - 2*xc*x_max_fit + x_max_fit**2) - syp.log(b**2/4 + xc**2 - 2*xc*x_min_fit + x_min_fit**2)) -
+                  b*h*(Q - 1)*(Q + 1)*syp.atan(2*(xc - x_max_fit)/b) + b*h*(Q - 1)*(Q + 1)*syp.atan(2*(xc - x_min_fit)/b) + 2*x_max_fit*(Q**2*a0 + h) - 2*x_min_fit*(Q**2*a0 + h))/(2*Q**2)
             Flam_B = lambdify([a0, xc, h, b, Q], F_B)
 
             #Peak Area
             I_L = []
             for j in range(aL):
                 I_L.append(Flam_L(popt[0], popt[1+3*j], popt[2+3*j], popt[3+3*j]))
-
+                print(I_L[j])
+                print(np.trapz(y_L[j], x1))
             I_G = []
             for j in range(aG):
                 I_G.append(Flam_G(popt[0], popt[1+3*aL+3*j], popt[2+3*aL+3*j], popt[3+3*aL+3*j]))
@@ -3062,6 +3071,8 @@ class PlotWindow(QMainWindow):
             I_BWF = []
             for j in range(aB):
                 I_BWF.append(Flam_B(popt[0], popt[4*j+3*aLG+1], popt[4*j+3*aLG+2], popt[4*j+3*aLG+3], popt[4*j+3*aLG+4]))
+                print(I_BWF[j])
+                print(np.trapz(y_BWF[j], x1))
 
             #Calculate partial derivates
             dF_La0 = syp.diff(F_L, a0)
