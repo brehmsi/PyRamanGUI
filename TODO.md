@@ -3,8 +3,7 @@
 - examples/01_example_basics 
 - doc/documentation.md  
 # Code
-- layer content function similar to origin
-- change save function from pickle to txt or dat
-- integrate sample database
+- make columns shiftable
+- create texteditor for insert text button
 - create database for spectrum with AI
 - debugging
