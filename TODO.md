@@ -5,5 +5,9 @@
 # Code
 - make columns shiftable
 - create texteditor for insert text button
+- subfolder 
+- make windows in sidebar shiftable within folder
 - create database for spectrum with AI
-- debugging
+- automatic peak detection
+- use automatic peak detection for get start values for peak fit
+
