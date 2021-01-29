@@ -2832,14 +2832,14 @@ class PlotWindow(QMainWindow):
             (fileBaseName, fileExtension) = os.path.splitext(name)
             startFileDirName = os.path.dirname(self.selectedData[0][3])
             startFileBaseName = startFileDirName + '/' + fileBaseName
-            startFileName = startFileBaseName + '_backgroundCorr.txt'
+            startFileName = startFileBaseName + '_bgc.txt'
             #save_data = [xb, yb, zb, x, y]
             save_data = [xb, yb]
             save_data = np.transpose(save_data)
             self.save_to_file('Save background-corrected data in file', startFileName, save_data)
 
             ### Append data ###
-            self.data.append([xb, yb, fileBaseName+'_backgroundCorr', startFileName, '-', 0])
+            self.data.append([xb, yb, '{}_bgc'.format(fileBaseName), startFileName, '-', 0])
 
             self.Dialog_BaselineParameter.close()
         else:
