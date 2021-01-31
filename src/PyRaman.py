@@ -10,7 +10,7 @@ import os
 import pickle
 import re
 import scipy
-import sympy as syp
+import sympy as sp
 import sys
 import time
 from datetime import datetime
@@ -31,13 +31,15 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QTableWidget, QVBoxLayou
     QMessageBox, QPushButton, QCheckBox, QTreeWidgetItem, QTableWidgetItem, QItemDelegate, 
     QLineEdit, QPushButton, QWidget, QMenu, QAction, QDialog, QFileDialog, QInputDialog, QAbstractItemView)
 from scipy import sparse
+from scipy import signal
 from scipy.optimize import curve_fit
 from scipy.sparse.linalg import spsolve
 from sympy.utilities.lambdify import lambdify
 from tabulate import tabulate
 
-import myfigureoptions  #see file 'myfigureoptions.py'
-import Database_Measurements #see file Database_Measurements
+# Import files
+import myfigureoptions          # see file 'myfigureoptions.py'
+import Database_Measurements    # see file Database_Measurements
 
 # This file essentially consists of three parts:
 # 1. Main Window
@@ -1333,11 +1335,12 @@ class MovingLines:
             self.fig.canvas.mpl_disconnect(self.cid3)
             self.fig.canvas.stop_event_loop(self)
 
-#idea: https://github.com/yuma-m/matplotlib-draggable-plot
+
 class LineDrawer:
     def __init__(self, arrow):
         '''
         Class to draw lines and arrows
+        idea: https://github.com/yuma-m/matplotlib-draggable-plot
 
         Parameters
         ----------
@@ -1555,24 +1558,28 @@ class InsertText:
 
 
 class DataPointPicker:
-    def __init__(self, line, selected, a):
-        # Creates a yellow dot around a selected data point
+    '''
+    Class to select a datapoint within the spectrum
+    '''
+    def __init__(self, line, a):
+        '''
+        Creates a yellow dot around a selected data point
+        '''
         self.xs = line.get_xdata()
         self.ys = line.get_ydata()
         self.line = line
-        self.selected = selected
-        self.lastind = a
-        self.controll_delete_parameter = True
-        self.selected.set_visible(True)
-        self.selected.figure.canvas.draw() 
+        self.fig = self.line.figure
+        self.idx = a
+        self.selected, = self.fig.axes[0].plot(self.xs[a], self.ys[a], 'o',
+                                               ms=12, alpha=0.4, color='yellow')  # Yellow point to mark selected Data points
+        self.fig.canvas.draw()
+        self.fig.canvas.setFocusPolicy(QtCore.Qt.ClickFocus)
+        self.fig.canvas.setFocus()
         
-        self.line.figure.canvas.setFocusPolicy(QtCore.Qt.ClickFocus)
-        self.line.figure.canvas.setFocus()
-        
-        self.cid1 = line.figure.canvas.mpl_connect('pick_event', self.onpick)
-        self.cid2 = line.figure.canvas.mpl_connect('key_press_event', self.onpress)
+        self.cid1 = self.fig.canvas.mpl_connect('pick_event', self.onpick)
+        self.cid2 = self.fig.canvas.mpl_connect('key_press_event', self.onpress)
 
-        line.figure.canvas.start_event_loop(timeout=10000)
+        self.fig.canvas.start_event_loop(timeout=10000)
 
     def onpick(self, event):
         N = len(event.ind)
@@ -1584,33 +1591,29 @@ class DataPointPicker:
         y = event.mouseevent.ydata
         distances = np.hypot(x - self.xs[event.ind], y - self.ys[event.ind])
         indmin = distances.argmin()
-        self.lastind = int(event.ind[indmin])
+        self.idx = int(event.ind[indmin])
 
-        self.selected.set_data(self.xs[self.lastind], self.ys[self.lastind])
+        self.selected.set_data(self.xs[self.idx], self.ys[self.idx])
         self.selected.set_visible(True)
-        self.selected.figure.canvas.draw()
+        self.fig.canvas.draw()
 
     def onpress(self, event):
         if event.key == 'enter':
-            self.line.figure.canvas.mpl_disconnect(self.cid1)
-            self.line.figure.canvas.mpl_disconnect(self.cid2)
-            self.line.figure.canvas.stop_event_loop(self)
+            self.fig.canvas.mpl_disconnect(self.cid1)
+            self.fig.canvas.mpl_disconnect(self.cid2)
+            self.fig.canvas.stop_event_loop(self)
+            self.selected.remove()
+            self.fig.canvas.draw()
             return
         elif event.key == 'right':
             inc = 1
         elif event.key == 'left':
-            inc = -1     
-        elif event.key == 'c':
-            self.controll_delete_parameter = False
-            self.line.figure.canvas.mpl_disconnect(self.cid1)
-            self.line.figure.canvas.mpl_disconnect(self.cid2)
-            self.line.figure.canvas.stop_event_loop(self)
-            return
+            inc = -1
         else:
             return
-        self.lastind += inc
-        self.selected.set_data(self.xs[self.lastind], self.ys[self.lastind])
-        self.selected.figure.canvas.draw()
+        self.idx += inc
+        self.selected.set_data(self.xs[self.idx], self.ys[self.idx])
+        self.fig.canvas.draw()
 
 
 class DataSetSelecter(QtWidgets.QDialog):
@@ -2239,31 +2242,32 @@ class PlotWindow(QMainWindow):
     ########## Bars (menubar, toolbar, statusbar) ##########
     def create_menubar(self):
         menubar = self.menuBar()
-        ### 1. menu item: File ###
+        # 1. menu item: File
         fileMenu = menubar.addMenu('&File')
         fileMenu.addAction('Save to File', self.menu_save_to_file)
 
-        ### 2. menu item: Edit  ###
+        # 2. menu item: Edit
         editMenu = menubar.addMenu('&Edit')
 
-        editMenu.addAction('Delete broken pixel - LabRam', self.delete_datapoint)
+        editMenu.addAction('Delete broken pixel - LabRam', self.del_broken_pixel)
 
-        editDeletePixel = editMenu.addAction('Delete single pixel', self.delete_pixel)
+        editDeletePixel = editMenu.addAction('Delete single datapoint', self.del_datapoint)
         editDeletePixel.setStatusTip('Delete selected data point with Enter, Move with arrow keys, Press c to leave Delete-Mode')
 
         editSelectArea = editMenu.addAction('Define data area', self.DefineArea)
         editSelectArea.setStatusTip('Move area limit with left mouse click, set it fix with right mouse click')        
 
-        editNormAct = editMenu.addAction('Normalize Spectrum', self.normalize)
-        editNormAct.setStatusTip('Normalizes highest peak to 1')
+        editNorm = editMenu.addMenu('Normalize spectrum regarding ...')
+        editNorm.setStatusTip('Normalizes highest peak to 1')
+        editNorm.addAction('... highest peak', self.normalize)
+        editNorm.addAction('... selected peak', lambda: self.normalize(select_peak=True))
 
         editAddSubAct = editMenu.addAction('Add up or subtract two spectra', self.add_subtract_spectra)
 
-
-        ### 3. menu: Analysis  ###
+        # 3. menu: Analysis
         analysisMenu = menubar.addMenu('&Analysis')
 
-        ### 3.1 Analysis Fit
+        # 3.1 Analysis Fit
         analysisFit = analysisMenu.addMenu('&Fit')
 
         analysisFitSingleFct = analysisFit.addMenu('&Single function')
@@ -2278,11 +2282,15 @@ class PlotWindow(QMainWindow):
         analysisRoutine.addAction('D und G Bande', self.fit_D_G)
         analysisRoutine.addAction('Sulfur oxyanion ratios', self.ratio_H2O_sulfuroxyanion)
 
-        ### 3.2 Linear regression
+        # 3.2 Linear regression
         analysisLinReg = analysisMenu.addAction('Linear regression', self.linear_regression)
 
-        ### 3.3 Analysis base line correction
+        # 3.3 Analysis base line correction
         analysisMenu.addAction('Baseline Correction', self.menu_baseline_als)
+
+        # 3.4 Analysis find peaks
+        analysisMenu.addAction('Find Peak', self.find_peaks)
+
 
         self.show()
 
@@ -2389,55 +2397,38 @@ class PlotWindow(QMainWindow):
             file.write(data)
             file.close()
 
-    def delete_pixel(self):
+    def del_datapoint(self):
         self.SelectDataset()
         for j in self.selectedDatasetNumber:
-            controll_delete_parameter = True
-            while controll_delete_parameter == True:
-                self.selectedPoint, = self.ax.plot(self.data[j][0][0], self.data[j][1][0], 'o', ms=12, alpha=0.4, color='yellow', visible=True)  #Yellow point to mark selected Data points
-                pickDP = DataPointPicker(self.spectrum[j], self.selectedPoint, 0)
-                a = pickDP.lastind
-                controll_delete_parameter = pickDP.controll_delete_parameter
-                self.selectedPoint.set_visible(False)
-                self.ax.figure.canvas.draw()
-                self.data[j][0] = np.delete(self.data[j][0], a)
-                self.data[j][1] = np.delete(self.data[j][1], a)
-                self.spectrum[j].set_data(self.data[j][0], self.data[j][1])
-                self.fig.canvas.draw()
-                controll_delete_parameter = pickDP.controll_delete_parameter
-            else:
-                self.setFocus()
-                return
+            pickDP = DataPointPicker(self.spectrum[j], 0)
+            idx = pickDP.idx
+            self.data[j][0] = np.delete(self.data[j][0], idx)
+            self.data[j][1] = np.delete(self.data[j][1], idx)
+            self.spectrum[j].set_data(self.data[j][0], self.data[j][1])
+            self.setFocus()
 
-    ### Deletes data point with number 630+n*957, because this pixel is broken in CCD detector of LabRam
-    def delete_datapoint(self):
+    def del_broken_pixel(self):
+        '''
+        Deletes data point with number 630+n*957, because this pixel is broken in CCD detector of LabRam
+        '''
         self.SelectDataset()
         for j in self.selectedDatasetNumber:
             a = 629
             grenze = 6
-            controll_delete_parameter = True        #Parameter to controll if data point should be deleted
-            self.mw.show_statusbar_message('Following data points of {} were deleted'.format(self.data[j][2]), 3000)
+            print('Following data points of {} were deleted'.format(self.data[j][2]))
             while a <= len(self.data[j][0]):
                 b = np.argmin(self.data[j][1][a-grenze:a+grenze])
                 if b == 0 or b == 12:
                     QMessageBox.about(self, "Title", 
-                        "Please select this data point manually (around %d in the data set %s)"%(self.data[j][0][a], self.data[j][2]))
-                    self.selectedPoint, = self.ax.plot(self.data[j][0][a], self.data[j][1][a], 'o', ms=12, alpha=0.4, color='yellow', visible=False)  #Yellow point to mark selected Data points
-                    pickDP = DataPointPicker(self.spectrum[j], self.selectedPoint, a)
-                    a = pickDP.lastind
-                    controll_delete_parameter = pickDP.controll_delete_parameter
-                    self.selectedPoint.set_visible(False)
-                    self.ax.figure.canvas.draw()     
+                        "Please select this data point manually (around {} in the data set {})".format(self.data[j][0][a], self.data[j][2]))
+                    pickDP = DataPointPicker(self.spectrum[j], a)
+                    a = pickDP.idx
                 else:
                     a = a + b - grenze
                 
-                if controll_delete_parameter == True:
-                    print(self.data[j][0][a], self.data[j][1][a])
-                    #self.table.removeRow(a)
-                    self.data[j][0] = np.delete(self.data[j][0], a)
-                    self.data[j][1] = np.delete(self.data[j][1], a)
-                else:
-                    pass
+                print(self.data[j][0][a], self.data[j][1][a])
+                self.data[j][0] = np.delete(self.data[j][0], a)
+                self.data[j][1] = np.delete(self.data[j][1], a)
                 a = a + 957
                   
             self.spectrum[j].set_data(self.data[j][0], self.data[j][1])
@@ -2451,13 +2442,22 @@ class PlotWindow(QMainWindow):
             save_data = np.transpose(save_data)
             self.save_to_file('Save data without deleted data points in file', startFileName, save_data)
 
-    def normalize(self):
+    def normalize(self, select_peak=False):
+        '''
+        normalize spectrum regarding to highest peak or regarding selected peak
+        '''
         self.SelectDataset()
         for n in self.selectedDatasetNumber:
-            self.data[n][1] = self.data[n][1]/numpy.amax(self.data[n][1])
+            norm_factor = numpy.amax(self.data[n][1])
+            if select_peak == True:
+                dpp = DataPointPicker(self.spectrum[n], np.where(self.data[n][1] == norm_factor))
+                idx = dpp.idx
+                norm_factor = self.data[n][1][idx]
+
+            self.data[n][1] = self.data[n][1]/norm_factor
             self.spectrum[n].set_data(self.data[n][0], self.data[n][1])
             self.fig.canvas.draw()
-            ### Save normalized data ###
+            # Save normalized data
             if self.data[n][3] !=None:
                 (fileBaseName, fileExtension) = os.path.splitext(self.data[n][2])
                 startFileDirName = os.path.dirname(self.data[n][3])
@@ -2758,6 +2758,18 @@ class PlotWindow(QMainWindow):
         self.ax.autoscale(True)
         return x_min, x_max
 
+    def find_peaks(self):
+        self.SelectDataset()
+        for n in self.selectedDatasetNumber:
+            x = self.data[n][0]
+            y = self.data[n][1]
+            y_max = max(y)
+
+            idx_peaks, properties = signal.find_peaks(y, height=0.3*y_max, width=5, distance=50)
+
+            print(x[idx_peaks])
+
+
     def menu_baseline_als(self):
         self.SelectDataset()
         x_min, x_max = self.SelectArea()
@@ -3031,31 +3043,31 @@ class PlotWindow(QMainWindow):
             r_squared = 1 - (ss_res / ss_tot)
         
             #### Calculate Peak-Areas and there Errors ####
-            r,a0,h,xc,b,Q = syp.symbols('r a0 h xc b Q', real=True)
+            r,a0,h,xc,b,Q = sp.symbols('r a0 h xc b Q', real=True)
 
             #Anti-Derivative of Lorentzian Function
-            #F_L = syp.integrate(a0 + h/(1 + (2*(r - xc)/b)**2), (r, x_min, x_max))
-            #F_L = syp.simplify(F_L)
-            #F_L = syp.trigsimp(F_L)
-            F_L = (x_max_fit - x_min_fit)*a0 - b*h*syp.atan(2*(xc - x_max_fit)/b)/2 + b*h*syp.atan(2*(xc - x_min_fit)/b)/2
+            #F_L = sp.integrate(a0 + h/(1 + (2*(r - xc)/b)**2), (r, x_min, x_max))
+            #F_L = sp.simplify(F_L)
+            #F_L = sp.trigsimp(F_L)
+            F_L = (x_max_fit - x_min_fit) * a0 - b * h * sp.atan(2 * (xc - x_max_fit) / b) / 2 + b * h * sp.atan(2 * (xc - x_min_fit) / b) / 2
             Flam_L = lambdify([a0, xc, h, b], F_L)
 
             #Anti-Derivative of Gaussian Function
-            #f_G = (a0 + h*syp.exp(-4*syp.log(2)*((r-xc)/b)*((r-xc)/b)))
-            #F_G = syp.integrate(f_G, (r, xmin, xmax))
-            #F_G = syp.simplify(F_G)
-            #F_G = syp.trigsimp(F_G)
-            F_G = (4*a0*(x_max_fit - x_min_fit)*syp.sqrt(syp.log(2)) - syp.sqrt(syp.pi)*b*h*syp.erf(2*(xc - x_max_fit)*syp.sqrt(syp.log(2))/b) +
-                  syp.sqrt(syp.pi)*b*h*syp.erf(2*(xc - x_min_fit)*syp.sqrt(syp.log(2))/b))/(4*syp.sqrt(syp.log(2)))
+            #f_G = (a0 + h*sp.exp(-4*sp.log(2)*((r-xc)/b)*((r-xc)/b)))
+            #F_G = sp.integrate(f_G, (r, xmin, xmax))
+            #F_G = sp.simplify(F_G)
+            #F_G = sp.trigsimp(F_G)
+            F_G = (4 * a0 * (x_max_fit - x_min_fit) * sp.sqrt(sp.log(2)) - sp.sqrt(sp.pi) * b * h * sp.erf(2 * (xc - x_max_fit) * sp.sqrt(sp.log(2)) / b) +
+                   sp.sqrt(sp.pi) * b * h * sp.erf(2 * (xc - x_min_fit) * sp.sqrt(sp.log(2)) / b)) / (4 * sp.sqrt(sp.log(2)))
             Flam_G = lambdify([a0, xc, h, b], F_G)
 
             #Anti-Derivative of Breit-Wigner-Fano Function
             #f_B = (a0 + BreitWignerFct(r, xc, h, b, Q))
-            #F_B = syp.integrate(f_B, (r, x_min, x_max))
-            #F_B = syp.simplify(F_B)
-            #F_B = syp.trigsimp(F_B)
-            F_B = (Q*b*h*(syp.log(b**2/4 + xc**2 - 2*xc*x_max_fit + x_max_fit**2) - syp.log(b**2/4 + xc**2 - 2*xc*x_min_fit + x_min_fit**2)) -
-                  b*h*(Q - 1)*(Q + 1)*syp.atan(2*(xc - x_max_fit)/b) + b*h*(Q - 1)*(Q + 1)*syp.atan(2*(xc - x_min_fit)/b) + 2*x_max_fit*(Q**2*a0 + h) - 2*x_min_fit*(Q**2*a0 + h))/(2*Q**2)
+            #F_B = sp.integrate(f_B, (r, x_min, x_max))
+            #F_B = sp.simplify(F_B)
+            #F_B = sp.trigsimp(F_B)
+            F_B = (Q * b * h * (sp.log(b ** 2 / 4 + xc ** 2 - 2 * xc * x_max_fit + x_max_fit ** 2) - sp.log(b ** 2 / 4 + xc ** 2 - 2 * xc * x_min_fit + x_min_fit ** 2)) -
+                   b * h * (Q - 1) * (Q + 1) * sp.atan(2 * (xc - x_max_fit) / b) + b * h * (Q - 1) * (Q + 1) * sp.atan(2 * (xc - x_min_fit) / b) + 2 * x_max_fit * (Q ** 2 * a0 + h) - 2 * x_min_fit * (Q ** 2 * a0 + h)) / (2 * Q ** 2)
             Flam_B = lambdify([a0, xc, h, b, Q], F_B)
 
             #Peak Area
@@ -3075,38 +3087,38 @@ class PlotWindow(QMainWindow):
                 print(np.trapz(y_BWF[j], x1))
 
             #Calculate partial derivates
-            dF_La0 = syp.diff(F_L, a0)
-            dF_Lh  = syp.diff(F_L, h)
-            dF_Lxc = syp.diff(F_L, xc)
-            dF_Lb  = syp.diff(F_L, b)
+            dF_La0 = sp.diff(F_L, a0)
+            dF_Lh  = sp.diff(F_L, h)
+            dF_Lxc = sp.diff(F_L, xc)
+            dF_Lb  = sp.diff(F_L, b)
 
-            dF_Ga0 = syp.diff(F_G, a0)
-            dF_Gh  = syp.diff(F_G, h)
-            dF_Gxc = syp.diff(F_G, xc)
-            dF_Gb  = syp.diff(F_G, b)
+            dF_Ga0 = sp.diff(F_G, a0)
+            dF_Gh  = sp.diff(F_G, h)
+            dF_Gxc = sp.diff(F_G, xc)
+            dF_Gb  = sp.diff(F_G, b)
 
-            dF_Ba0 = syp.diff(F_B, a0)
-            dF_Bh  = syp.diff(F_B, h)
-            dF_Bxc = syp.diff(F_B, xc)
-            dF_Bb  = syp.diff(F_B, b)
-            dF_BQ  = syp.diff(F_B, Q)
+            dF_Ba0 = sp.diff(F_B, a0)
+            dF_Bh  = sp.diff(F_B, h)
+            dF_Bxc = sp.diff(F_B, xc)
+            dF_Bb  = sp.diff(F_B, b)
+            dF_BQ  = sp.diff(F_B, Q)
 
             #Calculate Error of Peak Area with law of error propagation
-            da0,dh,dxc,db,dQ = syp.symbols('da0 dh dxc db dQ', real=True)
+            da0,dh,dxc,db,dQ = sp.symbols('da0 dh dxc db dQ', real=True)
 
-            DeltaF_L = syp.Abs(dF_La0)*da0 + syp.Abs(dF_Lh)*dh + syp.Abs(dF_Lxc)*dxc + syp.Abs(dF_Lb)*db
+            DeltaF_L = sp.Abs(dF_La0) * da0 + sp.Abs(dF_Lh) * dh + sp.Abs(dF_Lxc) * dxc + sp.Abs(dF_Lb) * db
             DeltaFlam_L = lambdify([a0, da0, xc, dxc, h, dh, b, db], DeltaF_L)
             I_L_err = []
             for j in range(aL):
                 I_L_err.append(DeltaFlam_L(popt[0], perr[0], popt[3*j+1], perr[3*j+1], popt[3*j+2], perr[3*j+2], popt[3*j+3], perr[3*j+3]))
 
-            DeltaF_G = syp.Abs(dF_Ga0)*da0 + syp.Abs(dF_Gh)*dh + syp.Abs(dF_Gxc)*dxc + syp.Abs(dF_Gb)*db
+            DeltaF_G = sp.Abs(dF_Ga0) * da0 + sp.Abs(dF_Gh) * dh + sp.Abs(dF_Gxc) * dxc + sp.Abs(dF_Gb) * db
             DeltaFlam_G = lambdify([a0, da0, xc, dxc, h, dh, b, db], DeltaF_G)
             I_G_err = []
             for j in range(aG):
                 I_G_err.append(DeltaFlam_G(popt[0], perr[0], popt[3*j+3*aL+1], perr[3*j+3*aL+1], popt[3*j+3*aL+2], perr[3*j+3*aL+2], popt[3*j+3*aL+3], perr[3*j+3*aL+3]))
 
-            DeltaF_B = syp.Abs(dF_Ba0)*da0 + syp.Abs(dF_Bh)*dh + syp.Abs(dF_Bxc)*dxc + syp.Abs(dF_Bb)*db + syp.Abs(dF_BQ)*dQ
+            DeltaF_B = sp.Abs(dF_Ba0) * da0 + sp.Abs(dF_Bh) * dh + sp.Abs(dF_Bxc) * dxc + sp.Abs(dF_Bb) * db + sp.Abs(dF_BQ) * dQ
             DeltaFlam_B = lambdify([a0, da0, xc, dxc, h, dh, b, db, Q, dQ], DeltaF_B)
             I_BWF_err = []
             for j in range(aB):
