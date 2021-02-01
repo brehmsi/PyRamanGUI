@@ -90,11 +90,11 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
             (default is None)
         '''
         super(RamanTreeWidget, self).__init__(parent)
+        self.setDragEnabled(True)
         self.setAcceptDrops(True)
         self.setHeaderHidden(True)
-        self.setDragEnabled(True)
         self.setDropIndicatorShown(True)
-        self.setDragDropMode(QAbstractItemView.InternalMove)
+        self.setDragDropMode(self.InternalMove)
         self.setSelectionMode(QAbstractItemView.SingleSelection)
 
     def mouseDoubleClickEvent(self, event):
@@ -142,15 +142,17 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
         ---------
         event : QDropEvent
         '''
+        event.setDropAction(Qt.MoveAction)
         itemAtDropLocation = self.itemAt(event.pos())
-        if itemAtDropLocation != None and itemAtDropLocation.type() == 0:
+
+        # send signal if parents (folder) of item changes during drag-drop-event
+        if itemAtDropLocation != None and itemAtDropLocation.parent() != self.dragged_item.parent():
             self.itemDropped.emit(self.dragged_item, itemAtDropLocation)
         else:
-            return
+           pass
 
         # keep the default behaviour
         super(RamanTreeWidget, self).dropEvent(event)
-
 
 class MainWindow(QMainWindow):
     '''
@@ -229,7 +231,9 @@ class MainWindow(QMainWindow):
             beepy.beep(sound=3)
 
     def keyPressEvent(self, event):
-        # A few shortcuts
+        '''
+        A few shortcuts
+        '''
         key = event.key()
         if key == (Qt.Key_Control and Qt.Key_S):
             self.save('Save')
@@ -407,11 +411,15 @@ class MainWindow(QMainWindow):
                     pass
 
     def change_folder(self, droppedItem, itemAtDropLocation):
-        foldername = itemAtDropLocation.text(0)
+        if itemAtDropLocation.parent() == None:
+            new_folder = itemAtDropLocation
+        else:
+            new_folder = itemAtDropLocation.parent()
+        foldername = new_folder.text(0)
         windowtyp = droppedItem.type()
         windowname = droppedItem.text(0)
         previous_folder = droppedItem.parent().text(0)
-        if itemAtDropLocation.type() == 0:            # dropevent in folder
+        if new_folder.type() == 0:            # dropevent in folder
             self.tabWidget.setCurrentWidget(self.folder[previous_folder][1])
             wind = self.window[self.windowtypes[windowtyp]][windowname]
             mdi = self.folder[foldername][1]
@@ -508,10 +516,10 @@ class MainWindow(QMainWindow):
         self.window[windowtype][title].show()
         self.windowNames[windowtype].append(title)
 
-        item = QTreeWidgetItem([title], type = windowtypeInt)
+        item = QTreeWidgetItem([title], type=windowtypeInt)
         item.setIcon(0, icon)
         item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable | Qt.ItemIsDragEnabled |
-                                         Qt.ItemIsUserCheckable | Qt.ItemNeverHasChildren)
+                                                       Qt.ItemIsUserCheckable)
 
         self.folder[foldername][0].addChild(item)
         self.window[windowtype][title].closeWindowSignal.connect(self.close_window)
