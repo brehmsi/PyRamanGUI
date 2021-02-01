@@ -6,7 +6,7 @@
 - make columns shiftable
 - create texteditor for insert text button
 - subfolder 
-- make windows in sidebar shiftable within folder
+- folder deletable
 - create database for spectrum with AI
 - automatic peak detection
 - use automatic peak detection for get start values for peak fit
