@@ -171,7 +171,8 @@ class MainWindow(QMainWindow):
         self.folder = {}                              # key = foldername, value = [Qtreewidgetitem, QmdiArea]
         self.FileName = os.path.dirname(__file__)     # path of this python file
         self.PyramanIcon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/PyRaman_logo.png")
-        self.pHomeRmn = None                         # path of Raman File associated to the open project
+        self.pHomeRmn = None                          # path of Raman File associated to the open project
+        self.db_measurements = None
 
         self.create_mainwindow()
 
@@ -356,12 +357,6 @@ class MainWindow(QMainWindow):
         self.db_measurements = Database_Measurements.DatabaseMeasurements()
         DBM_tab = self.tabWidget.addTab(self.db_measurements, self.PyramanIcon, title)
 
-    def close_tab(self, index):
-        if self.tabWidget.widget(index) == self.db_measurements:
-            self.tabWidget.removeTab(index)
-        else:
-            pass
-
     def create_sidetree_structure(self, structure):
         self.treeWidget.clear()
         for key, val in structure.items():
@@ -387,11 +382,19 @@ class MainWindow(QMainWindow):
                 text = item.text(0)
                 TreeItemMenu = QMenu()
                 ActRename = TreeItemMenu.addAction('Rename')
+                ActDelete = TreeItemMenu.addAction('Delete')
                 ac = TreeItemMenu.exec_(self.treeWidget.mapToGlobal(event.pos()))
                 # Rename
                 if ac == ActRename:
                     self.treeWidget.editItem(item)
                     self.treeWidget.itemChanged.connect(lambda item, column: self.rename_window(item, column, text))
+                if ac == ActDelete:
+                    if item.type() == 0:  # if item is folder:
+                        self.close_folder(foldername=item.text(0))
+                    else:
+                        windowtype = self.windowtypes[item.type()]
+                        title = item.text(0)
+                        self.windowWidget[windowtype][title].close()
         else:
             if event.button() == QtCore.Qt.RightButton:
                 TreeItemMenu = QMenu()
@@ -561,6 +564,34 @@ class MainWindow(QMainWindow):
 
         self.folder[items[0].parent().text(0)][0].removeChild(items[0])
         self.update_spreadsheet_menubar()
+
+    def close_folder(self, foldername):
+        # self.folder
+        # key = foldername, value = [Qtreewidgetitem, QmdiArea]
+
+        # Close all windows in the folder
+        self.folder[foldername][1].closeAllSubWindows()
+
+        # Close tab
+        idx = self.tabWidget.indexOf(self.folder[foldername][1])
+        self.tabWidget.removeTab(idx)
+
+        # Remove TreewidgetItem
+        root = self.treeWidget.invisibleRootItem()
+        root.removeChild(self.folder[foldername][0])
+
+        # delete dictionary entry in self.folder
+        del self.folder[foldername]
+
+
+    def close_tab(self, index):
+        if self.tabWidget.widget(index) == self.db_measurements:
+            self.tabWidget.removeTab(index)
+        else:
+            for key, val in self.folder.items():
+                if val[1] == self.tabWidget.widget(index):
+                    self.close_folder(key)
+                    break
 
     def update_spreadsheet_menubar(self):
         for j in self.window['Spreadsheet'].values():
