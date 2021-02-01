@@ -3,10 +3,9 @@
 - examples/01_example_basics 
 - doc/documentation.md  
 # Code
-- make columns shiftable
+- make columns shiftable in Spreadsheet
 - create texteditor for insert text button
 - subfolder 
-- folder deletable
 - create database for spectrum with AI
 - automatic peak detection
 - use automatic peak detection for get start values for peak fit
