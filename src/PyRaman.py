@@ -495,7 +495,7 @@ class MainWindow(QMainWindow):
             else:
                 pass
             windowtypeInt = 1
-            self.window[windowtype][title] = SpreadSheet(ssd, parent=self)
+            self.window[windowtype][title] = SpreadSheetWindow(ssd, parent=self)
             newSS = self.window[windowtype][title]
             newSS.new_pw_signal.connect(lambda: self.newWindow(None, 'Plotwindow', [newSS.plot_data, None], None))
             newSS.add_pw_signal.connect(lambda pw_name: self.add_Plot(pw_name, newSS.plot_data))
@@ -724,6 +724,7 @@ class SpreadSheetDelegate(QItemDelegate):
 class SpreadSheetItem(QTableWidgetItem):
     def __init__(self, siblings, wert):
         super(SpreadSheetItem, self).__init__()
+        self.setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable | Qt.ItemIsDragEnabled)
         self.siblings = siblings
         self.value = np.nan
         self.deps = set()
@@ -789,16 +790,25 @@ class SpreadSheetItem(QTableWidgetItem):
         self.propagate()
         return str(self.value)
 
-class SpreadSheet(QMainWindow):
+class RamanSpreadSheet(QTableWidget):
+    ''' A reimplementation of the QTableWidget'''
+    def __init__(self, *args, **kwargs):
+        super(RamanSpreadSheet, self).__init__(*args, **kwargs)
+        # self.setDragEnabled(True)
+        # self.setAcceptDrops(True)
+        # self.setDropIndicatorShown(True)
+        # self.setDragDropMode(self.InternalMove)
+
+class SpreadSheetWindow(QMainWindow):
     '''
     creating QMainWindow containing the spreadsheet
     '''
-    new_pw_signal   = QtCore.pyqtSignal()
-    add_pw_signal   = QtCore.pyqtSignal(str)
+    new_pw_signal = QtCore.pyqtSignal()
+    add_pw_signal = QtCore.pyqtSignal(str)
     closeWindowSignal = QtCore.pyqtSignal(str, str)
 
     def __init__(self, data, parent):
-        super(SpreadSheet, self).__init__(parent)
+        super(SpreadSheetWindow, self).__init__(parent)
         self.cells = {}
         self.d = data              # structure of data (dictionary) {'dataX with X = (0,1,2,..)' : actual data,'name of data', 'X, Y or Yerr', 'if loaded: filename')}
         self.mw = parent
@@ -812,8 +822,8 @@ class SpreadSheet(QMainWindow):
         self.create_row_header()
 
     def create_tablewidgets(self):        
-        self.table = QTableWidget(self.rows, self.cols, self)
-        ### fill the table items with data ###
+        self.table = RamanSpreadSheet(self.rows, self.cols, self)
+        # fill the table items with data
         self.table.setItemDelegate(SpreadSheetDelegate(self))
         for j in range(self.cols):
             for k in range(len(self.d['data%i'%j][0])):
@@ -825,7 +835,7 @@ class SpreadSheet(QMainWindow):
         self.table.itemChanged.connect(self.update_data)
 
     def create_menubar(self): 
-    # create the menubar               
+        '''create the menubar '''
         self.menubar = self.menuBar()
 
         ### 1. menu item: File ###
@@ -897,38 +907,29 @@ class SpreadSheet(QMainWindow):
         selected_column = self.headers.logicalIndexAt(position)
         header_menu = QMenu()
         delete_column = header_menu.addAction('Delete this column')
-        set_xy   = header_menu.addMenu('Set as:')
-        set_x    = set_xy.addAction('X')
-        set_y    = set_xy.addAction('Y')
-        set_yerr = set_xy.addAction('Yerr')
+        set_xy = header_menu.addMenu('Set as:')
+        set_xy.addAction('X')
+        set_xy.addAction('Y')
+        set_xy.addAction('Yerr')
+        set_xy.addAction('Opacity')
+        set_xy.triggered[QAction].connect(lambda QAction: self.set_column_type(QAction, selected_column))
         per_cm_to_nm = header_menu.addAction("cm^-1 to nm")
+        shift_column = header_menu.addMenu("Shift column to ...")
+        shift_column.addAction('left')
+        shift_column.addAction('right')
+        shift_column.triggered[QAction].connect(lambda QAction: self.shift_column(QAction, selected_column))
         ac = header_menu.exec_(self.table.mapToGlobal(position))
         # Delete selected colums
         if ac == delete_column:
             # Get the index of all selected columns in reverse order, so that last column is deleted first
-            selCol = sorted(set(index.column() for index in self.table.selectedIndexes()), reverse = True)      
+            selCol = sorted(set(index.column() for index in self.table.selectedIndexes()), reverse=True)
             for j in selCol:
-                del self.d['data%i'%j]                                                      # Delete data
+                del self.d['data{}'.format(j)]                                                      # Delete data
                 # Rename the remaining columns, so there is no gap in the numbering 
                 for k in range(j+1, self.cols):
-                    self.d['data%i'%(k-1)] = self.d.pop('data%i'%k)
+                    self.d['data{}'.format(k-1)] = self.d.pop('data{}'.format(k))
                 self.table.removeColumn(j)                                                  # Delete column
                 self.cols = self.cols - 1
-        if ac == set_x:
-            data_zs = self.d['data%i'%selected_column]
-            self.d.update({'data%i'%selected_column : [data_zs[0], data_zs[1], 'X', data_zs[3]]})
-            headers = [self.d[j][1] + '(' + self.d[j][2] + ')' for j in self.d.keys()]
-            self.table.setHorizontalHeaderLabels(headers)
-        if ac == set_y:
-            data_zs = self.d['data%i'%selected_column]
-            self.d.update({'data%i'%selected_column : [data_zs[0], data_zs[1], 'Y', data_zs[3]]})
-            headers = [self.d[j][1] + '(' + self.d[j][2] + ')' for j in self.d.keys()]
-            self.table.setHorizontalHeaderLabels(headers)
-        if ac == set_yerr:
-            data_zs = self.d['data%i'%selected_column]
-            self.d.update({'data%i'%selected_column : [data_zs[0], data_zs[1], 'Yerr', data_zs[3]]})
-            headers = [self.d[j][1] + '(' + self.d[j][2] + ')' for j in self.d.keys()]
-            self.table.setHorizontalHeaderLabels(headers)
         if ac == per_cm_to_nm:
             dialog_wavelength = QDialog()
             layout = QtWidgets.QGridLayout()
@@ -967,8 +968,25 @@ class SpreadSheet(QMainWindow):
                 self.table.setItem(k, selected_column+1, cell)
             self.d['data{}'.format(selected_column + 1)][0] = rs_nm
 
+    def set_column_type(self, qaction, selected_column):
+        col_type = qaction.text()
+        data_zs = self.d['data{}'.format(selected_column)]
+        self.d.update({'data{}'.format(selected_column): [data_zs[0], data_zs[1], col_type, data_zs[3]]})
+        headers = ['{}({})'.format(self.d[j][1], self.d[j][2]) for j in self.d.keys()]
+        self.table.setHorizontalHeaderLabels(headers)
+
+    def shift_column(self, qaction, selected_column):
+        idx = self.headers.visualIndex(selected_column)
+        if qaction.text() == 'left':
+            didx = -1
+        elif qaction.text() == 'right':
+            didx = 1
+        self.headers.moveSection(idx, idx+didx)
+        self.d['data{}'.format(idx)], self.d['data{}'.format(idx+didx)] = self.d['data{}'.format(idx+didx)], self.d['data{}'.format(idx)]
+
+
     def create_row_header(self):
-         ### opens header_menu with right mouse click###
+        '''opens header_menu with right mouse click on header'''
         self.row_headers = self.table.verticalHeader()
         self.row_headers.setContextMenuPolicy(Qt.CustomContextMenu)
         self.row_headers.customContextMenuRequested.connect(self.row_options)
@@ -982,18 +1000,18 @@ class SpreadSheet(QMainWindow):
         # Delete selected colums
         if ac == delete_row:
             # Get the index of all selected rows in reverse order, so that last row is deleted first
-            selRow = sorted(set(index.row() for index in self.table.selectedIndexes()), reverse = True)      
+            selRow = sorted(set(index.row() for index in self.table.selectedIndexes()), reverse=True)
             for j in range(self.cols):
                 for k in selRow:
-                    del self.d['data%i'%j][0][k]                                            # Delete data
+                    del self.d['data{}'.format(j)][0][k]                                            # Delete data
               
             for k in selRow:
                 self.table.removeRow(k)                                                  # Delete row
                 self.rows = self.rows - 1
             
     def keyPressEvent(self, event):
-    # A few shortcuts
-    # Enter or Return: go to the next row
+        # A few shortcuts
+        # Enter or Return: go to the next row
         key = event.key()
         if key == Qt.Key_Return or key == Qt.Key_Enter:
             # go to next row
@@ -1012,9 +1030,9 @@ class SpreadSheet(QMainWindow):
             selItem = [[index.row(), index.column()] for index in self.table.selectedIndexes()]
             for j in selItem:
                 self.table.takeItem(j[0], j[1])
-                self.d['data%i' % j[1]][0][j[0]] = np.nan
+                self.d['data{}'.format(j[1])][0][j[0]] = np.nan
         else:
-            super(SpreadSheet, self).keyPressEvent(event)
+            super(SpreadSheetWindow, self).keyPressEvent(event)
 
     def file_save(self):
         '''
@@ -1027,12 +1045,10 @@ class SpreadSheet(QMainWindow):
         else:
             return
 
-        #formattyp = '%.3f'
         data = [self.d['data0'][0]]
         for j in range(1, self.cols):
-            data.append(self.d['data%i'%j][0])
-            #formattyp = formattyp + '	%.3f'
-        
+            data.append(self.d['data{}'.format(j)][0])
+
         n = len(self.d['data0'][0])
         if all(len(x) == n for x in data):
             pass
@@ -1047,7 +1063,6 @@ class SpreadSheet(QMainWindow):
 
         self.pHomeTxt = SaveFileName
 
-        #np.savetxt(SaveFileName, data, fmt=formattyp)
         np.savetxt(SaveFileName, data, fmt='%.5f')
 
     def load_file(self):
@@ -1112,10 +1127,10 @@ class SpreadSheet(QMainWindow):
             FileName.append(os.path.splitext(os.path.basename(newFiles[j]))[0]) 
         for k in range(n_newFiles):
             for j in range(lines[k]):	
-                data_name = 'data%i'%(j+self.cols)			
+                data_name = 'data{}'.format(j+self.cols)
                 if j == 0:
                     if header[k] == None:   # if header is None, use Filename as header
-                        self.d.update({data_name : [data[k][j], str(FileName[k]), 'X', newFiles[k]]})
+                        self.d.update({data_name: [data[k][j], str(FileName[k]), 'X', newFiles[k]]})
                     else:
                         self.d.update({data_name: [data[k][j], header[k][j], 'X', newFiles[k]]})
                 else:
@@ -1134,7 +1149,7 @@ class SpreadSheet(QMainWindow):
         self.table.setHorizontalHeaderLabels(headers)
 
         for j in range(self.cols):
-            zwischenspeicher = self.d['data%i'%j][0]
+            zwischenspeicher = self.d['data{}'.format(j)][0]
             for k in range(len(zwischenspeicher)):
                 newcell = SpreadSheetItem(self.cells, zwischenspeicher[k])
                 self.cells[cellname(k, j)] = newcell
@@ -1171,11 +1186,12 @@ class SpreadSheet(QMainWindow):
             self.table.setItem(i, self.cols-1, cell)
                         
     def get_plot_data(self):
-        # get data from selected columns and prepares data for plot
+        ''' get data from selected columns and prepares data for plot '''
 
         self.plot_data = []     # [X-data, Y-data, label, file, yerr, plottype]  # in newer projected additional entry: self
 
-        selCol = sorted(set(index.column() for index in self.table.selectedIndexes()))  #selected Columns
+        # get visual index of selected columns in sorted order
+        selCol = sorted(set(self.headers.visualIndex(idx.column()) for idx in self.table.selectedIndexes()))
 
         # Decides if line or dot plot       
         action = self.sender()
@@ -1186,22 +1202,24 @@ class SpreadSheet(QMainWindow):
         else:
             plot_type = None        
 
+        # iterate over all selected columns
         for j in selCol:
-            if self.d['data%i'%j][2] != 'Y':
+            if self.d['data{}'.format(j)][2] != 'Y':
                 self.mw.show_statusbar_message('Please only select Y-columns!', 4000)
                 return
             else:
                 k = j-1
-                while k >=0:
-                    if self.d['data%i'%k][2] == 'X':
-                        self.plot_data.append([self.d['data%i'%k][0], self.d['data%i'%j][0], self.d['data%i'%j][1], self.d['data%i'%k][3], plot_type])
+                while k >= 0:
+                    if self.d['data{}'.format(k)][2] == 'X':
+                        self.plot_data.append([self.d['data{}'.format(k)][0], self.d['data{}'.format(j)][0],
+                                               self.d['data{}'.format(j)][1], self.d['data{}'.format(k)][3], plot_type])
                         m = j+1
                         while m <= self.cols:
                             if m == self.cols:
                                 yerr = 0
                                 m = self.cols+1
-                            elif self.d['data%i'%m][2] == 'Yerr':
-                                yerr = self.d['data%i'%m][0]
+                            elif self.d['data{}'.format(m)][2] == 'Yerr':
+                                yerr = self.d['data{}'.format(m)][0]
                                 m = self.cols+1
                             else:
                                 m = m+1
@@ -1226,8 +1244,6 @@ class SpreadSheet(QMainWindow):
             else:
                 self.mw.show_statusbar_message('X and Y have different lengths')
                 return
-
-
 
         # emit signal to MainWindow to create new Plotwindow or add lines to existing plotwindow
         if plot_type != None:
@@ -2240,7 +2256,7 @@ class PlotWindow(QMainWindow):
             self.ax.figure.canvas.draw()
         elif event.artist in self.spectrum and event.mouseevent.button == 3:
             self.lineDialog = QMenu()
-            self.lineDialog.addAction("Go to Spreadsheet",lambda: self.go_to_spreadsheet(event.artist))
+            self.lineDialog.addAction("Go to Spreadsheet", lambda: self.go_to_spreadsheet(event.artist))
             point = self.mapToGlobal(QtCore.QPoint(event.mouseevent.x, self.frameGeometry().height() - event.mouseevent.y))
             self.lineDialog.exec_(point)
         else:
