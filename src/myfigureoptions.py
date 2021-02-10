@@ -341,7 +341,9 @@ def figure_edit(axes, parent=None):
 
         axes.set_xlabel(xlabel)
         axes.xaxis.labelpad = xlabelpad
-        if xtickspace != None:
+        if xtickspace == 0:
+            axes.xaxis.set_ticks([])
+        elif xtickspace != None:
             xtick_space_start =  math.ceil(xlim_left / xtickspace) * xtickspace
             axes.xaxis.set_ticks(np.arange(xtick_space_start, xlim_right, xtickspace))
         axes.set_xlim(xlim_left, xlim_right)
@@ -350,8 +352,10 @@ def figure_edit(axes, parent=None):
 
         axes.set_ylabel(ylabel)
         axes.yaxis.labelpad = ylabelpad
-        if ytickspace != None:
-            ytick_space_start =  math.ceil(ylim_left / ytickspace) * ytickspace
+        if ytickspace == 0:
+            axes.yaxis.set_ticks([])
+        elif ytickspace != None:
+            ytick_space_start = math.ceil(ylim_left / ytickspace) * ytickspace
             axes.yaxis.set_ticks(np.arange(ytick_space_start, ylim_right, ytickspace))
         axes.set_ylim(ylim_left, ylim_right)
         axes.yaxis.label.set_size(labelsize)
