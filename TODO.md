@@ -3,7 +3,6 @@
 - examples/01_example_basics 
 - doc/documentation.md  
 # Code
-- make columns shiftable in Spreadsheet
 - create texteditor for insert text button
 - subfolder 
 - create database for spectrum with AI
