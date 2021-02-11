@@ -1221,6 +1221,9 @@ class SpreadSheetWindow(QMainWindow):
                             elif self.d['data{}'.format(m)][2] == 'Yerr':
                                 yerr = self.d['data{}'.format(m)][0]
                                 m = self.cols+1
+                            elif self.d['data{}'.format(m)][2] == 'Opacity':
+                                yerr = self.d['data{}'.format(m)][0]
+                                m = self.cols+1
                             else:
                                 m = m+1
                         self.plot_data[-1].append(yerr)
@@ -2144,7 +2147,15 @@ class PlotWindow(QMainWindow):
             layout.addWidget(self.Canvas)
 
             for j in self.data:
-                if isinstance(j[5], (np.ndarray, np.generic)):
+                if isinstance(j[5], (np.ndarray, np.generic)) and all(e == j[1][0] for e in j[1]):
+                    rgba_colors = np.zeros((len(j[5]), 4))
+                    rgba_colors[:, 3] = j[5]
+                    #print(rgba_colors)
+                    #for i in range(len(j[5])):
+                    #    self.ax.plot(j[0][i], j[1][i], j[4], alpha=j[5][i])
+
+                    self.spectrum.append(self.ax.scatter(j[0], j[1], label=j[2], picker=5, color=rgba_colors))
+                elif isinstance(j[5], (np.ndarray, np.generic)):
                     (spect, capline, barlinecol) = self.ax.errorbar(j[0], j[1], yerr=j[5], fmt=j[4],
                         picker=5, capsize=3)
                     self.spectrum.append(spect)
@@ -2153,10 +2164,10 @@ class PlotWindow(QMainWindow):
                     capline[1].set_label('_Hidden capline top ' + j[2])
                     barlinecol[0].set_label('_Hidden barlinecol ' + j[2])
                 else:
-                    self.spectrum.append(self.ax.plot(j[0], j[1], j[4], label = j[2], picker = 5)[0])
-            self.ax.legend(fontsize = legendfontsize)
-            self.ax.set_xlabel(r'Raman shift / cm$^{-1}$', fontsize = labelfontsize)
-            self.ax.set_ylabel(r'Intensity / cts/s', fontsize = labelfontsize)
+                    self.spectrum.append(self.ax.plot(j[0], j[1], j[4], label=j[2], picker=5)[0])
+            self.ax.legend(fontsize=legendfontsize)
+            self.ax.set_xlabel(r'Raman shift / cm$^{-1}$', fontsize=labelfontsize)
+            self.ax.set_ylabel(r'Intensity / cts/s', fontsize=labelfontsize)
             self.ax.xaxis.set_tick_params(labelsize=tickfontsize)
             self.ax.yaxis.set_tick_params(labelsize=tickfontsize)
         else:                       #loaded Plot
