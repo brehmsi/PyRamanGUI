@@ -34,6 +34,7 @@ from scipy import sparse
 from scipy import signal
 from scipy.optimize import curve_fit
 from scipy.sparse.linalg import spsolve
+from sklearn.linear_model import LinearRegression
 from sympy.utilities.lambdify import lambdify
 from tabulate import tabulate
 
@@ -776,7 +777,8 @@ class SpreadSheetItem(QTableWidgetItem):
             print('Bitte keine Buchstaben eingeben')
             self.value = self.wert
         except SyntaxError:
-            print('keine Ahnung was hier los ist')
+            pass
+            # print('keine Ahnung was hier los ist')
 
         self.reqs = currentreqs
 
@@ -826,8 +828,8 @@ class SpreadSheetWindow(QMainWindow):
         # fill the table items with data
         self.table.setItemDelegate(SpreadSheetDelegate(self))
         for j in range(self.cols):
-            for k in range(len(self.d['data%i'%j][0])):
-                cell = SpreadSheetItem(self.cells, self.d['data%i'%j][0][k])
+            for k in range(len(self.d['data{}'.format(j)][0])):
+                cell = SpreadSheetItem(self.cells, self.d['data{}'.format(j)][0][k])
                 self.cells[cellname(k, j)] = cell
                 self.table.setItem(k, j, cell)		
 
@@ -1240,9 +1242,11 @@ class SpreadSheetWindow(QMainWindow):
         # append Spreadsheet instance
         for j in self.plot_data:
             # delete all values, which are nan
-            j[0] = j[0][np.logical_not(np.isnan(j[1]))]
-            j[1] = j[1][np.logical_not(np.isnan(j[1]))]
             if len(j[0]) == len(j[1]):
+                j[0] = j[0][np.logical_not(np.isnan(j[0]))]
+                j[1] = j[1][np.logical_not(np.isnan(j[1]))]
+                j[0] = j[0][np.logical_not(np.isnan(j[1]))]
+                j[1] = j[1][np.logical_not(np.isnan(j[0]))]
                 j.append(self.windowTitle())
             else:
                 self.mw.show_statusbar_message('X and Y have different lengths')
@@ -1277,9 +1281,9 @@ class Functions:
     def __init__(self, pw):
         self.pw = pw
 
-    def LinearFct(self, x, a, b):
+    def LinearFct(self, x, a):
         '''linear Function'''
-        return a*x + b
+        return a*x #+ b
 
     def LorentzFct(self, x, xc, h, b):
         ''' definition of Lorentzian for fit process '''
@@ -2425,11 +2429,17 @@ class PlotWindow(QMainWindow):
 
     def SelectDataset(self, select_only_one=False):
         data_sets_name = []
+        self.selectedData = []
         for j in self.spectrum:
             data_sets_name.append(j.get_label())
-        DSS = DataSetSelecter(data_sets_name, select_only_one)
-        self.selectedData = []
-        self.selectedDatasetNumber = DSS.selectedDatasetNumber
+        if len(data_sets_name) == 0:
+            self.selectedDatasetNumber = []
+        elif len(data_sets_name) == 1:
+            self.selectedDatasetNumber = [0]
+        else:
+            DSS = DataSetSelecter(data_sets_name, select_only_one)
+            self.selectedDatasetNumber = DSS.selectedDatasetNumber
+
         for j in self.selectedDatasetNumber:
             self.selectedData.append(self.data[j])
 
