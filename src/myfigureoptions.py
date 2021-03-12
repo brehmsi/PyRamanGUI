@@ -23,6 +23,7 @@ from matplotlib.backends.qt_compat import QtGui
 
 number_of_axis = 0
 
+
 def get_icon(name):
     basedir = os.path.join(matplotlib.rcParams['datapath'], 'images')
     return QtGui.QIcon(os.path.join(basedir, name))
@@ -265,7 +266,7 @@ def figure_edit(axes, parent=None):
     for label in ebbarlinelabels:
         collection = ebbarlinedict[label]
         color = mcolors.to_hex(
-            mcolors.to_rgba(line.get_color(), line.get_alpha()),
+            mcolors.to_rgba(collection.get_color()[0], collection.get_alpha()),
             keep_alpha=True)
         barlinedata = [
               ('Line Width', collection.get_linewidth()[0]),
@@ -761,7 +762,7 @@ def figure_edit_brokenaxis(axes, parent = None):
         (xscale, xtickspace, *xlim,
             yscale, ylim_left, ylim_right, ytickspace) = axis_options
 
-        xlim_left  = []
+        xlim_left = []
         xlim_right = []
 
         for j in range(0, len(xlim), 2):
