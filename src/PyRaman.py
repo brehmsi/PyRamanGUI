@@ -1011,7 +1011,7 @@ class SpreadSheetWindow(QMainWindow):
     def row_options(self, position):
         selected_row = self.row_headers.logicalIndexAt(position)
         header_menu = QMenu()
-        delete_row = header_menu.addAction('Delete this row?')
+        delete_row = header_menu.addAction('Delete this row')
         ac = header_menu.exec_(self.table.mapToGlobal(position))
         # Delete selected colums
         if ac == delete_row:
@@ -1019,7 +1019,7 @@ class SpreadSheetWindow(QMainWindow):
             selRow = sorted(set(index.row() for index in self.table.selectedIndexes()), reverse=True)
             for j in range(self.cols):
                 for k in selRow:
-                    del self.d['data{}'.format(j)][0][k]  # Delete data
+                    self.d['data{}'.format(j)][0] = np.delete(self.d['data{}'.format(j)][0], k)  # Delete data
 
             for k in selRow:
                 self.table.removeRow(k)  # Delete row
@@ -1062,8 +1062,11 @@ class SpreadSheetWindow(QMainWindow):
             return
 
         data = [self.d['data0'][0]]
+        header = self.d['data0'][1]
         for j in range(1, self.cols):
             data.append(self.d['data{}'.format(j)][0])
+            header = '{}%{}'.format(header, self.d['data{}'.format(j)][1])
+        header = '{} '.format(header)
 
         n = len(self.d['data0'][0])
         if all(len(x) == n for x in data):
@@ -1079,7 +1082,7 @@ class SpreadSheetWindow(QMainWindow):
 
         self.pHomeTxt = SaveFileName
 
-        np.savetxt(SaveFileName, data, fmt='%.5f')
+        np.savetxt(SaveFileName, data, fmt='%.5f', header=header)
 
     def load_file(self):
         '''
@@ -1145,15 +1148,15 @@ class SpreadSheetWindow(QMainWindow):
             for j in range(lines[k]):
                 data_name = 'data{}'.format(j + self.cols)
                 if j == 0:
-                    if header[k] == None:  # if header is None, use Filename as header
-                        self.d.update({data_name: [data[k][j], str(FileName[k]), 'X', newFiles[k]]})
-                    else:
-                        self.d.update({data_name: [data[k][j], header[k][j], 'X', newFiles[k]]})
+                    col_type = 'X'
                 else:
-                    if header[k] == None:
-                        self.d.update({data_name: [data[k][j], str(FileName[k]), 'Y', newFiles[k]]})
-                    else:
-                        self.d.update({data_name: [data[k][j], header[k][j], 'Y', newFiles[k]]})
+                    col_type = 'Y'
+
+                if header[k] == None or len(header[k]) <= j:  # if header is None, use Filename as header
+                    self.d.update({data_name: [data[k][j], str(FileName[k]), col_type, newFiles[k]]})
+                else:
+                    self.d.update({data_name: [data[k][j], header[k][j], col_type, newFiles[k]]})
+
             self.cols = self.cols + lines[k]
 
         self.rows = max([len(self.d[j][0]) for j in self.d.keys()])
@@ -1263,7 +1266,7 @@ class SpreadSheetWindow(QMainWindow):
                 j[1] = j[1][np.logical_not(np.isnan(j[0]))]
                 j.append(self.windowTitle())
             else:
-                self.mw.show_statusbar_message('X and Y have different lengths')
+                self.mw.show_statusbar_message('X and Y have different lengths', 4000)
                 return
 
         # emit signal to MainWindow to create new Plotwindow or add lines to existing plotwindow
@@ -1297,9 +1300,9 @@ class Functions:
     def __init__(self, pw):
         self.pw = pw
 
-    def LinearFct(self, x, a):
+    def LinearFct(self, x, a, b):
         '''linear Function'''
-        return a * x  # + b
+        return a * x + b
 
     def LorentzFct(self, x, xc, h, b):
         ''' definition of Lorentzian for fit process '''
@@ -2179,9 +2182,9 @@ class PlotWindow(QMainWindow):
                                                                     picker=5, capsize=3)
                     self.spectrum.append(spect)
                     spect.set_label(j[2])
-                    capline[0].set_label('_Hidden capline bottom ' + j[2])
-                    capline[1].set_label('_Hidden capline top ' + j[2])
-                    barlinecol[0].set_label('_Hidden barlinecol ' + j[2])
+                    capline[0].set_label('_Hidden capline bottom' + spect.get_label())
+                    capline[1].set_label('_Hidden capline top ' + spect.get_label())
+                    barlinecol[0].set_label('_Hidden barlinecol ' + spect.get_label())
                 else:
                     self.spectrum.append(self.ax.plot(j[0], j[1], j[4], label=j[2], picker=5)[0])
             self.ax.legend(fontsize=legendfontsize)
@@ -2369,6 +2372,7 @@ class PlotWindow(QMainWindow):
         analysisRoutine = analysisMenu.addMenu('&Analysis routines')
         analysisRoutine.addAction('D und G Bande', self.fit_D_G)
         analysisRoutine.addAction('Sulfur oxyanion ratios', self.ratio_H2O_sulfuroxyanion)
+        analysisRoutine.addAction('Get m/I(G) (Hydrogen content)', self.hydrogen_estimation)
 
         # 3.2 Linear regression
         analysisLinReg = analysisMenu.addAction('Linear regression', self.linear_regression)
@@ -3019,6 +3023,46 @@ class PlotWindow(QMainWindow):
                 print_param.append([parmeter_name[i], popt[i], perr[i]])
             print(tabulate(print_param, headers=['Parameters', 'Values', 'Errors']))
 
+    def hydrogen_estimation(self):
+        '''
+        determine the slope of PL background in carbon spectra in order to estimate the hydrogen content compare with:
+        C. Casiraghi, A. C. Ferrari, J. Robertson, Physical Review B 2005, 72, 8 085401.
+        '''
+
+        self.SelectDataset()
+        x_min_1 = 600
+        x_max_1 = 900
+        x_min_2 = 1900
+        x_max_2 = 2300
+        for n in self.selectedDatasetNumber:
+            x = self.spectrum[n].get_xdata()
+            y = self.spectrum[n].get_ydata()
+
+            x1 = x[np.where((x > x_min_1) & (x < x_max_1))]
+            y1 = y[np.where((x > x_min_1) & (x < x_max_1))]
+            x2 = x[np.where((x > x_min_2) & (x < x_max_2))]
+            y2 = y[np.where((x > x_min_2) & (x < x_max_2))]
+            x = np.concatenate((x1, x2))
+            y = np.concatenate((y1, y2))
+
+            popt, pcov = curve_fit(self.functions.LinearFct, x, y)
+
+            # Plot determined linear function
+            x_plot = np.linspace(min(x), max(x), 1000)
+            self.ax.plot(x_plot, self.functions.LinearFct(x_plot, *popt), '-r')
+            self.fig.canvas.draw()
+
+            # get index of G peak
+            idx_G = np.argmax(y)
+
+            # calculate m/I(G):
+            mIG = popt[0]/y[idx_G]
+            if mIG > 0:
+                H_content = 21.7 + 16.6 * math.log(mIG*10**4)
+                print(mIG, H_content)
+            else:
+                print('negative slope')
+
     def fit_D_G(self):
         '''
         Partially based on Christian's Mathematica Notebook
@@ -3034,8 +3078,10 @@ class PlotWindow(QMainWindow):
         x_max = 4000
 
         # parameter for background-correction
-        p = 0.0001  # asymmetry 0.001 <= p <= 0.1 is a good choice     recommended from Eilers and Boelens for Raman: 0.001    recommended from Simon: 0.0001
-        lam = 10000000  # smoothness 10^2 <= lambda <= 10^9            recommended from Eilers and Boelens for Raman: 10^7     recommended from Simon: 10^7
+        p = 0.001 # asymmetry 0.001 <= p <= 0.1 is a good choice  recommended from Eilers and Boelens for Raman: 0.001
+                   # recommended from Simon: 0.0001
+        lam = 10000000 # smoothness 10^2 <= lambda <= 10^9         recommended from Eilers and Boelens for Raman: 10^7
+                       # recommended from Simon: 10^7
 
         # Limits for FitProcess
         # define fitarea
@@ -3045,9 +3091,9 @@ class PlotWindow(QMainWindow):
         # Fitprocess
         # D-Band: Lorentz
         # G-Band: BreitWignerFano
-        self.n_fit_fct['Lorentz'] = 1  # number of Lorentzian
-        self.n_fit_fct['Gauss'] = 0  # number of Gaussian
-        self.n_fit_fct['Breit-Wigner-Fano'] = 1  # number of Breit-Wigner-Fano
+        self.n_fit_fct['Lorentz'] = 0  # number of Lorentzian
+        self.n_fit_fct['Gauss'] = 5  # number of Gaussian
+        self.n_fit_fct['Breit-Wigner-Fano'] = 0  # number of Breit-Wigner-Fano
         aL = self.n_fit_fct['Lorentz']
         aG = self.n_fit_fct['Gauss']
         aB = self.n_fit_fct['Breit-Wigner-Fano']
@@ -3060,29 +3106,30 @@ class PlotWindow(QMainWindow):
         pBoundsUp = []
         inf = np.inf
 
-        pStart.append((1360, 80, 50))  # Lorentz (D-Bande)
+        pStart.append((1360, 80, 30))  # D-Bande
         pBoundsLow.append((1335, 0, 0))
-        pBoundsUp.append((1385, inf, inf))
+        pBoundsUp.append((1385, inf, 150))
 
-        # pStart.append((1165,   2,   5))         #Gaussian 0
-        # pBoundsLow.append((1150, 0, 0))
-        # pBoundsUp.append((1180, inf, inf))
-        # pStart.append((1238,   2,   5))         #Gaussian 1
-        # pBoundsLow.append((1223, 0, 0))
-        # pBoundsUp.append((1253, inf, inf))
-        # pStart.append((1435, 20, 80))           #Gaussian 2
-        # pBoundsLow.append((1420, 0, 0))
-        # pBoundsUp.append((1455, inf, inf))
-        pStart.append((1600, 200, 50, -10))  # Breit-Wigner-Fano
-        pBoundsLow.append((0, 0, 0, -inf))
-        pBoundsUp.append((inf, inf, inf, 0))
+        pStart.append((1600, 200, 30))  # G-Peak
+        pBoundsLow.append((1580, 0, 0))
+        pBoundsUp.append((1620, inf, inf))
+
+        pStart.append((1170,   2,   5))         # additional Peak (PA)
+        pBoundsLow.append((1150, 0, 0))
+        pBoundsUp.append((1190, inf, 150))
+        pStart.append((1240,   2,   5))         # additional Peak (PA)
+        pBoundsLow.append((1220, 0, 0))
+        pBoundsUp.append((1260, inf, 150))
+        pStart.append((1430, 2, 5))           # additional Peak (PA)
+        pBoundsLow.append((1410, 0, 0))
+        pBoundsUp.append((1460, inf, 150))
 
         p_start = []
         p_bounds_low = []
         p_bounds_up = []
         p_start.extend([0])
-        p_bounds_low.extend([-10])
-        p_bounds_up.extend([10])
+        p_bounds_low.extend([-0.05])
+        p_bounds_up.extend([0.05])
         for i in range(len(pStart)):
             p_start.extend(pStart[i])
             p_bounds_low.extend(pBoundsLow[i])
@@ -3182,25 +3229,6 @@ class PlotWindow(QMainWindow):
                            Q ** 2 * a0 + h)) / (2 * Q ** 2)
             Flam_B = lambdify([a0, xc, h, b, Q], F_B)
 
-            # Peak Area
-            I_L = []
-            for j in range(aL):
-                I_L.append(Flam_L(popt[0], popt[1 + 3 * j], popt[2 + 3 * j], popt[3 + 3 * j]))
-                print(I_L[j])
-                print(np.trapz(y_L[j], x1))
-            I_G = []
-            for j in range(aG):
-                I_G.append(
-                    Flam_G(popt[0], popt[1 + 3 * aL + 3 * j], popt[2 + 3 * aL + 3 * j], popt[3 + 3 * aL + 3 * j]))
-
-            I_BWF = []
-            for j in range(aB):
-                I_BWF.append(
-                    Flam_B(popt[0], popt[4 * j + 3 * aLG + 1], popt[4 * j + 3 * aLG + 2], popt[4 * j + 3 * aLG + 3],
-                           popt[4 * j + 3 * aLG + 4]))
-                print(I_BWF[j])
-                print(np.trapz(y_BWF[j], x1))
-
             # Calculate partial derivates
             dF_La0 = sp.diff(F_L, a0)
             dF_Lh = sp.diff(F_L, h)
@@ -3223,37 +3251,85 @@ class PlotWindow(QMainWindow):
 
             DeltaF_L = sp.Abs(dF_La0) * da0 + sp.Abs(dF_Lh) * dh + sp.Abs(dF_Lxc) * dxc + sp.Abs(dF_Lb) * db
             DeltaFlam_L = lambdify([a0, da0, xc, dxc, h, dh, b, db], DeltaF_L)
-            I_L_err = []
-            for j in range(aL):
-                I_L_err.append(
-                    DeltaFlam_L(popt[0], perr[0], popt[3 * j + 1], perr[3 * j + 1], popt[3 * j + 2], perr[3 * j + 2],
-                                popt[3 * j + 3], perr[3 * j + 3]))
-
             DeltaF_G = sp.Abs(dF_Ga0) * da0 + sp.Abs(dF_Gh) * dh + sp.Abs(dF_Gxc) * dxc + sp.Abs(dF_Gb) * db
             DeltaFlam_G = lambdify([a0, da0, xc, dxc, h, dh, b, db], DeltaF_G)
-            I_G_err = []
-            for j in range(aG):
-                I_G_err.append(DeltaFlam_G(popt[0], perr[0], popt[3 * j + 3 * aL + 1], perr[3 * j + 3 * aL + 1],
-                                           popt[3 * j + 3 * aL + 2], perr[3 * j + 3 * aL + 2], popt[3 * j + 3 * aL + 3],
-                                           perr[3 * j + 3 * aL + 3]))
-
             DeltaF_B = sp.Abs(dF_Ba0) * da0 + sp.Abs(dF_Bh) * dh + sp.Abs(dF_Bxc) * dxc + sp.Abs(dF_Bb) * db + sp.Abs(
                 dF_BQ) * dQ
             DeltaFlam_B = lambdify([a0, da0, xc, dxc, h, dh, b, db, Q, dQ], DeltaF_B)
+
+            # Peak Area
+            ID = 0
+            IG = 0
+            ID_err = 0
+            IG_err = 0
+
+            xD = 1350
+            xG = 1600
+            absxD = 1350
+            absxG = 1600
+
+            I_L = []
+            I_L_err = []
+            for j in range(aL):
+                I_L.append(Flam_L(popt[0], popt[1 + 3 * j], popt[2 + 3 * j], popt[3 + 3 * j]))
+                I_L_err.append(
+                    DeltaFlam_L(popt[0], perr[0], popt[3 * j + 1], perr[3 * j + 1], popt[3 * j + 2], perr[3 * j + 2],
+                                popt[3 * j + 3], perr[3 * j + 3]))
+                if np.abs(popt[1 + 3 * j] - xD) < absxD:
+                    ID = I_L[j]
+                    ID_err = I_L_err[j]
+                    absxD = np.abs(popt[1 + 3 * j] - xD)
+                elif np.abs(popt[1 + 3 * j] - xG) < absxG:
+                    IG = I_L[j]
+                    IG_err = I_L_err[j]
+                    absxG = np.abs(popt[1 + 3 * j] - xD)
+                else:
+                    pass
+
+            I_G = []
+            I_G_err = []
+            for j in range(aG):
+                I_G.append(
+                    Flam_G(popt[0], popt[1 + 3 * aL + 3 * j], popt[2 + 3 * aL + 3 * j], popt[3 + 3 * aL + 3 * j]))
+                I_G_err.append(DeltaFlam_G(popt[0], perr[0], popt[3 * j + 3 * aL + 1], perr[3 * j + 3 * aL + 1],
+                                           popt[3 * j + 3 * aL + 2], perr[3 * j + 3 * aL + 2], popt[3 * j + 3 * aL + 3],
+                                           perr[3 * j + 3 * aL + 3]))
+                if np.abs(popt[1 + 3 * aL + 3 * j] - xD) < absxD:
+                    ID = I_G[j]
+                    ID_err = I_G_err[j]
+                    absxD = np.abs(popt[1 + 3 * aL + 3 * j] - xD)
+                elif np.abs(popt[1 + 3 * aL + 3 * j] - xG) < absxG:
+                    IG = I_G[j]
+                    IG_err = I_G_err[j]
+                    absxG = np.abs(popt[1 + 3 * aL + 3 * j] - xD)
+                else:
+                    pass
+
+            I_BWF = []
             I_BWF_err = []
             for j in range(aB):
+                I_BWF.append(
+                    Flam_B(popt[0], popt[4 * j + 3 * aLG + 1], popt[4 * j + 3 * aLG + 2], popt[4 * j + 3 * aLG + 3],
+                           popt[4 * j + 3 * aLG + 4]))
                 I_BWF_err.append(DeltaFlam_B(popt[0], perr[0], popt[4 * j + 3 * aLG + 1], perr[4 * j + 3 * aLG + 1],
                                              popt[4 * j + 3 * aLG + 2], perr[4 * j + 3 * aLG + 2],
                                              popt[4 * j + 3 * aLG + 3], perr[4 * j + 3 * aLG + 3],
                                              popt[4 * j + 3 * aLG + 4], perr[4 * j + 3 * aLG + 4]))
+                if np.abs(popt[4 * j + 3 * aLG + 1] - xD) < absxD:
+                    ID = I_BWF[j]
+                    ID_err = I_BWF_err[j]
+                    absxD = np.abs(popt[4 * j + 3 * aLG + 1] - xD)
+                elif np.abs(popt[4 * j + 3 * aLG + 1] - xG) < absxG:
+                    IG = I_BWF[j]
+                    IG_err = I_BWF_err[j]
+                    absxG = np.abs(popt[4 * j + 3 * aLG + 1] - xD)
+                else:
+                    pass
 
             ### Estimate Cluster size ###
             # ID/IG = C(lambda)/L_a
             # mit C(514.5 nm) = 44 Angstrom
-            ID = I_L[0]
-            IG = I_BWF[0]
-            ID_err = I_L_err[0]
-            IG_err = I_BWF_err[0]
+
             L_a = 4.4 * IG / ID
             L_a_err = L_a * (ID_err / ID + IG_err / IG)
             ratio = ID / IG
@@ -3319,8 +3395,8 @@ class PlotWindow(QMainWindow):
             self.save_to_file('Save fit data in file', startFileName, save_data)
 
             ### Save background-corrected data ###
-            startFileName = startFileBaseName + '_backgroundCorr.txt'
-            save_data = [xb, yb, zb]
+            startFileName = startFileBaseName + '_bgc.txt'
+            save_data = [xb, yb]
             save_data = np.transpose(save_data)
             self.save_to_file('Save background-corrected data in file', startFileName, save_data)
 
