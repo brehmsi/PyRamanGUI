@@ -4,6 +4,7 @@
 - doc/documentation.md  
 # Code
 - create texteditor for insert text button
+- improve errorbar handling 
 - subfolder 
 - create database for spectrum with AI
 - automatic peak detection
