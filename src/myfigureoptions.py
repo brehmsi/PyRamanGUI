@@ -156,36 +156,27 @@ def figure_edit(axes, parent=None):
         else:
             return label, 0
 
-    # Get / Curves / errorbar capline
+    # Get / Curves
     linedict = {}
-    ebcaplinedict = {}          # capline of errorbar
     for line in axes.get_lines():
         label = line.get_label()
         if '_nolegend_' in label:
-            continue
-        elif label.split(' ', 1)[0] == '_Hidden':     # Errorbars
-            rest = label.split('_Hidden ', 1)[1]
-            ebcaplinedict[rest] = line
             continue
         else:
             pass
         linedict[label] = line
     curves = []
-    ebcaplines = []               # capline of errorbar
 
-    # Get / errorbar barline
-    ebbarlinedict = {}            # barline of errorbar
-    for collection in axes.collections:
-        label = collection.get_label()
-        if '_nolegend_' in label:
-            continue
-        elif label.split(' ', 1)[0] == '_Hidden':     # Errorbars
-            rest = label.split('_Hidden ', 1)[1]
-            ebbarlinedict[rest] = collection
-            continue
-        else:
-            pass
-    ebbarlines = []                 # barline of errorbar
+    errorbar_dict = {}
+    for container in axes.containers:
+        if type(container) == matplotlib.container.ErrorbarContainer:
+            label = container.get_label()
+            if label is not None:
+                name = label.split('_Hidden errorbar ', 1)[1]
+            else:
+                name = 'errorbar'
+            errorbar_dict[name] = container
+    errorbars = []
 
     def prepare_data(d, init):
         """Prepare entry for FormLayout.
@@ -212,7 +203,6 @@ def figure_edit(axes, parent=None):
         return ([canonical_init] +
                 sorted(short2name.items(),
                        key=lambda short_and_name: short_and_name[1]))
-
 
     curvelabels = sorted(linedict, key=cmp_key)
     for label in curvelabels:
@@ -247,33 +237,20 @@ def figure_edit(axes, parent=None):
     # Is there a curve displayed?
     has_curve = bool(curves)
 
-    # Errorbar capline
-    ebcaplinelabels = sorted(ebcaplinedict, key=cmp_key)
-    for label in ebcaplinelabels:
-        line = ebcaplinedict[label]
+    # Errorbar
+    errorbar_labels = sorted(errorbar_dict, key=cmp_key)
+    for label in errorbar_labels:
+        plotline, caplines, barlinecols = errorbar_dict[label]
         ec = mcolors.to_hex(
-            mcolors.to_rgba(line.get_markeredgecolor(), line.get_alpha()),
+            mcolors.to_rgba(caplines[0].get_markerfacecolor(), barlinecols[0].get_alpha()),
             keep_alpha=True)
-        caplinedata = [
-              ('Cap Size', line.get_markersize()),
-              ('Edge color (RGBA)', ec)]
-        ebcaplines.append([caplinedata, label, ""])
+        errorbar_data = [
+            ('Cap Size', caplines[0].get_markersize()),
+            ('Line Width', caplines[0].get_markeredgewidth()),
+            ('Edge color (RGBA)', ec)]
+        errorbars.append([errorbar_data, label, ""])
     # Is there a errorbar capline displayed?
-    has_ebcaplines = bool(ebcaplines)
-
-    # Errorbar barline
-    ebbarlinelabels = sorted(ebbarlinedict, key=cmp_key)
-    for label in ebbarlinelabels:
-        collection = ebbarlinedict[label]
-        color = mcolors.to_hex(
-            mcolors.to_rgba(collection.get_color()[0], collection.get_alpha()),
-            keep_alpha=True)
-        barlinedata = [
-              ('Line Width', collection.get_linewidth()[0]),
-              ('Color (RGBA)', color)]
-        ebbarlines.append([barlinedata, label, ""])
-    # Is there a errorbar barline displayed?
-    has_ebbarlines = bool(ebbarlines)
+    has_errorbar = bool(errorbars)
 
     # Get / Images
     imagedict = {}
@@ -308,10 +285,8 @@ def figure_edit(axes, parent=None):
         datalist.append((curves, "Curves", ""))
     if images:
         datalist.append((images, "Images", ""))
-    if ebcaplines:
-        datalist.append((ebcaplines, "Errorbar caplines", ""))
-    if ebbarlines:
-        datalist.append((ebbarlines, "Errorbar barlines", ""))
+    if errorbars:
+        datalist.append((errorbars, "Errorbar", ""))
 
     def apply_callback(data):
         """This function will be called to apply changes"""
@@ -322,8 +297,7 @@ def figure_edit(axes, parent=None):
         legend = data.pop(0)
         curves = data.pop(0) if has_curve else []
         images = data.pop(0) if has_image else []
-        ebcaplines = data.pop(0) if has_ebcaplines else []
-        ebbarlines = data.pop(0) if has_ebbarlines else []
+        ebcaplines = data.pop(0) if has_errorbar else []
         if data:
             raise ValueError("Unexpected field")
 
@@ -424,19 +398,21 @@ def figure_edit(axes, parent=None):
                     print(e)
 
         # Set / Errorbar Caplines
-        for index, capline in enumerate(ebcaplines):
-            line = ebcaplinedict[ebcaplinelabels[index]]
-            (markersize, markeredgecolor) = capline
-            line.set_markersize(markersize)
-            line.set_markerfacecolor(markerfacecolor)
-            line.set_markeredgecolor(markeredgecolor)
+        for index, params in enumerate(ebcaplines):
+            errorbar = errorbar_dict[errorbar_labels[index]]
+            plotline, caplines, barlinecols = errorbar
+            barlinecol = barlinecols[0]
+            (markersize, linewidth, color) = params
 
-        # Set / Errorbar Barlines
-        for index, barline in enumerate(ebbarlines):
-            collection = ebbarlinedict[ebbarlinelabels[index]]
-            (linewidth, color) = barline
-            collection.set_linewidth(linewidth)
-            collection.set_color(color)
+            errorbar.set_label('_Hidden errorbar {}'.format(plotline.get_label()))
+
+            for capline in caplines:
+                capline.set_markersize(markersize)
+                capline.set_markeredgewidth(linewidth)
+                capline.set_markerfacecolor(color)
+                capline.set_markeredgecolor(color)
+            barlinecol.set_linewidth(linewidth)
+            barlinecol.set_color(color)
 
         # Set / Images
         for index, image_settings in enumerate(images):
