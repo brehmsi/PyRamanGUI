@@ -382,9 +382,9 @@ class MainWindow(QMainWindow):
             win.showMaximized()
 
     def tree_window_options(self, event, item):
-        if item != None:
+        if item is not None:
             if event.button() == QtCore.Qt.RightButton:
-                text = item.text(0)
+                item_text = item.text(0)
                 TreeItemMenu = QMenu()
                 ActRename = TreeItemMenu.addAction('Rename')
                 ActDelete = TreeItemMenu.addAction('Delete')
@@ -392,7 +392,8 @@ class MainWindow(QMainWindow):
                 # Rename
                 if ac == ActRename:
                     self.treeWidget.editItem(item)
-                    self.treeWidget.itemChanged.connect(lambda item, column: self.rename_window(item, column, text))
+                    self.treeWidget.itemChanged.connect(lambda item, column:
+                                                        self.rename_window(item, column, item_text))
                 if ac == ActDelete:
                     if item.type() == 0:  # if item is folder:
                         self.close_folder(foldername=item.text(0))
@@ -1146,6 +1147,10 @@ class SpreadSheetWindow(QMainWindow):
                 print('{} \n probably the rows have different lengths'.format(e))
 
             data[j] = np.transpose(data[j])
+
+            if isinstance(data[j][0], float):
+                data[j] = [data[j], np.ones(len(data[j])) * np.nan]
+
             lines.append(len(data[j]))
             FileName.append(os.path.splitext(os.path.basename(newFiles[j]))[0])
         for k in range(n_newFiles):
@@ -1156,14 +1161,17 @@ class SpreadSheetWindow(QMainWindow):
                 else:
                     col_type = 'Y'
 
-                if header[k] == None or len(header[k]) <= j:  # if header is None, use Filename as header
+                if header[k] is None or len(header[k]) <= j:  # if header is None, use Filename as header
                     self.d.update({data_name: [data[k][j], str(FileName[k]), col_type, newFiles[k]]})
                 else:
                     self.d.update({data_name: [data[k][j], header[k][j], col_type, newFiles[k]]})
 
             self.cols = self.cols + lines[k]
 
-        self.rows = max([len(self.d[j][0]) for j in self.d.keys()])
+        if isinstance(self.d['data0'][0], float):
+            self.rows = len(self.d['data0'])
+        else:
+            self.rows = max([len(self.d[j][0]) for j in self.d.keys()])
 
         self.table.setColumnCount(self.cols)
         self.table.setRowCount(self.rows)
@@ -1307,32 +1315,32 @@ class SpreadSheetWindow(QMainWindow):
 ### 4. Plot
 #####################################################################################################################################################
 class Functions:
-    '''
+    """
     Fit functions
-    '''
+    """
 
     def __init__(self, pw):
         self.pw = pw
 
     def LinearFct(self, x, a, b):
-        '''linear Function'''
+        """ linear Function """
         return a * x + b
 
     def LorentzFct(self, x, xc, h, b):
-        ''' definition of Lorentzian for fit process '''
+        """ definition of Lorentzian for fit process """
         return h / (1 + (2 * (x - xc) / b) ** 2)
 
     def GaussianFct(self, x, xc, h, b):
-        ''' definition of Gaussian for fit process '''
+        """ definition of Gaussian for fit process """
         return h * np.exp(-4 * math.log(2) * ((x - xc) / b) * ((x - xc) / b))
 
     def BreitWignerFct(self, x, xc, h, b, Q):
-        '''definition of Breit-Wigner-Fano fucntion for fit process
+        """definition of Breit-Wigner-Fano fucntion for fit process
 
         (look e.g. "Interpretation of Raman spectra of disordered and amorphous carbon" von Ferrari und Robertson)
         Q is BWF coupling coefficient
         For Q^-1->0: the Lorentzian line is recovered
-        '''
+        """
         return h * (1 + 2 * (x - xc) / (Q * b)) ** 2 / (1 + (2 * (x - xc) / b) ** 2)
 
     ### Summing up the fit functions ###
@@ -3095,7 +3103,7 @@ class PlotWindow(QMainWindow):
         x_max = 4000
 
         # parameter for background-correction
-        p = 0.01 # asymmetry 0.001 <= p <= 0.1 is a good choice  recommended from Eilers and Boelens for Raman: 0.001
+        p = 0.001 # asymmetry 0.001 <= p <= 0.1 is a good choice  recommended from Eilers and Boelens for Raman: 0.001
                    # recommended from Simon: 0.0001
         lam = 10000000 # smoothness 10^2 <= lambda <= 10^9         recommended from Eilers and Boelens for Raman: 10^7
                        # recommended from Simon: 10^7
@@ -3138,8 +3146,8 @@ class PlotWindow(QMainWindow):
         pBoundsUp.append((1440, inf, 100))
 
         pStart.append((1600, 200, 30, -10))  # G-Peak (BWF)
-        pBoundsLow.append((1580, 0, 0, -inf))
-        pBoundsUp.append((1620, inf, inf, inf))
+        pBoundsLow.append((1575, 0, 0, -inf))
+        pBoundsUp.append((1630, inf, inf, inf))
 
         p_start = []
         p_bounds_low = []
@@ -3173,9 +3181,12 @@ class PlotWindow(QMainWindow):
             # limit data to fitarea
             working_x = xb[np.where((xb > x_min_fit) & (xb < x_max_fit))]
             working_y = yb[np.where((xb > x_min_fit) & (xb < x_max_fit))]
-
-            popt, pcov = curve_fit(self.functions.FctSumme, working_x, working_y, p0=p_start, bounds=p_bounds,
+            try:
+                popt, pcov = curve_fit(self.functions.FctSumme, working_x, working_y, p0=p_start, bounds=p_bounds,
                                    absolute_sigma=False)
+            except RuntimeError as e:
+                self.mw.show_statusbar_message(str(e), 4000)
+                continue
 
             ### Plot the Fit Data ###
             x1 = np.linspace(min(working_x), max(working_x), 3000)
@@ -3279,6 +3290,10 @@ class PlotWindow(QMainWindow):
             area_G = 0
             area_D_err = 0
             area_G_err = 0
+            pos_G = 1600
+            pos_G_err = 0
+            b_G = 0
+            q_G = 0
 
             I_D = 0
             I_G = 0
@@ -3305,6 +3320,10 @@ class PlotWindow(QMainWindow):
                     area_G_err = area_Lorentz_err[j]
                     absxG = np.abs(popt[1 + 3 * j] - xD)
                     I_G = popt[2 + 3 * j]
+                    pos_G = popt[1 + 3 * j]
+                    pos_G_err = perr[1 + 3 * j]
+                    b_G = popt[3 + 3 * j]
+                    q_G = popt[4 + 3 * j]
                 else:
                     pass
 
@@ -3326,6 +3345,8 @@ class PlotWindow(QMainWindow):
                     area_G_err = area_Gauss_err[j]
                     absxG = np.abs(popt[1 + 3 * aL + 3 * j] - xD)
                     I_G = popt[2 + 3 * aL + 3 * j]
+                    pos_G = popt[1 + 3 * aL + 3 * j]
+                    pos_G_err = perr[1 + 3 * aL + 3 * j]
                 else:
                     pass
 
@@ -3349,6 +3370,10 @@ class PlotWindow(QMainWindow):
                     area_G_err = area_BWF_err[j]
                     absxG = np.abs(popt[4 * j + 3 * aLG + 1] - xD)
                     I_G = popt[4 * j + 3 * aLG + 2]
+                    pos_G = popt[4 * j + 3 * aLG + 1]
+                    pos_G_err = perr[4 * j + 3 * aLG + 1]
+                    b_G = popt[4 * j + 3 * aLG + 3]
+                    q_G = popt[4 * j + 3 * aLG + 4]
                 else:
                     pass
 
@@ -3400,9 +3425,14 @@ class PlotWindow(QMainWindow):
 
             (fileBaseName, fileExtension) = os.path.splitext(self.spectrum[n].get_label())
             startFileDirName = os.path.dirname(self.selectedData[0][3])
-            file_cluster = open(startFileDirName + "/I_D-I_G.txt", "a")
+            file_cluster = open(startFileDirName + "/ID-IG.txt", "a")
             file_cluster.write('\n' + str(fileBaseName) + '   %.4f' % ratio + '   %.4f' % ratio_err)
             file_cluster.close()
+
+            pos_G_max = pos_G + b_G/(2*q_G)
+            file_GPosition = open(startFileDirName + "/G-Position.txt", "a")
+            file_GPosition.write('\n{} {:.4f}  {:.4f}'.format(fileBaseName, pos_G_max, 0.0))
+            file_GPosition.close()
 
             ### Save the fit parameter ###
             startFileBaseName = startFileDirName + '/' + fileBaseName
