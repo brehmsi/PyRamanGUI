@@ -224,6 +224,7 @@ def figure_edit(axes, parent=None):
             ('Draw style', prepare_data(DRAWSTYLES, line.get_drawstyle())),
             ('Width', line.get_linewidth()),
             ('Color (RGBA)', color),
+            ('Fill Area under curve', False),
             sep,
             (None, '<b>Marker</b>'),
             ('Style', prepare_data(MARKERS, line.get_marker())),
@@ -376,7 +377,7 @@ def figure_edit(axes, parent=None):
         # Set / Curves
         for index, curve in enumerate(curves):
             line = linedict[curvelabels[index]]
-            (label, linestyle, drawstyle, linewidth, color, marker, markersize,
+            (label, linestyle, drawstyle, linewidth, color, fill, marker, markersize,
              markerfacecolor, markeredgecolor, removeLine) = curve
             line.set_label(label)
             line.set_linestyle(linestyle)
@@ -390,6 +391,8 @@ def figure_edit(axes, parent=None):
                 line.set_markersize(markersize)
                 line.set_markerfacecolor(markerfacecolor)
                 line.set_markeredgecolor(markeredgecolor)
+            if fill == True:
+                axes.fill_between(line.get_xdata(), line.get_ydata(), color=color)
             if removeLine == True:
                 try:
                     parent.signal_remove_line.emit(line)
