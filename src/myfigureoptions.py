@@ -178,6 +178,20 @@ def figure_edit(axes, parent=None):
             errorbar_dict[name] = container
     errorbars = []
 
+    fill_dict = {}
+    for col in axes.collections:
+        if type(col) == matplotlib.collections.PolyCollection:
+            label = col.get_label()
+            if label is not None:
+                try:
+                    name = label.split('_Hidden Fill ', 1)[1]
+                except IndexError:
+                    name = label
+            else:
+                name = 'Fill'
+            fill_dict[name] = col
+    fills = []
+
     def prepare_data(d, init):
         """Prepare entry for FormLayout.
 
@@ -253,6 +267,21 @@ def figure_edit(axes, parent=None):
     # Is there a errorbar capline displayed?
     has_errorbar = bool(errorbars)
 
+    # Fill under curves
+    fill_labels = sorted(fill_dict, key=cmp_key)
+    for label in fill_labels:
+        fill = fill_dict[label]
+        fill_color = mcolors.to_hex(
+            fill.get_facecolor()[0],
+            keep_alpha=True)
+        fill_data = [
+            ('Color', fill_color),
+            sep,
+            sep,
+            ('Remove Fill', False)]
+        fills.append([fill_data, label, ""])
+    has_fills = bool(fills)
+
     # Get / Images
     imagedict = {}
     for image in axes.get_images():
@@ -280,14 +309,16 @@ def figure_edit(axes, parent=None):
         images.append([imagedata, label, ""])
     # Is there an image displayed?
     has_image = bool(images)
-    datalist = [(general, "Axes", ""), (legend, "Legend", "")]
 
+    datalist = [(general, "Axes", ""), (legend, "Legend", "")]
     if curves:
         datalist.append((curves, "Curves", ""))
     if images:
         datalist.append((images, "Images", ""))
     if errorbars:
         datalist.append((errorbars, "Errorbar", ""))
+    if fills:
+        datalist.append((fills, "Fill under curves", ""))
 
     def apply_callback(data):
         """This function will be called to apply changes"""
@@ -298,7 +329,8 @@ def figure_edit(axes, parent=None):
         legend = data.pop(0)
         curves = data.pop(0) if has_curve else []
         images = data.pop(0) if has_image else []
-        ebcaplines = data.pop(0) if has_errorbar else []
+        errorbars = data.pop(0) if has_errorbar else []
+        fills = data.pop(0) if has_fills else []
         if data:
             raise ValueError("Unexpected field")
 
@@ -377,8 +409,8 @@ def figure_edit(axes, parent=None):
         # Set / Curves
         for index, curve in enumerate(curves):
             line = linedict[curvelabels[index]]
-            (label, linestyle, drawstyle, linewidth, color, fill, marker, markersize,
-             markerfacecolor, markeredgecolor, removeLine) = curve
+            (label, linestyle, drawstyle, linewidth, color, create_fill, marker, markersize,
+             markerfacecolor, markeredgecolor, remove_line) = curve
             line.set_label(label)
             line.set_linestyle(linestyle)
             line.set_drawstyle(drawstyle)
@@ -391,9 +423,14 @@ def figure_edit(axes, parent=None):
                 line.set_markersize(markersize)
                 line.set_markerfacecolor(markerfacecolor)
                 line.set_markeredgecolor(markeredgecolor)
-            if fill == True:
-                axes.fill_between(line.get_xdata(), line.get_ydata(), color=color)
-            if removeLine == True:
+            if create_fill is True:
+                if line.get_label() in fill_dict.keys():
+                    pass
+                else:
+                    new_fill = axes.fill_between(line.get_xdata(), line.get_ydata(), color=color)
+                    new_fill.set_label('_Hidden Fill {}'.format(line.get_label()))
+                    fill_dict[line.get_label()] = new_fill
+            if remove_line is True:
                 try:
                     parent.signal_remove_line.emit(line)
                     line.remove()
@@ -401,7 +438,7 @@ def figure_edit(axes, parent=None):
                     print(e)
 
         # Set / Errorbar Caplines
-        for index, params in enumerate(ebcaplines):
+        for index, params in enumerate(errorbars):
             errorbar = errorbar_dict[errorbar_labels[index]]
             plotline, caplines, barlinecols = errorbar
             barlinecol = barlinecols[0]
@@ -416,6 +453,19 @@ def figure_edit(axes, parent=None):
                 capline.set_markeredgecolor(color)
             barlinecol.set_linewidth(linewidth)
             barlinecol.set_color(color)
+
+        # Set / Fill under Curves
+        for index, params in enumerate(fills):
+            fill = fill_dict[fill_labels[index]]
+            (face_color, remove_fill) = params
+
+            fill.set_facecolor(face_color)
+
+            if remove_fill == True:
+                try:
+                    fill.remove()
+                except ValueError as e:
+                    print(e)
 
         # Set / Images
         for index, image_settings in enumerate(images):
