@@ -1582,15 +1582,12 @@ class LineDrawer:
 
 
 class InsertText:
-    def __init__(self, text, mainwindow):
+    def __init__(self, text, main_window):
         self.text_annotation = text
-        self.mw = mainwindow
+        self.mw = main_window
         self.fig = self.text_annotation.figure
         if self.fig is None:
             return
-        self.create_connections()
-
-    def create_connections(self):
         self.cid1 = self.fig.canvas.mpl_connect('pick_event', self.on_pick)
 
     def on_pick(self, event):
@@ -1602,7 +1599,7 @@ class InsertText:
         elif event.artist == self.text_annotation and event.mouseevent.button == 3:
             self.text_options()
         else:
-            return
+            pass
 
     def edit(self):
         self.textbox = QtWidgets.QLineEdit()
@@ -2221,12 +2218,13 @@ class PlotWindow(QMainWindow):
             layout.addWidget(self.Canvas)
             for j in self.ax.lines:
                 self.spectrum.append(j)
+            it = []
             for j in self.ax.get_children():
                 if type(j) == mpatches.FancyArrowPatch:  # all drawn lines and arrows
                     self.drawn_line.append(LineDrawer(j))
-                elif type(j) == matplotlib.text.Annotation:  # all inserted texts
-                    it = InsertText(j, self.mw)
-                    self.inserted_text.append(it)
+                elif type(j) == matplotlib.text.Annotation and j not in it:  # all inserted texts
+                    it.append(j)
+                    self.inserted_text.append(InsertText(j, self.mw))
                 else:
                     pass
             self.ax.get_legend()
@@ -3530,6 +3528,10 @@ class PlotWindow(QMainWindow):
             self.spectrum[n] = ms.line
             self.data[n][1] = ms.y
 
+    def draw_line(self):
+        self.selected_points = []
+        self.pick_arrow_points_connection = self.fig.canvas.mpl_connect('button_press_event',
+                                                                        self.pick_points_for_arrow)
     def pick_points_for_arrow(self, event):
         self.selected_points.append([event.xdata, event.ydata])
         if len(self.selected_points) == 2:
@@ -3543,10 +3545,8 @@ class PlotWindow(QMainWindow):
             self.drawn_line.append(LineDrawer(arrow))
             self.fig.canvas.draw()
 
-    def draw_line(self):
-        self.selected_points = []
-        self.pick_arrow_points_connection = self.fig.canvas.mpl_connect('button_press_event',
-                                                                        self.pick_points_for_arrow)
+    def insert_text(self):
+        self.pick_text_point_connection = self.fig.canvas.mpl_connect('button_press_event', self.pick_point_for_text)
 
     def pick_point_for_text(self, event):
         pos = [event.xdata, event.ydata]
@@ -3556,9 +3556,6 @@ class PlotWindow(QMainWindow):
         self.ax.add_artist(text)
         self.fig.canvas.mpl_disconnect(self.pick_text_point_connection)
         self.fig.canvas.draw()
-
-    def insert_text(self):
-        self.pick_text_point_connection = self.fig.canvas.mpl_connect('button_press_event', self.pick_point_for_text)
 
     def closeEvent(self, event):
         close = QMessageBox()
