@@ -1534,7 +1534,8 @@ class LineDrawer:
                             ('-.', 'dashDot'),
                             (':', 'dotted'),
                             ('None', 'None')]),
-            ('Color', color)
+            ('Color', color),
+            ('Remove Line', False)
         ]
         arrowOptions = [
             ('Arrow Style', [current_style, '-', '<-', '->', '<->', '-|>']),
@@ -1560,7 +1561,7 @@ class LineDrawer:
         arrowOptions = selectedOptions[1]
         positionOptions = selectedOptions[2]
 
-        (width, linestyle, color) = lineOptions
+        (width, linestyle, color, remove_line) = lineOptions
         (arrowstyle, headlength, headwidth) = arrowOptions
         (xStart, yStart, xEnd, yEnd) = positionOptions
 
@@ -1578,6 +1579,9 @@ class LineDrawer:
         self.posB[1] = yEnd
         self.arrow.set_positions(self.posA, self.posB)
 
+        if remove_line is True:
+            self.arrow.remove()
+
         self.c.draw()
 
 
@@ -1586,9 +1590,9 @@ class InsertText:
         self.text_annotation = text
         self.mw = main_window
         self.fig = self.text_annotation.figure
-        if self.fig is None:
+        if self.fig is None or self.text_annotation is None:
             return
-        self.cid1 = self.fig.canvas.mpl_connect('pick_event', self.on_pick)
+        self.fig.canvas.mpl_connect('pick_event', self.on_pick)
 
     def on_pick(self, event):
         if event.artist == self.text_annotation and event.mouseevent.button == 1 and event.mouseevent.dblclick is True:
@@ -1636,6 +1640,7 @@ class InsertText:
         text_options_list = [
             ('Fontsize', self.text_annotation.get_fontsize()),
             ('Color', color),
+            ('Remove Text', False)
         ]
 
         text_option_menu = formlayout.fedit(text_options_list, title="Text options")
@@ -1643,10 +1648,12 @@ class InsertText:
             self.apply_callback(text_option_menu)
 
     def apply_callback(self, options):
-        (fontsize, color) = options
+        (fontsize, color, remove_text) = options
 
         self.text_annotation.set_fontsize(fontsize)
         self.text_annotation.set_color(color)
+        if remove_text is True:
+            self.text_annotation.remove()
         self.fig.canvas.draw()
 
 
@@ -3532,6 +3539,7 @@ class PlotWindow(QMainWindow):
         self.selected_points = []
         self.pick_arrow_points_connection = self.fig.canvas.mpl_connect('button_press_event',
                                                                         self.pick_points_for_arrow)
+
     def pick_points_for_arrow(self, event):
         self.selected_points.append([event.xdata, event.ydata])
         if len(self.selected_points) == 2:
@@ -3551,9 +3559,7 @@ class PlotWindow(QMainWindow):
     def pick_point_for_text(self, event):
         pos = [event.xdata, event.ydata]
         text = self.ax.annotate(r'''*''', pos, picker=5)
-        it = InsertText(text, self.mw)
-        self.inserted_text.append(it)
-        self.ax.add_artist(text)
+        self.inserted_text.append(InsertText(text, self.mw))
         self.fig.canvas.mpl_disconnect(self.pick_text_point_connection)
         self.fig.canvas.draw()
 
