@@ -2,8 +2,7 @@
 - examples/01_example_basics 
 - doc/documentation.md  
 # Code
-- create texteditor for insert text button
-- improve errorbar handling 
+- create texteditor for insert text button 
 - subfolder 
 - create database for spectrum with AI
 - automatic peak detection
