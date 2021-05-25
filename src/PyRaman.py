@@ -85,12 +85,12 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
     itemDropped = QtCore.pyqtSignal(object, object)
 
     def __init__(self, parent=None):
-        '''
+        """
         Parameters
         ----------
         parent : class, optional
             (default is None)
-        '''
+        """
         super(RamanTreeWidget, self).__init__(parent)
         self.setDragEnabled(True)
         self.setAcceptDrops(True)
@@ -100,11 +100,11 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
         self.setSelectionMode(QAbstractItemView.SingleSelection)
 
     def mouseDoubleClickEvent(self, event):
-        '''
+        """
         Parameters
         ----------
         event : QMouseEvent            #The mouse event.
-        '''
+        """
         item = self.itemAt(event.pos())
         if item != None:
             self.itemDoubleClicked.emit(item)
@@ -112,11 +112,11 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
             return
 
     def mousePressEvent(self, event):
-        '''
+        """
         Parameters
         ----------
         event : QMouseEvent           #The mouse event.
-        '''
+        """
         item = self.itemAt(event.pos())
         if item != None:
             self.setCurrentItem(item)
@@ -139,11 +139,11 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
         super(RamanTreeWidget, self).startDrag(action)
 
     def dropEvent(self, event):
-        '''
+        """
         Paramters
         ---------
         event : QDropEvent
-        '''
+        """
         event.setDropAction(Qt.MoveAction)
         itemAtDropLocation = self.itemAt(event.pos())
 
@@ -158,9 +158,9 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
 
 
 class MainWindow(QMainWindow):
-    '''
+    """
     Creating the main window
-    '''
+    """
 
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
@@ -181,7 +181,9 @@ class MainWindow(QMainWindow):
         self.create_mainwindow()
 
     def create_mainwindow(self):
-        """Create the main window"""
+        """
+        Create the main window
+        """
         self.setWindowIcon(self.PyramanIcon)
         self.setWindowTitle('PyRaman')  # set window title
 
@@ -237,9 +239,9 @@ class MainWindow(QMainWindow):
             beepy.beep(sound=3)
 
     def keyPressEvent(self, event):
-        '''
+        """
         A few shortcuts
-        '''
+        """
         key = event.key()
         if key == (Qt.Key_Control and Qt.Key_S):
             self.save('Save')
@@ -297,14 +299,14 @@ class MainWindow(QMainWindow):
                     self.new_window(foldername, val[0], val[1], key)
 
     def save(self, q):
-        '''
+        """
         function to save complete project in rmn-File with pickle
 
         Parameters:
         -----------
         q: str
 
-        '''
+        """
 
         # Ask for directory, if none is deposite or 'Save Project As' was pressed
         if self.pHomeRmn == None or q == 'Save As':
@@ -498,15 +500,17 @@ class MainWindow(QMainWindow):
 
         if windowtype == 'Spreadsheet':
             if windowcontent is None:
-                ssd = [{'data': np.full(9, np.nan), 'shortname': 'A', 'type': 'X', 'filename': None},
-                       {'data': np.full(9, np.nan), "shortname": 'B', "type": 'Y',
-                        "filename": None}]  # Spreadsheet- Data (for start only zeros)
+                ssd = [{'data': np.full(9, np.nan), 'shortname': 'A', 'type': 'X', 'filename': None, "longname": None,
+                        "unit": None, "comments": None, "formula": None},
+                       {'data': np.full(9, np.nan), "shortname": 'B', "type": 'Y', "filename": None, "longname": None,
+                        "unit": None, "comments": None, "formula": None}]  # Spreadsheet- Data (for start only zeros)
             else:
                 # change old data format to new format
                 if isinstance(windowcontent, dict):
                     ssd = []
                     for key, val in windowcontent.items():
-                        ssd.append({"data": val[0], "shortname": val[1], "type": val[2], "filename": val[3]})
+                        ssd.append({"data": val[0], "shortname": val[1], "type": val[2], "filename": val[3],
+                                    "longname": None, "unit": None, "comments": None, "formula": None})
                 else:
                     ssd = windowcontent
             windowtypeInt = 1
@@ -849,13 +853,6 @@ class Header(QTableWidget):
         hh = self.horizontalHeader()
         hh.sectionResized.connect(self.section_resized)
         hh.selectionModel().selectionChanged.connect(self.section_selected)
-        self.set_items()
-
-    def set_items(self):
-        for c in range(self.columnCount()):
-            for r in range(self.rowCount()):
-                self.setItem(r, c, QTableWidgetItem())
-                self.item(r, c).setBackground(QtGui.QColor(255, 255, 200))
 
     def section_resized(self, idx, old_size, new_size):
         self.p.data_table.setColumnWidth(idx, new_size)
@@ -878,8 +875,8 @@ class SpreadSheetWindow(QMainWindow):
         super(SpreadSheetWindow, self).__init__(parent)
         self.cells = {}
         # structure of self.d (dictionary):
-        # {'dataX with X = (0,1,2,..)' : actual data,'short name', 'X, Y or Yerr', 'if loaded: filename', 'Long Name',
-        # Unit, Comments)
+        # {'dataX with X = (0,1,2,..)' : data,'short name', 'X, Y or Yerr', if loaded: 'filename', 'Long Name',
+        # 'Unit', 'Comments')
         self.data = data
         self.mw = parent
         self.cols = len(self.data)  # number of columns
@@ -902,12 +899,13 @@ class SpreadSheetWindow(QMainWindow):
         # connect scrollbar from data table with header table
         self.data_table.horizontalScrollBar().valueChanged.connect(self.header_table.horizontalScrollBar().setValue)
 
-        self.create_tableitems()
+        self.create_table_items()
+        self.create_header_items()
         self.create_menubar()
         self.create_col_header()
         self.create_row_header()
 
-    def create_tableitems(self):
+    def create_table_items(self):
         """ fill the table items with data """
         self.data_table.setItemDelegate(SpreadSheetDelegate(self))
         for c in range(self.cols):
@@ -916,7 +914,15 @@ class SpreadSheetWindow(QMainWindow):
                 self.cells[cellname(r, c)] = cell
                 self.data_table.setItem(r, c, cell)
         self.data_table.itemChanged.connect(self.update_data)
-        # self.header_table.itemChanged.connect(self.update_header)
+
+    def create_header_items(self):
+        for c in range(self.header_table.columnCount()):
+            for r, key in enumerate(["longname", "unit", "comments", "formula"]):
+                item_text = self.data[c][key]
+                header_item = QTableWidgetItem(item_text)
+                header_item.setBackground(QtGui.QColor(255, 255, 200))
+                self.header_table.setItem(r, c, header_item)
+        self.header_table.itemChanged.connect(self.update_header)
 
     def create_menubar(self):
         """ create the menubar """
@@ -1124,9 +1130,9 @@ class SpreadSheetWindow(QMainWindow):
             super(SpreadSheetWindow, self).keyPressEvent(event)
 
     def file_save(self):
-        '''
+        """
         save data from spreadsheet in txt-file
-        '''
+        """
         SaveFileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Save File', self.pHomeTxt)
 
         if SaveFileName[0] != '':
@@ -1293,11 +1299,13 @@ class SpreadSheetWindow(QMainWindow):
         row = item.row()
 
         if row == 0:  # Long Name
-            self.data[col]['Long Name'] = content
+            self.data[col]["longname"] = content
         elif row == 1:  # Unit
-            self.data[col]["Unit"] = content
+            self.data[col]["unit"] = content
         elif row == 2:  # Comments
-            self.data[col]["Comment"] = content
+            self.data[col]["comments"] = content
+        elif row == 3: # F(x) =
+            self.data[col]["formula"] = content
         else:
             pass
 
