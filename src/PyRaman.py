@@ -900,7 +900,7 @@ class SpreadSheetWindow(QMainWindow):
         self.data_table.horizontalScrollBar().valueChanged.connect(self.header_table.horizontalScrollBar().setValue)
 
         self.create_table_items()
-        self.create_header_items()
+        self.create_header_items(start=0, end=self.cols)
         self.create_menubar()
         self.create_col_header()
         self.create_row_header()
@@ -915,12 +915,17 @@ class SpreadSheetWindow(QMainWindow):
                 self.data_table.setItem(r, c, cell)
         self.data_table.itemChanged.connect(self.update_data)
 
-    def create_header_items(self):
-        for c in range(self.header_table.columnCount()):
+    def create_header_items(self, start, end):
+        for c in range(start, end):
             for r, key in enumerate(["longname", "unit", "comments", "formula"]):
-                item_text = self.data[c][key]
+                try:
+                    item_text = self.data[c][key]
+                except KeyError:
+                    print(key, ": ERROOOORRR")
+                    item_text = None
+                    self.data[c][key] = None
                 header_item = QTableWidgetItem(item_text)
-                header_item.setBackground(QtGui.QColor(255, 255, 200))
+                header_item.setBackground(QtGui.QColor(255, 255, 200))      # color: light yellow
                 self.header_table.setItem(r, c, header_item)
         self.header_table.itemChanged.connect(self.update_header)
 
@@ -1006,7 +1011,10 @@ class SpreadSheetWindow(QMainWindow):
         set_xy.addAction('Yerr')
         set_xy.addAction('Opacity')
         set_xy.triggered[QAction].connect(lambda QAction: self.set_column_type(QAction, selected_column))
-        per_cm_to_nm = header_menu.addAction("cm^-1 to nm")
+        convert_unit = header_menu.addMenu("convert unit")
+        convert_unit.addAction("cm^-1 to nm")
+        convert_unit.addAction("nm to cm^-1")
+        convert_unit.triggered[QAction].connect(lambda QAction: self.convert_column_unit(QAction, selected_column))
         shift_column = header_menu.addMenu("Shift column to ...")
         shift_column.addAction('left')
         shift_column.addAction('right')
@@ -1018,51 +1026,47 @@ class SpreadSheetWindow(QMainWindow):
             selCol = sorted(set(index.column() for index in self.header_table.selectedIndexes()), reverse=True)
             for j in selCol:
                 del self.data[j]  # Delete data
-                # Rename the remaining columns, so there is no gap in the numbering 
-                # for k in range(j + 1, self.cols):
-                #    self.data['data{}'.format(k - 1)] = self.data.pop('data{}'.format(k))
                 self.data_table.removeColumn(j)  # Delete column
                 self.header_table.removeColumn(j)
                 self.cols = self.cols - 1
-        if ac == per_cm_to_nm:
-            dialog_wavelength = QDialog()
-            layout = QtWidgets.QGridLayout()
-            cbox = QtWidgets.QComboBox()
-            cbox.addItem("325")
-            cbox.addItem("442")
-            cbox.addItem("532")
-            cbox.addItem("633")
-            cbox.addItem("785")
-            layout.addWidget(cbox)
-            dialog_wavelength.setLayout(layout)
-            dialog_wavelength.setWindowTitle("Select a Wavelength")
-            dialog_wavelength.setWindowModality(Qt.ApplicationModal)
-            dialog_wavelength.exec_()
-            wl0 = float(cbox.currentText())
-            self.data_table.insertColumn(selected_column + 1)
-            self.header_table.insertColumn(selected_column + 1)
 
-            # Rename the data, so there is no gap in the numbering
-            for k in range(self.cols, selected_column + 1, -1):
-                self.data['data{}'.format(k)] = self.data.pop('data{}'.format(k - 1))
-            self.cols = self.cols + 1
-            self.data['data{}'.format(selected_column + 1)] = self.data['data{}'.format(selected_column)].copy()
-            self.data['data{}'.format(selected_column + 1)][0] = self.data['data{}'.format(selected_column)][0].copy()
-            # Rename
-            self.data['data{}'.format(selected_column + 1)][1] = '{} in nm'.format(
-                self.data['data{}'.format(selected_column + 1)][1])
-            self.data = dict(sorted(self.data.items()))
-            headers = ['{} ({})'.format(self.data[j][1], self.data[j][2]) for j in self.data.keys()]
-            self.header_table.setHorizontalHeaderLabels(headers)
-            rs_nm = []
-            for k in range(len(self.data['data{}'.format(selected_column + 1)][0])):
-                rs = self.data['data{}'.format(selected_column + 1)][0][k]
-                wl1 = wl0 / (1 - rs * 10 ** (-7) * wl0)
-                rs_nm.append(wl1)
-                cell = SpreadSheetItem(self.cells, wl1)
-                self.cells[cellname(k, selected_column + 1)] = cell
-                self.data_table.setItem(k, selected_column + 1, cell)
-            self.data['data{}'.format(selected_column + 1)][0] = rs_nm
+    def convert_column_unit(self, action, selected_column):
+        dialog_wavelength = QDialog()
+        layout = QtWidgets.QGridLayout()
+        cbox = QtWidgets.QComboBox()
+        cbox.addItem("325")
+        cbox.addItem("442")
+        cbox.addItem("532")
+        cbox.addItem("633")
+        cbox.addItem("785")
+        layout.addWidget(cbox)
+        dialog_wavelength.setLayout(layout)
+        dialog_wavelength.setWindowTitle("Select a Wavelength")
+        dialog_wavelength.setWindowModality(Qt.ApplicationModal)
+        dialog_wavelength.exec_()
+        wl0 = float(cbox.currentText())
+        if action.text() == "cm^-1 to nm":
+            # data
+            data_in_nm = self.data[selected_column]
+            data_in_nm["data"] = wl0 / (1 - data_in_nm["data"] * 10 ** (-7) * wl0)
+            data_in_nm["unit"] = "nm"
+            self.data.insert(selected_column + 1, data_in_nm)
+        elif action.text() == "nm to cm^-1":
+            data_per_cm = self.data[selected_column]
+            data_per_cm["data"] = (1 / wl0 - 1/data_per_cm["data"])*10**7
+            data_per_cm["unit"] = "cm-1"
+            self.data.insert(selected_column + 1, data_per_cm)
+
+        # table and header
+        self.data_table.insertColumn(selected_column + 1)
+        self.header_table.insertColumn(selected_column + 1)
+        for r in range(len(self.data[selected_column + 1]["data"])):
+            cell = SpreadSheetItem(self.cells, self.data[selected_column+1]["data"][r])
+            self.cells[cellname(r, selected_column + 1)] = cell
+            self.data_table.setItem(r, selected_column + 1, cell)
+        self.create_header_items(start=selected_column+1, end=selected_column+2)
+        headers = ['{} ({})'.format(d['shortname'], d["type"]) for d in self.data]
+        self.header_table.setHorizontalHeaderLabels(headers)
 
     def set_column_type(self, qaction, selected_column):
         col_type = qaction.text()
@@ -1121,11 +1125,11 @@ class SpreadSheetWindow(QMainWindow):
                 pass
             ti = self.data_table.item(cr + 1, cc)
             self.data_table.setCurrentItem(ti)
-        if key == Qt.Key_Delete:
-            selItem = [[index.row(), index.column()] for index in self.data_table.selectedIndexes()]
-            for j in selItem:
-                self.data_table.takeItem(j[0], j[1])
-                self.data[j[1]]["data"][j[0]] = np.nan
+        #if key == Qt.Key_Delete:
+        #    selItem = [[index.row(), index.column()] for index in self.data_table.selectedIndexes()]
+        #    for j in selItem:
+        #        self.data_table.takeItem(j[0], j[1])
+        #        self.data[j[1]]["data"][j[0]] = np.nan
         else:
             super(SpreadSheetWindow, self).keyPressEvent(event)
 
@@ -1186,7 +1190,7 @@ class SpreadSheetWindow(QMainWindow):
                 self.cols = 0
                 self.rows = 0
             elif returnValue == QMessageBox.No:  # Add
-                self.cols = self.cols
+                pass
             else:  # Cancel
                 return
         else:
@@ -1194,6 +1198,7 @@ class SpreadSheetWindow(QMainWindow):
             self.cols = 0
             self.rows = 0
 
+        cols_before = self.cols
         dialog = QFileDialog(self)
         dialog.setFileMode(QFileDialog.ExistingFiles)
         dialog.setNameFilter(("Data (*.txt)"))
@@ -1242,32 +1247,28 @@ class SpreadSheetWindow(QMainWindow):
 
                 if header[k] is None or len(header[k]) <= j:  # if header is None, use Filename as header
                     self.data.append({"data": load_data[k][j], "shortname": str(FileName[k]), "type": col_type,
-                                    "filename": newFiles[k]})
+                                      "filename": newFiles[k], "longname": None, "unit": None, "comments": None,
+                                      "formula": None})
                 else:
                     self.data.append({"data": load_data[k][j], "shortname": header[k][j], "type": col_type,
-                                    "filename": newFiles[k]})
+                                      "filename": newFiles[k], "longname": None, "unit": None, "comments": None,
+                                      "formula": None})
 
             self.cols = self.cols + lines[k]
 
-        if isinstance(self.data[0]["data"], float):
-            self.rows = len(self.data[0])
-        else:
-            self.rows = max([len(d["data"]) for d in self.data])
+        self.rows = max([len(d["data"]) for d in self.data])
 
         self.data_table.setColumnCount(self.cols)
         self.data_table.setRowCount(self.rows)
         self.header_table.setColumnCount(self.cols)
         self.header_table.setRowCount(4)
 
+        # set header
         headers = ['{} ({})'.format(d["shortname"], d["type"]) for d in self.data]
         self.header_table.setHorizontalHeaderLabels(headers)
-        # Color header cells in yellow
-        for c in range(self.cols):
-            for r in range(4):
-                self.header_table.setItem(r, c, QTableWidgetItem())
-                self.header_table.item(r, c).setBackground(QtGui.QColor(255, 255, 200))
+        self.create_header_items(cols_before, self.cols)
 
-        for c in range(self.cols):
+        for c in range(cols_before, self.cols):
             zwischenspeicher = self.data[c]["data"]
             for r in range(len(zwischenspeicher)):
                 newcell = SpreadSheetItem(self.cells, zwischenspeicher[r])
@@ -1277,7 +1278,7 @@ class SpreadSheetWindow(QMainWindow):
         self.pHomeTxt = FileName[0]
 
     def update_data(self, item):
-        # if content of spreadsheet cell is changed, data stored in variable self.d is also changed
+        # if content of spreadsheet cell is changed, data stored in variable self.data is also changed
         new_cell_content = item.text()
         col = item.column()
         row = item.row()
@@ -1298,13 +1299,13 @@ class SpreadSheetWindow(QMainWindow):
         col = item.column()
         row = item.row()
 
-        if row == 0:  # Long Name
+        if row == 0:    # Long Name
             self.data[col]["longname"] = content
         elif row == 1:  # Unit
             self.data[col]["unit"] = content
         elif row == 2:  # Comments
             self.data[col]["comments"] = content
-        elif row == 3: # F(x) =
+        elif row == 3:  # F(x) =
             self.data[col]["formula"] = content
         else:
             pass
