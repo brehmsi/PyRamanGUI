@@ -677,7 +677,10 @@ class TextWindow(QMainWindow):
             return
 
         file = open(fileName, 'w')
-        file.write(self.text)
+        try:
+            file.write(self.text)
+        except UnicodeEncodeError as e:
+            self.mw.show_statusbar_message(''.format(e), 4000)
         file.close()
 
     def load_file(self):
@@ -921,7 +924,7 @@ class SpreadSheetWindow(QMainWindow):
                 try:
                     item_text = self.data[c][key]
                 except KeyError:
-                    print(key, ": ERROOOORRR")
+                    print(self.data[c]["shortname"], key, ": ERROOOORRR")
                     item_text = None
                     self.data[c][key] = None
                 header_item = QTableWidgetItem(item_text)
