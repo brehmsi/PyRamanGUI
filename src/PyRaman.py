@@ -838,6 +838,7 @@ class Header(QTableWidget):
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.setFrameStyle(0)
+
         self.setSizePolicy(QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Minimum))
         self.setVerticalHeaderLabels(['Long Name', 'Unit', 'Comments', 'F(x)= (not working yet)'])
         hh = self.horizontalHeader()
@@ -881,10 +882,14 @@ class SpreadSheetWindow(QMainWindow):
         # Layout of tables
         self.main_layout = QtWidgets.QBoxLayout(QtWidgets.QBoxLayout.TopToBottom, self.central_widget)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout = QtWidgets.QHBoxLayout()
+        header_layout.addWidget(self.header_table)
+        header_layout.addSpacing(21)        # to level with vertical scrollbar from data table
         self.main_layout.setSpacing(0)
         self.main_layout.setAlignment(Qt.AlignTop)
-        self.main_layout.addWidget(self.header_table)
+        self.main_layout.addLayout(header_layout)
         self.main_layout.addWidget(self.data_table)
+
         self.setCentralWidget(self.central_widget)
 
         # connect scrollbar from data table with header table
@@ -1090,8 +1095,6 @@ class SpreadSheetWindow(QMainWindow):
         self.data[vis_col]["type"] = col_type
         self.header_table.horizontalHeaderItem(log_col).setText(
             "{}({})".format(self.data[vis_col]["shortname"], col_type))
-        #headers = ["{}({})".format(d["shortname"], d["type"]) for d in self.data]
-        #self.header_table.setHorizontalHeaderLabels(headers)
 
     def shift_column(self, qaction, selected_column):
         idx = self.headers.visualIndex(selected_column)
@@ -1522,12 +1525,12 @@ class LineBuilder:
 
 class MovingLines:
     def __init__(self, line, scaling=False):
-        '''
+        """
         Class to move lines
         Parameters
         ----------
         line: Line2D
-        '''
+        """
 
         self.line = line
         self.scaling = scaling
@@ -1582,14 +1585,14 @@ class MovingLines:
 
 class LineDrawer:
     def __init__(self, arrow):
-        '''
+        """
         Class to draw lines and arrows
         idea: https://github.com/yuma-m/matplotlib-draggable-plot
 
         Parameters
         ----------
         arrow: FancyArrowPatch
-        '''
+        """
         self.arrow = arrow
         self.fig = self.arrow.figure
         self.ax = self.fig.axes[0]
@@ -1792,14 +1795,14 @@ class InsertText:
 
 
 class DataPointPicker:
-    '''
+    """
     Class to select a datapoint within the spectrum
-    '''
+    """
 
     def __init__(self, line, a):
-        '''
+        """
         Creates a yellow dot around a selected data point
-        '''
+        """
         self.xs = line.get_xdata()
         self.ys = line.get_ydata()
         self.line = line
@@ -1853,16 +1856,16 @@ class DataPointPicker:
 
 
 class DataSetSelecter(QtWidgets.QDialog):
+    """
+    Select one or several datasets
+
+    Parameters
+    ----------
+    data_set_names           # names of all datasets
+    select_only_one          # if True only on Dataset can be selected
+    """
     def __init__(self, data_set_names, select_only_one=True):
         super(DataSetSelecter, self).__init__(parent=None)
-        '''
-        Select one or several datasets
-
-        Parameters
-        ----------
-        data_set_names           # names of all datasets
-        select_only_one          # if True only on Dataset can be selected
-        '''
         self.data_set_names = data_set_names
         self.select_only_one = select_only_one
         self.selectedDatasetNumber = []
@@ -1871,18 +1874,25 @@ class DataSetSelecter(QtWidgets.QDialog):
 
     def create_dialog(self):
         layout = QtWidgets.QGridLayout()
+        if self.select_only_one is False:
+            check_all = QCheckBox("Select all", self)
+            myFont = QtGui.QFont()
+            myFont.setBold(True)
+            check_all.setFont(myFont)
+            check_all.stateChanged.connect(self.select_all)
+            layout.addWidget(check_all, 0, 0)
 
         for idx, name in enumerate(self.data_set_names):
             self.CheckDataset.append(QCheckBox(name, self))
-            layout.addWidget(self.CheckDataset[idx], idx, 0)
+            layout.addWidget(self.CheckDataset[idx], idx+1, 0)
             if self.select_only_one is True:
                 self.CheckDataset[idx].stateChanged.connect(self.onStateChange)
 
-        ok_button = QPushButton("ok", self)
-        layout.addWidget(ok_button, len(self.data_set_names), 0)
+        ok_button = QPushButton("OK", self)
+        layout.addWidget(ok_button, len(self.data_set_names)+1, 0)
         ok_button.clicked.connect(self.Ok_button)
         self.setLayout(layout)
-        self.setWindowTitle("Dialog")
+        self.setWindowTitle("Select Dataset")
         self.exec_()
 
     @pyqtSlot(int)
@@ -1892,8 +1902,17 @@ class DataSetSelecter(QtWidgets.QDialog):
                 if self.sender() != j:
                     j.setChecked(False)
 
+    @pyqtSlot(int)
+    def select_all(self, state):
+        if state == Qt.Checked:
+            for cd in self.CheckDataset:
+                cd.setCheckState(Qt.Checked)
+        elif state == Qt.Unchecked:
+            for cd in self.CheckDataset:
+                cd.setCheckState(Qt.Unchecked)
+
     def Ok_button(self):
-        # OK Button for function SecetedDataset
+        """ OK Button for function SecetedDataset """
         for idx, d in enumerate(self.CheckDataset):
             if d.isChecked():
                 self.selectedDatasetNumber.append(idx)
