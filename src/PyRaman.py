@@ -257,7 +257,10 @@ class MainWindow(QMainWindow):
             new_MainWindow()
 
     def load(self):
-        # Load project from rmn file with pickle
+        """
+        Load project from rmn file with pickle
+        @return: None
+        """
         fileName = QtWidgets.QFileDialog.getOpenFileName(self, 'Load',  # get file name
                                                          self.pHomeRmn, 'All Files (*);;Raman Files (*.rmn)')
 
@@ -267,36 +270,17 @@ class MainWindow(QMainWindow):
             self.close()
             return
 
-        date_of_file = time.strftime('%Y-%m-%d', time.localtime(os.path.getmtime(self.pHomeRmn)))
-        datetime_of_file = datetime.strptime(date_of_file, '%Y-%m-%d')
-
         file = open(self.pHomeRmn, 'rb')  # open file and save content in variable 'v' with pickle
         v = pickle.load(file)
         file.close()
 
-        datetime_of_save_change = datetime(2020, 10, 2)
-        if datetime_of_file < datetime_of_save_change:
-            for key, val in v['Spreadsheet'].items():  # open all saved spreadsheets
-                # change old data format to new one
-                self.new_window(None, 'Spreadsheet', val, key)
-
-            for key, val in v['Plot-Window'].items():  # open all saved plotwindows
-                plot_data = val[0]
-                fig = val[1]
-                pwtitle = key
-                self.new_window(None, 'Plotwindow', [plot_data, fig], pwtitle)
-
-            if 'Text-Window' in v.keys():
-                for key, val in v['Text-Window'].items():
-                    self.new_window(None, 'Textwindow', val, key)
-        else:
-            self.treeWidget.clear()
-            self.tabWidget.clear()
-            self.folder = {}
-            for foldername, foldercontent in v.items():
-                self.new_Folder(foldername)
-                for key, val in foldercontent.items():
-                    self.new_window(foldername, val[0], val[1], key)
+        self.treeWidget.clear()
+        self.tabWidget.clear()
+        self.folder = {}
+        for foldername, foldercontent in v.items():
+            self.new_Folder(foldername)
+            for key, val in foldercontent.items():
+                self.new_window(foldername, val[0], val[1], key)
 
     def save(self, q):
         """
@@ -446,7 +430,7 @@ class MainWindow(QMainWindow):
     def delete_empty_subwindows(self, mdi):
         sub_win_list = mdi.subWindowList()
         for j in sub_win_list:
-            if j.widget() == None:
+            if j.widget() is None:
                 mdi.removeSubWindow(j)
 
     def rename_window(self, item, column, old_text):
@@ -522,6 +506,9 @@ class MainWindow(QMainWindow):
         elif windowtype == 'Plotwindow':
             windowtypeInt = 2
             plotData, fig = windowcontent
+            if fig is not None:
+                fig.set_size_inches([10, 10])   # necessary to avoid weird error:
+                                                # (ValueError: figure size must be positive finite not [ 4.58 -0.09])
             self.window[windowtype][title] = PlotWindow(plotData, fig, self)
             self.update_spreadsheet_menubar()
             icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/PlotWindow.png")
@@ -798,7 +785,7 @@ class SpreadSheetItem(QTableWidgetItem):
         try:
             self.value = eval(formula, {}, environment)
         except NameError:  # occurs if letters were typed in
-            print('Bitte keine Buchstaben eingeben')
+            print('Only numbers please')
             self.value = self.wert
         except SyntaxError:
             pass
@@ -888,6 +875,7 @@ class SpreadSheetWindow(QMainWindow):
 
         self.central_widget = QWidget()
         self.header_table = Header(4, self.cols, parent=self)  # table header
+        self.header_table.itemChanged.connect(self.header_changed)
         self.data_table = RamanSpreadSheet(self.rows, self.cols, parent=self)  # table widget
 
         # Layout of tables
@@ -928,9 +916,28 @@ class SpreadSheetWindow(QMainWindow):
                     item_text = None
                     self.data[c][key] = None
                 header_item = QTableWidgetItem(item_text)
-                header_item.setBackground(QtGui.QColor(255, 255, 200))      # color: light yellow
+                header_item.setBackground(QtGui.QColor(255, 255, 200))  # color: light yellow
                 self.header_table.setItem(r, c, header_item)
         self.header_table.itemChanged.connect(self.update_header)
+
+    def header_changed(self, item):
+        row = item.row()
+        col = item.column()
+        text = item.text()
+        if row == 3:
+            if text == "":
+                pass
+            elif text[0] == "=":
+                self.header_function(col, text)
+            else:
+                pass
+                # print(item.text())
+        else:
+            pass
+
+    def header_function(self, col, text):
+        if 'Col' in text:
+            print(col)
 
     def create_menubar(self):
         """ create the menubar """
@@ -978,31 +985,31 @@ class SpreadSheetWindow(QMainWindow):
         self.headerline.setHidden(True)  # Hide it till its needed
         self.sectionedit = 0
         self.header_table.horizontalHeader().sectionDoubleClicked.connect(self.rename_header)
-        self.headerline.editingFinished.connect(self.doneEditing)
 
-    def rename_header(self, column):
+    def rename_header(self, logical_column):
         # This block sets up the geometry for the line edit
         header_position = self.headers.mapToGlobal(QtCore.QPoint(0, 0))
         edit_geometry = self.headerline.geometry()
-        edit_geometry.setWidth(self.headers.sectionSize(column))
+        edit_geometry.setWidth(self.headers.sectionSize(logical_column))
         edit_geometry.setHeight(self.header_table.rowHeight(0))
-        edit_geometry.moveLeft(header_position.x() + self.headers.sectionViewportPosition(column))
+        edit_geometry.moveLeft(header_position.x() + self.headers.sectionViewportPosition(logical_column))
         edit_geometry.moveTop(header_position.y())
         self.headerline.setGeometry(edit_geometry)
+        visual_column = self.data_table.visualColumn(logical_column)
+        self.headerline.editingFinished.connect(lambda: self.header_editing_finished(logical_column, visual_column))
 
-        self.headerline.setText(self.data[column]['shortname'])
+        self.headerline.setText(self.data[visual_column]['shortname'])
         self.headerline.setHidden(False)  # Make it visiable
         self.headerline.setFocus()
-        self.sectionedit = column
 
-    def doneEditing(self):
+    def header_editing_finished(self, log_col, vis_col):
         self.headerline.setHidden(True)
         newHeader = str(self.headerline.text())
-        data_zs = self.data[self.sectionedit]
-        self.data[self.sectionedit] = {"data": data_zs['data'], "shortname": newHeader, "type": data_zs["type"],
-                                       "filename": data_zs['filename']}
-        self.header_table.horizontalHeaderItem(self.sectionedit).setText(
-            '{} ({})'.format(self.data[self.sectionedit]["shortname"], self.data[self.sectionedit]["type"]))
+        data_zs = self.data[vis_col]
+        self.data[vis_col] = {"data": data_zs['data'], "shortname": newHeader, "type": data_zs["type"],
+                              "filename": data_zs['filename']}
+        self.header_table.horizontalHeaderItem(log_col).setText(
+            '{} ({})'.format(self.data[vis_col]["shortname"], self.data[vis_col]["type"]))
 
     def show_header_context_menu(self, position):
         selected_column = self.headers.logicalIndexAt(position)
@@ -1056,7 +1063,7 @@ class SpreadSheetWindow(QMainWindow):
             self.data.insert(selected_column + 1, data_in_nm)
         elif action.text() == "nm to cm^-1":
             data_per_cm = self.data[selected_column]
-            data_per_cm["data"] = (1 / wl0 - 1/data_per_cm["data"])*10**7
+            data_per_cm["data"] = (1 / wl0 - 1 / data_per_cm["data"]) * 10 ** 7
             data_per_cm["unit"] = "cm-1"
             self.data.insert(selected_column + 1, data_per_cm)
 
@@ -1064,18 +1071,27 @@ class SpreadSheetWindow(QMainWindow):
         self.data_table.insertColumn(selected_column + 1)
         self.header_table.insertColumn(selected_column + 1)
         for r in range(len(self.data[selected_column + 1]["data"])):
-            cell = SpreadSheetItem(self.cells, self.data[selected_column+1]["data"][r])
+            cell = SpreadSheetItem(self.cells, self.data[selected_column + 1]["data"][r])
             self.cells[cellname(r, selected_column + 1)] = cell
             self.data_table.setItem(r, selected_column + 1, cell)
-        self.create_header_items(start=selected_column+1, end=selected_column+2)
+        self.create_header_items(start=selected_column + 1, end=selected_column + 2)
         headers = ['{} ({})'.format(d['shortname'], d["type"]) for d in self.data]
         self.header_table.setHorizontalHeaderLabels(headers)
 
-    def set_column_type(self, qaction, selected_column):
+    def set_column_type(self, qaction, log_col):
+        """
+        setting the column type to X, Y or Yerr
+        @param qaction:
+        @param log_col: logical index of selected column
+        @return:
+        """
         col_type = qaction.text()
-        self.data[selected_column]["type"] = col_type
-        headers = ["{}({})".format(d["shortname"], d["type"]) for d in self.data]
-        self.header_table.setHorizontalHeaderLabels(headers)
+        vis_col = self.header_table.visualColumn(log_col)
+        self.data[vis_col]["type"] = col_type
+        self.header_table.horizontalHeaderItem(log_col).setText(
+            "{}({})".format(self.data[vis_col]["shortname"], col_type))
+        #headers = ["{}({})".format(d["shortname"], d["type"]) for d in self.data]
+        #self.header_table.setHorizontalHeaderLabels(headers)
 
     def shift_column(self, qaction, selected_column):
         idx = self.headers.visualIndex(selected_column)
@@ -1128,7 +1144,7 @@ class SpreadSheetWindow(QMainWindow):
                 pass
             ti = self.data_table.item(cr + 1, cc)
             self.data_table.setCurrentItem(ti)
-        #if key == Qt.Key_Delete:
+        # if key == Qt.Key_Delete:
         #    selItem = [[index.row(), index.column()] for index in self.data_table.selectedIndexes()]
         #    for j in selItem:
         #        self.data_table.takeItem(j[0], j[1])
@@ -1283,7 +1299,7 @@ class SpreadSheetWindow(QMainWindow):
     def update_data(self, item):
         # if content of spreadsheet cell is changed, data stored in variable self.data is also changed
         new_cell_content = item.text()
-        col = item.column()
+        col = self.data_table.visualColumn(item.column())
         row = item.row()
         if new_cell_content == '':
             self.data_table.takeItem(row, col)
@@ -1297,12 +1313,12 @@ class SpreadSheetWindow(QMainWindow):
             self.data[col]["data"] = np.append(self.data[col]["data"], new_cell_content)
 
     def update_header(self, item):
-        """if header is changed, self.data is changed to"""
+        """if header is changed, self.data is changed too"""
         content = item.text()
         col = item.column()
         row = item.row()
 
-        if row == 0:    # Long Name
+        if row == 0:  # Long Name
             self.data[col]["longname"] = content
         elif row == 1:  # Unit
             self.data[col]["unit"] = content
@@ -1336,7 +1352,6 @@ class SpreadSheetWindow(QMainWindow):
         """ get data from selected columns and prepares data for plot """
 
         self.plot_data = []  # [X-data, Y-data, label, file, yerr, plottype]  # in newer projected additional entry: self
-
         # get visual index of selected columns in sorted order
         selCol = sorted(set(self.headers.visualIndex(idx.column()) for idx in self.header_table.selectedIndexes()))
 
@@ -1358,8 +1373,13 @@ class SpreadSheetWindow(QMainWindow):
                 k = c - 1
                 while k >= 0:
                     if self.data[k]["type"] == 'X':
+                        # label for plot legende
+                        if self.data[c]["longname"] is None or self.data[c]["longname"] == '':
+                            label = self.data[c]["shortname"]
+                        else:
+                            label = self.data[c]["longname"]
                         self.plot_data.append([self.data[k]["data"], self.data[c]["data"],
-                                          self.data[c]["shortname"], self.data[k]["filename"], plot_type])
+                                               label, self.data[c]["filename"], plot_type])
                         m = c + 1
                         while m <= self.cols:
                             if m == self.cols:
@@ -1389,21 +1409,22 @@ class SpreadSheetWindow(QMainWindow):
                 if all(x_bool) is False:
                     pd[0] = pd[0][x_bool]
                     pd[1] = pd[1][x_bool]
-                    if pd[5] is not None:
-                        pd[5] = pd[5][x_bool]
+                    # Error
+                    if pd[4] is not None:
+                        pd[4] = pd[4][x_bool]
 
                 y_bool = np.logical_not(np.isnan(pd[1]))
                 if all(y_bool) is False:
                     pd[0] = pd[0][y_bool]
                     pd[1] = pd[1][y_bool]
-                    if pd[5] is not None:
-                        pd[5] = pd[5][y_bool]
+                    # Error
+                    if pd[4] is not None:
+                        pd[4] = pd[4][y_bool]
 
                 pd.append(self.windowTitle())
             else:
                 self.mw.show_statusbar_message('X and Y have different lengths', 4000)
                 return
-
         # emit signal to MainWindow to create new Plotwindow or add lines to existing plotwindow
         if plot_type != None:
             self.new_pw_signal.emit()
@@ -2259,11 +2280,11 @@ class MyCustomToolbar(NavigationToolbar2QT):
 
 
 class PlotWindow(QMainWindow):
-    '''
+    """
     Parameters
     ----------
     plot_data: array    # [X-Data, Y-Data, label, ...]
-    '''
+    """
 
     closeWindowSignal = QtCore.pyqtSignal(str, str)  # Signal in case plotwindow is closed
 
@@ -2300,7 +2321,7 @@ class PlotWindow(QMainWindow):
         labelfontsize = 24
         tickfontsize = 18
 
-        if self.fig == None:  # new Plot
+        if self.fig is None:  # new Plot
             self.fig = Figure(figsize=(15, 9))
             self.ax = self.fig.add_subplot(111)
             self.Canvas = FigureCanvasQTAgg(self.fig)
@@ -2340,7 +2361,6 @@ class PlotWindow(QMainWindow):
         toolbar = MyCustomToolbar(self.Canvas)
         toolbar.signal_remove_line.connect(self.remove_line)
         self.addToolBar(toolbar)
-
         self.ax.get_legend().set_picker(5)
 
     def add_plot(self, new_data):
@@ -2375,10 +2395,10 @@ class PlotWindow(QMainWindow):
             pass
 
     def remove_line(self, line):
-        '''
+        """
         remove data from self.spectrum and self.data after line was removed
         in figureoptions
-        '''
+        """
         i = self.spectrum.index(line)
         self.data.pop(i)
         self.spectrum.pop(i)
@@ -2593,17 +2613,15 @@ class PlotWindow(QMainWindow):
 
     def menu_save_to_file(self):
         self.SelectDataset()
-        save_data = []
         for j in self.selectedData:
-            if j[3] != None:
+            if j[3] is not None:
                 startFileDirName = os.path.dirname(j[3])
                 startFileName = '{}/{}'.format(startFileDirName, j[2])
             else:
                 startFileName = None
-            save_data.append(j[0])
-            save_data.append(j[1])
-        save_data = np.transpose(save_data)
-        self.save_to_file('Save data selected data in file', startFileName, save_data)
+            save_data = [j[0], j[1]]
+            save_data = np.transpose(save_data)
+            self.save_to_file('Save data selected data in file', startFileName, save_data)
 
     def save_to_file(self, WindowName, startFileName, data):
         SaveFileName = QFileDialog.getSaveFileName(self, WindowName, startFileName, "All Files (*);;Text Files (*.txt)")
@@ -2670,9 +2688,9 @@ class PlotWindow(QMainWindow):
             self.save_to_file('Save data without deleted data points in file', startFileName, save_data)
 
     def normalize(self, select_peak=False):
-        '''
+        """
         normalize spectrum regarding to highest peak or regarding selected peak
-        '''
+        """
         self.SelectDataset()
         for n in self.selectedDatasetNumber:
             norm_factor = numpy.amax(self.data[n][1])
@@ -2697,9 +2715,9 @@ class PlotWindow(QMainWindow):
             self.save_to_file('Save normalized data in file', startFileName, save_data)
 
     def add_subtract_spectra(self):
-        '''
+        """
         function to add or subtract a spectrum from an other spectrum
-        '''
+        """
         self.dialog_add_sub = QDialog()
         vlayout = QtWidgets.QVBoxLayout()
         hlayout = QtWidgets.QHBoxLayout()
@@ -2925,22 +2943,30 @@ class PlotWindow(QMainWindow):
             r_squared = 1 - (ss_res / ss_tot)
 
             # bring data into printable form
-            print_table = [['Background', popt[0], perr[0]]]
-            print_table.append(['', '', ''])
+            print_table = [['Background', popt[0], perr[0]], ['', '', '']]
             a = 1
 
-            for key in self.n_fit_fct.keys():
-                for j in range(self.n_fit_fct[key]):
+            for key in self.n_fit_fct.keys():  # iterate over Lorentz, Gauss, BWF
+                for j in range(self.n_fit_fct[key]):  # iterate over used fit functions per L, G or BWF
                     print_table.append(['{} {}'.format(key, j + 1)])
                     print_table.append(['Raman Shift in cm-1', popt[a], perr[a]])
                     print_table.append(['Peak height in cps', popt[a + 1], perr[a + 1]])
                     print_table.append(['FWHM in cm-1', popt[a + 2], perr[a + 2]])
-                    if key != 'Breit-Wigner-Fano':
+                    if key == 'Lorentz':
+                        area = np.trapz(self.functions.LorentzFct(x, popt[a], popt[a + 1], popt[a + 2]), x)
                         a += 3
-                    else:
+                    elif key == 'Gauss':
+                        area = np.trapz(self.functions.GaussianFct(x, popt[a], popt[a + 1], popt[a + 2]), x)
+                        a += 3
+                    elif key == 'Breit-Wigner-Fano':
+                        area = np.trapz(
+                            self.functions.BreitWignerFct(x, popt[a], popt[a + 1], popt[a + 2], popt[a + 3]), x)
                         print_table.append(
                             ['BWF Coupling Coefficient', popt[a + 3], perr[a + 3]])
                         a += 4
+                    else:
+                        print('This is weird!')
+                    print_table.append(["Area under curve", area])
                     print_table.append(['', '', ''])
             print('\n {}'.format(self.spectrum[n].get_label()))
             print(r'R^2={:.4f}'.format(r_squared))
@@ -3093,11 +3119,11 @@ class PlotWindow(QMainWindow):
         self.fig.canvas.draw()
 
     def baseline_als(self, x, y, p, lam):
-        '''
+        """
         Baseline correction
         based on: "Baseline Correction with Asymmetric Least SquaresSmoothing" from Eilers and Boelens
         also look at: https://stackoverflow.com/questions/29156532/python-baseline-correction-library
-        '''
+        """
 
         niter = 10
         # p = 0.001   			#asymmetry 0.001 <= p <= 0.1 is a good choice     recommended from Eilers and Boelens for Raman: 0.001    recommended from Simon: 0.0001
@@ -3153,10 +3179,10 @@ class PlotWindow(QMainWindow):
             print(tabulate(print_param, headers=['Parameters', 'Values', 'Errors']))
 
     def hydrogen_estimation(self):
-        '''
+        """
         determine the slope of PL background in carbon spectra in order to estimate the hydrogen content compare with:
         C. Casiraghi, A. C. Ferrari, J. Robertson, Physical Review B 2005, 72, 8 085401.
-        '''
+        """
 
         self.SelectDataset()
         x_min_1 = 600
@@ -3193,10 +3219,10 @@ class PlotWindow(QMainWindow):
                 print('negative slope')
 
     def fit_D_G(self):
-        '''
+        """
         Partially based on Christian's Mathematica Notebook
         Fitroutine for D and G bands in spectra of carbon compounds
-        '''
+        """
         # Select which data set will be fitted
         self.SelectDataset()
         # if self.selectedData == []:
