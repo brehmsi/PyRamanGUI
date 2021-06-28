@@ -49,9 +49,9 @@ import Database_Measurements  # see file Database_Measurements
 # 3. Spreadsheet
 # 4. Plot
 
-#####################################################################################################################################################
-### 1. Main window
-#####################################################################################################################################################
+########################################################################################################################
+# 1. Main window
+########################################################################################################################
 class RamanTreeWidget(QtWidgets.QTreeWidget):
     """
     A reimplementation of the PyQt QTreeWidget.
@@ -813,6 +813,7 @@ class RamanSpreadSheet(QTableWidget):
         # self.setAcceptDrops(True)
         # self.setDropIndicatorShown(True)
         # self.setDragDropMode(self.InternalMove)
+        self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
         self.horizontalHeader().hide()
         self.p = self.parent()
         self.setFrameStyle(0)
@@ -1354,7 +1355,7 @@ class SpreadSheetWindow(QMainWindow):
     def get_plot_data(self):
         """ get data from selected columns and prepares data for plot """
 
-        self.plot_data = []  # [X-data, Y-data, label, file, yerr, plottype]  # in newer projected additional entry: self
+        self.plot_data = []  # [X-data, Y-data, label, filename, plottype, yerr, spreadsheet-title]
         # get visual index of selected columns in sorted order
         selCol = sorted(set(self.headers.visualIndex(idx.column()) for idx in self.header_table.selectedIndexes()))
 
@@ -1386,7 +1387,7 @@ class SpreadSheetWindow(QMainWindow):
                         m = c + 1
                         while m <= self.cols:
                             if m == self.cols:
-                                yerr = 0
+                                yerr = None
                                 m = self.cols + 1
                             elif self.data[m]["type"] == 'Yerr':
                                 yerr = self.data[m]["data"]
@@ -1413,16 +1414,16 @@ class SpreadSheetWindow(QMainWindow):
                     pd[0] = pd[0][x_bool]
                     pd[1] = pd[1][x_bool]
                     # Error
-                    if pd[4] is not None:
-                        pd[4] = pd[4][x_bool]
+                    if pd[5] is not None:
+                        pd[5] = pd[5][x_bool]
 
                 y_bool = np.logical_not(np.isnan(pd[1]))
                 if all(y_bool) is False:
                     pd[0] = pd[0][y_bool]
                     pd[1] = pd[1][y_bool]
                     # Error
-                    if pd[4] is not None:
-                        pd[4] = pd[4][y_bool]
+                    if pd[5] is not None:
+                        pd[5] = pd[5][y_bool]
 
                 pd.append(self.windowTitle())
             else:
