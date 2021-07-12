@@ -6,6 +6,7 @@ import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
 import matplotlib.backends.qt_editor._formlayout as formlayout
 import numpy as np
+import operator
 import os
 import pickle
 import re
@@ -118,7 +119,7 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
         event : QMouseEvent           #The mouse event.
         """
         item = self.itemAt(event.pos())
-        if item != None:
+        if item is not None:
             self.setCurrentItem(item)
         else:
             pass
@@ -148,7 +149,7 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
         itemAtDropLocation = self.itemAt(event.pos())
 
         # send signal if parents (folder) of item changes during drag-drop-event
-        if itemAtDropLocation != None and itemAtDropLocation.parent() != self.dragged_item.parent():
+        if itemAtDropLocation is not None and itemAtDropLocation.parent() != self.dragged_item.parent():
             self.itemDropped.emit(self.dragged_item, itemAtDropLocation)
         else:
             pass
@@ -507,8 +508,8 @@ class MainWindow(QMainWindow):
             windowtypeInt = 2
             plotData, fig = windowcontent
             if fig is not None:
-                fig.set_size_inches([10, 10])   # necessary to avoid weird error:
-                                                # (ValueError: figure size must be positive finite not [ 4.58 -0.09])
+                fig.set_size_inches([10, 10])  # necessary to avoid weird error:
+                # (ValueError: figure size must be positive finite not [ 4.58 -0.09])
             self.window[windowtype][title] = PlotWindow(plotData, fig, self)
             self.update_spreadsheet_menubar()
             icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/PlotWindow.png")
@@ -534,7 +535,7 @@ class MainWindow(QMainWindow):
         self.window[windowtype][title].closeWindowSignal.connect(self.close_window)
 
     def new_Folder(self, title):
-        if title == None:
+        if title is None:
             i = 1
             while i <= 100:
                 title = 'Folder ' + str(i)
@@ -542,13 +543,11 @@ class MainWindow(QMainWindow):
                     i += 1
                 else:
                     break
-        else:
-            pass
 
         self.folder[title] = []  # first entry contains QTreeWidgetItem (Folder), second contains QMdiArea
         self.folder[title].append(QTreeWidgetItem([title]))
         self.folder[title][0].setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable |
-                                       Qt.ItemIsDropEnabled)
+                                       Qt.ItemIsDragEnabled)
         self.folder[title][0].setIcon(0, QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/folder.png"))
         self.treeWidget.addTopLevelItem(self.folder[title][0])
         self.treeWidget.expandItem(self.folder[title][0])
@@ -804,6 +803,87 @@ class SpreadSheetItem(QTableWidgetItem):
         return str(self.value)
 
 
+class FormulaInterpreter:
+    """
+    class to analyse formulas typed in the formula field of the Spreadsheet header
+    written by Christopher Tao
+    source: https://levelup.gitconnected.com/how-to-write-a-formula-string-parser-in-python-5362210afeab
+    """
+    def __init__(self, data):
+        self.data = data
+        self.ops = {
+            "+": operator.add,
+            "-": operator.sub,
+            "*": operator.mul,
+            "/": operator.truediv}
+
+    def interprete_formula(self, f):
+        if re.match(r'\ACol\([0-9]+\)\Z', f):
+            col_formula = int(re.findall(r'\b\d+\b', f)[0])
+            return self.data[col_formula]['data']
+        elif re.match(r'\A\(.+\)\Z', f) and self.parentheses_enclosed(f):  # e.g. '(Col(1)-Col(2))'
+            return self.interprete_formula(f[1:-1])
+        elif f.replace('.', '', 1).isdigit():                               # constant numbers: e.g. '2+3*Col(0)'
+            return float(f)
+        elif '+' in f or '-' in f or '*' in f or '/' in f:
+            rest_f = self.remove_matched_parentheses(f)
+            # not combine it with '+' and '-' because  multiplication and division first, then addition and subtraction
+            if '+' in rest_f or '-' in rest_f:
+                split_f = re.compile(r'[\+\-]').split(f)
+            else:
+                split_f = re.compile(r'[\*\/]').split(f)
+
+            if split_f[0].count('(') != split_f[0].count(')'):
+                nested_level = split_f[0].count('(') - split_f[0].count(')')
+                pos = len(split_f[0])
+                for sf in split_f[1:]:
+                    if '(' in sf:
+                        nested_level += sf.count('(')
+                    if ')' in sf:
+                        nested_level -= sf.count(')')
+                    pos += len(sf) + 1  # +1 because of the operator inside parenthesis
+                    if nested_level == 0:
+                        break
+            else:
+                pos = len(split_f[0])
+
+            left = f[:pos]          # left component
+            right = f[pos + 1:]     # right component
+            op = f[pos]             # the operator
+            return self.ops[op](self.interprete_formula(left), self.interprete_formula(right))
+        else:
+            print('There is something wrong with the formula')
+            return np.full(len(self.data[0]['data']), 0)
+
+    def parentheses_enclosed(self, s):
+        paren_order = re.findall(r'[\(\)]', s)
+
+        if paren_order.count('(') != paren_order.count(')'):
+            return False
+
+        curr_levels = []
+        nest_lv = 0
+        for p in paren_order:
+            if p == '(':
+                nest_lv += 1
+            else:
+                nest_lv -= 1
+            curr_levels.append(nest_lv)
+        if 0 in curr_levels[:-1]:
+            return False
+        else:
+            return True
+
+    def remove_matched_parentheses(self, formula):
+        if re.search(r'(?<!Col)\(', formula):
+            match_end_par = re.search(r'(?<!Col\(\d)\)', formula)
+            end_par = match_end_par.start()  # index of first ')'
+            start_par = [m.start() for m in re.finditer(r'(?<!Col)\(', formula[:end_par])][-1] # index of last '('
+            return self.remove_matched_parentheses(formula[:start_par] + formula[end_par + 1:])
+        else:
+            return formula
+
+
 class RamanSpreadSheet(QTableWidget):
     """ A reimplementation of the QTableWidget"""
 
@@ -877,7 +957,6 @@ class SpreadSheetWindow(QMainWindow):
 
         self.central_widget = QWidget()
         self.header_table = Header(4, self.cols, parent=self)  # table header
-        self.header_table.itemChanged.connect(self.header_changed)
         self.data_table = RamanSpreadSheet(self.rows, self.cols, parent=self)  # table widget
 
         # Layout of tables
@@ -885,7 +964,7 @@ class SpreadSheetWindow(QMainWindow):
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         header_layout = QtWidgets.QHBoxLayout()
         header_layout.addWidget(self.header_table)
-        header_layout.addSpacing(21)        # to level with vertical scrollbar from data table
+        header_layout.addSpacing(21)  # to level with vertical scrollbar from data table
         self.main_layout.setSpacing(0)
         self.main_layout.setAlignment(Qt.AlignTop)
         self.main_layout.addLayout(header_layout)
@@ -925,25 +1004,6 @@ class SpreadSheetWindow(QMainWindow):
                 header_item.setBackground(QtGui.QColor(255, 255, 200))  # color: light yellow
                 self.header_table.setItem(r, c, header_item)
         self.header_table.itemChanged.connect(self.update_header)
-
-    def header_changed(self, item):
-        row = item.row()
-        col = item.column()
-        text = item.text()
-        if row == 3:
-            if text == "":
-                pass
-            elif text[0] == "=":
-                self.header_function(col, text)
-            else:
-                pass
-                # print(item.text())
-        else:
-            pass
-
-    def header_function(self, col, text):
-        if 'Col' in text:
-            print(col)
 
     def create_menubar(self):
         """ create the menubar """
@@ -1005,15 +1065,13 @@ class SpreadSheetWindow(QMainWindow):
         self.headerline.editingFinished.connect(lambda: self.header_editing_finished(logical_column, visual_column))
 
         self.headerline.setText(self.data[visual_column]['shortname'])
-        self.headerline.setHidden(False)  # Make it visiable
+        self.headerline.setHidden(False)  # Make it visible
         self.headerline.setFocus()
 
     def header_editing_finished(self, log_col, vis_col):
         self.headerline.setHidden(True)
         newHeader = str(self.headerline.text())
-        data_zs = self.data[vis_col]
-        self.data[vis_col] = {"data": data_zs['data'], "shortname": newHeader, "type": data_zs["type"],
-                              "filename": data_zs['filename']}
+        self.data[vis_col]["shortname"] = newHeader
         self.header_table.horizontalHeaderItem(log_col).setText(
             '{} ({})'.format(self.data[vis_col]["shortname"], self.data[vis_col]["type"]))
 
@@ -1031,10 +1089,12 @@ class SpreadSheetWindow(QMainWindow):
         convert_unit.addAction("cm^-1 to nm")
         convert_unit.addAction("nm to cm^-1")
         convert_unit.triggered[QAction].connect(lambda QAction: self.convert_column_unit(QAction, selected_column))
-        shift_column = header_menu.addMenu("Shift column to ...")
-        shift_column.addAction('left')
-        shift_column.addAction('right')
-        shift_column.triggered[QAction].connect(lambda QAction: self.shift_column(QAction, selected_column))
+        mov_col = header_menu.addMenu("Move column")
+        mov_col.addAction('Move left')
+        mov_col.addAction('Move right')
+        mov_col.addAction('Move to first')
+        mov_col.addAction('Move to last')
+        mov_col.triggered[QAction].connect(lambda QAction: self.move_column(QAction, selected_column))
         ac = header_menu.exec_(self.header_table.mapToGlobal(position))
         # Delete selected colums
         if ac == delete_column:
@@ -1097,15 +1157,19 @@ class SpreadSheetWindow(QMainWindow):
         self.header_table.horizontalHeaderItem(log_col).setText(
             "{}({})".format(self.data[vis_col]["shortname"], col_type))
 
-    def shift_column(self, qaction, selected_column):
-        idx = self.headers.visualIndex(selected_column)
-        if qaction.text() == 'left':
-            didx = -1
-        elif qaction.text() == 'right':
-            didx = 1
-        self.headers.moveSection(idx, idx + didx)
-        self.data_table.horizontalHeader().moveSection(idx, idx + didx)
-        self.data[idx], self.data[idx + didx] = self.data[idx + didx], self.data[idx]
+    def move_column(self, qaction, selected_column):
+        old_idx = self.headers.visualIndex(selected_column)
+        if qaction.text() == 'Move left':
+            new_idx = old_idx - 1
+        elif qaction.text() == 'Move right':
+            new_idx = old_idx + 1
+        elif qaction.text() == 'Move to first':
+            new_idx = 0
+        elif qaction.text() == 'Move to last':
+            new_idx = self.data_table.columnCount() - 1
+        self.headers.moveSection(old_idx, new_idx)
+        self.data_table.horizontalHeader().moveSection(old_idx, new_idx)
+        self.data.insert(new_idx, self.data.pop(old_idx))
 
     def create_row_header(self):
         """opens header_menu with right mouse click on header"""
@@ -1292,9 +1356,8 @@ class SpreadSheetWindow(QMainWindow):
         self.create_header_items(cols_before, self.cols)
 
         for c in range(cols_before, self.cols):
-            zwischenspeicher = self.data[c]["data"]
-            for r in range(len(zwischenspeicher)):
-                newcell = SpreadSheetItem(self.cells, zwischenspeicher[r])
+            for r in range(len(self.data[c]["data"])):
+                newcell = SpreadSheetItem(self.cells, self.data[c]["data"][r])
                 self.cells[cellname(r, c)] = newcell
                 self.data_table.setItem(r, c, newcell)
 
@@ -1308,8 +1371,6 @@ class SpreadSheetWindow(QMainWindow):
         if new_cell_content == '':
             self.data_table.takeItem(row, col)
             new_cell_content = np.nan
-        else:
-            pass
 
         try:
             self.data[col]["data"][row] = new_cell_content
@@ -1322,7 +1383,7 @@ class SpreadSheetWindow(QMainWindow):
         col = item.column()
         row = item.row()
 
-        if row == 0:  # Long Name
+        if row == 0:    # Long Name
             self.data[col]["longname"] = content
         elif row == 1:  # Unit
             self.data[col]["unit"] = content
@@ -1330,8 +1391,17 @@ class SpreadSheetWindow(QMainWindow):
             self.data[col]["comments"] = content
         elif row == 3:  # F(x) =
             self.data[col]["formula"] = content
-        else:
-            pass
+            if content is None or content == '':
+                return
+            else:
+                Interpreter = FormulaInterpreter(self.data)
+                new_data = Interpreter.interprete_formula(content)
+                if new_data is not None:
+                    self.data[col]["data"] = new_data
+                    for r in range(len(self.data[col]["data"])):
+                        newcell = SpreadSheetItem(self.cells, self.data[col]["data"][r])
+                        self.cells[cellname(r, col)] = newcell
+                        self.data_table.setItem(r, col, newcell)
 
     def new_col(self):
         # adds a new column at end of table
@@ -1339,7 +1409,8 @@ class SpreadSheetWindow(QMainWindow):
         self.data_table.setColumnCount(self.cols)
         self.header_table.setColumnCount(self.cols)
         self.data.append({"data": np.zeros(self.rows), "shortname": str(chr(ord('A') + self.cols - 2)),
-                          "type": "Y", "filename": ""})
+                          "type": "Y", "filename": "", "longname": None, "unit": None,
+                          "comments": None, "formula": None})
         headers = [d["shortname"] + '(' + d["type"] + ')' for d in self.data]
         self.header_table.setHorizontalHeaderLabels(headers)
         for i in range(self.rows):
@@ -1401,8 +1472,6 @@ class SpreadSheetWindow(QMainWindow):
                 if k == -1:
                     self.mw.show_statusbar_message('At least one dataset Y has no assigned X dataset.', 4000)
                     return
-                else:
-                    pass
 
         # check that x and y have same length to avoid problems later:
         # append Spreadsheet instance
@@ -1865,6 +1934,7 @@ class DataSetSelecter(QtWidgets.QDialog):
     data_set_names           # names of all datasets
     select_only_one          # if True only on Dataset can be selected
     """
+
     def __init__(self, data_set_names, select_only_one=True):
         super(DataSetSelecter, self).__init__(parent=None)
         self.data_set_names = data_set_names
@@ -1885,12 +1955,12 @@ class DataSetSelecter(QtWidgets.QDialog):
 
         for idx, name in enumerate(self.data_set_names):
             self.CheckDataset.append(QCheckBox(name, self))
-            layout.addWidget(self.CheckDataset[idx], idx+1, 0)
+            layout.addWidget(self.CheckDataset[idx], idx + 1, 0)
             if self.select_only_one is True:
                 self.CheckDataset[idx].stateChanged.connect(self.onStateChange)
 
         ok_button = QPushButton("OK", self)
-        layout.addWidget(ok_button, len(self.data_set_names)+1, 0)
+        layout.addWidget(ok_button, len(self.data_set_names) + 1, 0)
         ok_button.clicked.connect(self.Ok_button)
         self.setLayout(layout)
         self.setWindowTitle("Select Dataset")
