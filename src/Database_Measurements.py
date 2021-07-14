@@ -15,11 +15,11 @@ from datetime import date
 
 
 class DatabaseMeasurements(QMainWindow):
-    ''' Creating the main window containing the list of all measurements '''
+    """ Creating the main window containing the list of all measurements """
 
     def __init__(self):
         super().__init__()
-        self.path_of_datenbank = os.path.join(os.path.dirname(__file__), 'Sampledatabase.db')
+        self.path_of_database = os.path.join(os.path.dirname(__file__), 'Sampledatabase.db')
         self.date = str(date.today())
         self.sample = 'MgAlON'
         self.materialclass = 'MgAlON'
@@ -34,11 +34,11 @@ class DatabaseMeasurements(QMainWindow):
 
     def entries(self):
         # Connection to databank and create table if not existing
-        if os.path.exists(self.path_of_datenbank):
-            conn = sqlite3.connect(self.path_of_datenbank)
+        if os.path.exists(self.path_of_database):
+            conn = sqlite3.connect(self.path_of_database)
             c = conn.cursor()
         else:
-            conn = sqlite3.connect(self.path_of_datenbank)
+            conn = sqlite3.connect(self.path_of_database)
             c = conn.cursor()
             c.execute(
                 '''CREATE TABLE stocks (ID int, Date text, Sample text, Material text, Wavelength text, Donor text, Location text)''')
@@ -118,9 +118,9 @@ class DatabaseMeasurements(QMainWindow):
             print('Something is wrong!')
 
     def new_entry(self):
-        # transfers entry of entry window into an entry of the databank
+        # transfers entry of entry window into an entry of the database
         ew = self.ew
-        conn = sqlite3.connect(self.path_of_datenbank)
+        conn = sqlite3.connect(self.path_of_database)
         c = conn.cursor()
         c.execute('SELECT * FROM stocks')
         a = c.fetchall()
@@ -136,13 +136,13 @@ class DatabaseMeasurements(QMainWindow):
         self.entries()
 
     def change_entry(self):
-        # change entry of the databank into entry of the entry window
+        # change entry of the database into entry of the entry window
         ew = self.ew
         idtochange = []
         for j in self.entryList.selectedItems():
             idtochange.append(j.text(0))
 
-        conn = sqlite3.connect(self.path_of_datenbank)
+        conn = sqlite3.connect(self.path_of_database)
         c = conn.cursor()
         sqlite_update_query = 'UPDATE stocks set Date=?, Sample=?, Material=?, Wavelength=?, Donor=?, Location=?  where ID = ?'
         for j in idtochange:
@@ -159,7 +159,7 @@ class DatabaseMeasurements(QMainWindow):
         for j in self.entryList.selectedItems():
             idtodelete.append(j.text(0))
 
-        conn = sqlite3.connect(self.path_of_datenbank)
+        conn = sqlite3.connect(self.path_of_database)
         c = conn.cursor()
         for j in idtodelete:
             c.execute('DELETE FROM stocks WHERE ID = ?', (j,))
@@ -224,7 +224,7 @@ class DatabaseMeasurements(QMainWindow):
 
 
 class EntryWindow(QMainWindow):
-    ''' entry window '''
+    """ entry window """
     entryUpdateSignal = QtCore.pyqtSignal()
 
     def __init__(self, MW, parent=None):
