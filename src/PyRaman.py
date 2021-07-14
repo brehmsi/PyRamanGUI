@@ -921,7 +921,7 @@ class Header(QTableWidget):
         self.setFrameStyle(0)
 
         self.setSizePolicy(QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Minimum))
-        self.setVerticalHeaderLabels(['Long Name', 'Unit', 'Comments', 'F(x)= (not working yet)'])
+        self.setVerticalHeaderLabels(['Long Name', 'Unit', 'Comments', 'F(x)='])
         hh = self.horizontalHeader()
         hh.sectionResized.connect(self.section_resized)
         hh.selectionModel().selectionChanged.connect(self.section_selected)
