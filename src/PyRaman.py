@@ -1,5 +1,5 @@
 #Autor: Simon Brehm
-import beepy
+# import beepy
 import math
 import matplotlib
 import matplotlib.colors as mcolors
@@ -22,7 +22,7 @@ from matplotlib.figure import Figure
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 import matplotlib.backends.qt_editor.figureoptions as figureoptions
-from matplotlib.backends.qt_compat import _setDevicePixelRatioF, _devicePixelRatioF
+#from matplotlib.backends.qt_compat import _setDevicePixelRatioF, _devicePixelRatioF
 from numpy import pi
 from numpy.fft import fft, fftshift
 from PyQt5 import QtGui, QtWidgets, QtCore
