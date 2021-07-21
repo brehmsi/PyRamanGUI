@@ -107,7 +107,7 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
         event : QMouseEvent            #The mouse event.
         """
         item = self.itemAt(event.pos())
-        if item != None:
+        if item is not None:
             self.itemDoubleClicked.emit(item)
         else:
             return
@@ -148,11 +148,12 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
         event.setDropAction(Qt.MoveAction)
         itemAtDropLocation = self.itemAt(event.pos())
 
-        # send signal if parents (folder) of item changes during drag-drop-event
-        if itemAtDropLocation is not None and itemAtDropLocation.parent() != self.dragged_item.parent():
+        if itemAtDropLocation is None:
+            # no drops outside of folders
+            return
+        elif itemAtDropLocation.parent() != self.dragged_item.parent():
+            # send signal if parents (folder) of item changes during drag-drop-event
             self.itemDropped.emit(self.dragged_item, itemAtDropLocation)
-        else:
-            pass
 
         # keep the default behaviour
         super(RamanTreeWidget, self).dropEvent(event)
