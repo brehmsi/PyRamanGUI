@@ -1,4 +1,4 @@
-# Autor: Simon Brehm
+#Autor: Simon Brehm
 import beepy
 import math
 import matplotlib
@@ -469,8 +469,9 @@ class MainWindow(QMainWindow):
     def new_window(self, foldername, windowtype, windowcontent, title):
         if foldername is None:
             foldername = self.tabWidget.tabText(self.tabWidget.currentIndex())
-        else:
-            foldername = foldername
+            if foldername == 'Database':
+                self.show_statusbar_message('please open window in other folder', 4000)
+                return
 
         if title is None:
             i = 1
@@ -480,8 +481,6 @@ class MainWindow(QMainWindow):
                     i += 1
                 else:
                     break
-        else:
-            pass
 
         if windowtype == 'Spreadsheet':
             if windowcontent is None:
@@ -547,7 +546,7 @@ class MainWindow(QMainWindow):
         self.folder[title] = []  # first entry contains QTreeWidgetItem (Folder), second contains QMdiArea
         self.folder[title].append(QTreeWidgetItem([title]))
         self.folder[title][0].setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable |
-                                       Qt.ItemIsDragEnabled)
+                                       Qt.ItemIsDragEnabled | Qt.ItemIsDropEnabled)
         self.folder[title][0].setIcon(0, QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/folder.png"))
         self.treeWidget.addTopLevelItem(self.folder[title][0])
         self.treeWidget.expandItem(self.folder[title][0])
@@ -1189,8 +1188,10 @@ class SpreadSheetWindow(QMainWindow):
             selRow = sorted(set(index.row() for index in self.data_table.selectedIndexes()), reverse=True)
             for c in range(self.cols):
                 for r in selRow:
-                    self.data[c]["data"] = np.delete(self.data[c]["data"], r)  # Delete data
-
+                    try:
+                        self.data[c]["data"] = np.delete(self.data[c]["data"], r)  # Delete data
+                    except IndexError as e:
+                        print(e)
             for k in selRow:
                 self.data_table.removeRow(k)  # Delete row
                 self.rows = self.rows - 1
@@ -2527,7 +2528,7 @@ class PlotWindow(QMainWindow):
             self.ax.figure.canvas.draw()
         elif event.artist in self.spectrum and event.mouseevent.button == 3:
             self.lineDialog = QMenu()
-            self.lineDialog.addAction("Go to Spreadsheet", lambda: self.go_to_spreadsheet(event.artist))
+            # self.lineDialog.addAction("Go to Spreadsheet", lambda: self.go_to_spreadsheet(event.artist))
             point = self.mapToGlobal(
                 QtCore.QPoint(event.mouseevent.x, self.frameGeometry().height() - event.mouseevent.y))
             self.lineDialog.exec_(point)
