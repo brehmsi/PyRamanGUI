@@ -295,15 +295,13 @@ class MainWindow(QMainWindow):
         """
 
         # Ask for directory, if none is deposite or 'Save Project As' was pressed
-        if self.pHomeRmn == None or q == 'Save As':
+        if self.pHomeRmn is None or q == 'Save As':
             fileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Save as', self.pHomeRmn,
                                                              'All Files (*);;Raman Files (*.rmn)')
             if fileName[0] != '':
                 self.pHomeRmn = fileName[0]
             else:
                 return
-        else:
-            pass
 
         save_dict = {}
         for key, val in self.folder.items():
@@ -344,7 +342,6 @@ class MainWindow(QMainWindow):
                       os.path.splitext(self.pHomeRmn)[1])
         else:
             saveControllParam = 0
-            pass
 
     def execute_database_measurements(self):
         title = 'Database'
@@ -1552,8 +1549,13 @@ class Functions:
         """
         return h * (1 + 2 * (x - xc) / (Q * b)) ** 2 / (1 + (2 * (x - xc) / b) ** 2)
 
-    ### Summing up the fit functions ###
     def FctSumme(self, x, *p):
+        """
+        Summing up the fit functions
+        @param x: x data
+        @param p: fitparameter
+        @return: fitted y data
+        """
         a = self.pw.n_fit_fct['Lorentz']  # number of Lorentzians
         b = self.pw.n_fit_fct['Gauss']  # number of Gaussians
         c = self.pw.n_fit_fct['Breit-Wigner-Fano']  # number of Breit-Wigner-Fano functions
@@ -1994,6 +1996,128 @@ class DataSetSelecter(QtWidgets.QDialog):
         self.close()
 
 
+class Baseline_Corrections():
+    def __init__(self, pw):
+        self.pw = pw    # contains parent: class PlotWindow
+        self.p_start = '0.001'
+        self.lam_start = '10000000'
+        self.return_value = None
+
+    def als_startparam(self, x, y, n):
+        spct = self.pw.spectrum[n]
+        self.Dialog_BaselineParameter = QDialog()
+        layout = QtWidgets.QGridLayout()
+
+        p_edit = QtWidgets.QLineEdit()
+        layout.addWidget(p_edit, 0, 0)
+        p_edit.setText(self.p_start)
+        p_label = QtWidgets.QLabel('p')
+        layout.addWidget(p_label, 0, 1)
+
+        lam_edit = QtWidgets.QLineEdit()
+        layout.addWidget(lam_edit, 1, 0)
+        lam_edit.setText(self.lam_start)
+        lam_label = QtWidgets.QLabel('lambda')
+        layout.addWidget(lam_label, 1, 1)
+
+        p = float(p_edit.text())
+        lam = float(lam_edit.text())
+        yb, zb = self.asy_least_square(x, y, p, lam)
+        self.baseline, = self.pw.ax.plot(x, zb, 'c--', label='baseline ({})'.format(spct.get_label()))
+        self.blcSpektrum, = self.pw.ax.plot(x, yb, 'c-', label='baseline-corrected ({})'.format(spct.get_label()))
+        self.pw.fig.canvas.draw()
+
+        self.finishbutton = QPushButton('Ok', self.pw)
+        self.finishbutton.setCheckable(True)
+        self.finishbutton.setToolTip(
+            'Are you happy with the start parameters? \n Close the dialog window and save the baseline!')
+        self.finishbutton.clicked.connect(
+            lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text()), spct))
+        layout.addWidget(self.finishbutton, 2, 0)
+
+        self.closebutton = QPushButton('Close', self.pw)
+        self.closebutton.setCheckable(True)
+        self.closebutton.setToolTip('Closes the dialog window and baseline is not saved.')
+        self.closebutton.clicked.connect(
+            lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text()), spct))
+        layout.addWidget(self.closebutton, 2, 1)
+
+        applybutton = QPushButton('Apply', self.pw)
+        applybutton.setToolTip('Do you want to try the fit parameters? \n Lets do it!')
+        applybutton.clicked.connect(
+            lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text()), spct))
+        layout.addWidget(applybutton, 2, 2)
+
+        self.Dialog_BaselineParameter.setLayout(layout)
+        self.Dialog_BaselineParameter.setWindowTitle("Baseline Parameter")
+        self.Dialog_BaselineParameter.setWindowModality(Qt.ApplicationModal)
+        self.Dialog_BaselineParameter.exec_()
+
+        self.p_start = p_edit.text()
+        self.lam_start = lam_edit.text()
+
+        return self.return_value
+
+    def baseline_als_call(self, x, y, p, lam, spct):
+        self.blcSpektrum.remove()
+        self.baseline.remove()
+        name = spct.get_label()
+        if self.closebutton.isChecked():
+            self.Dialog_BaselineParameter.close()
+            self.return_value = None
+        elif self.finishbutton.isChecked():
+            yb, zb = self.asy_least_square(x, y, p, lam)
+            self.Dialog_BaselineParameter.close()
+            self.return_value = yb, zb
+        else:
+            yb, zb = self.asy_least_square(x, y, p, lam)
+            self.baseline, = self.pw.ax.plot(x, zb, 'c--', label='baseline ({})'.format(name))
+            self.blcSpektrum, = self.pw.ax.plot(x, yb, 'c-', label='baseline-corrected ({})'.format(name))
+        self.pw.fig.canvas.draw()
+
+    def asy_least_square(self, x, y, p, lam):
+        """
+        Baseline correction
+        based on: "Baseline Correction with Asymmetric Least SquaresSmoothing" from Eilers and Boelens
+        also look at: https://stackoverflow.com/questions/29156532/python-baseline-correction-library
+        """
+
+        niter = 10
+        # p = 0.001   			#asymmetry 0.001 <= p <= 0.1 is a good choice     recommended from Eilers and Boelens for Raman: 0.001    recommended from Simon: 0.0001
+        # lam = 10000000			#smoothness 10^2 <= lambda <= 10^9                     recommended from Eilers and Boelens for Raman: 10^7      recommended from Simon: 10^7
+        L = len(x)
+        D = sparse.csc_matrix(np.diff(np.eye(L), 2))
+        w = np.ones(L)
+        for i in range(niter):
+            W = sparse.spdiags(w, 0, L, L)
+            Z = W + lam * D.dot(D.transpose())
+            z = spsolve(Z, w * y)
+            w = p * (y > z) + (1 - p) * (y < z)
+        y = y - z
+
+        #        self.baseline,    = self.ax.plot(x, z, 'c--', label = 'baseline (' + self.selectedData[0][2] + ')')
+        #        self.blcSpektrum, = self.ax.plot(x, y, 'c-', label = 'baseline-corrected '+ self.selectedData[0][2])
+        #        self.fig.canvas.draw()
+        return y, z  #y - background-corrected Intensity-values, z - background
+
+    def rubberband(self, x, y):
+        """
+        Rubberband Baseline Correction
+        source: https://dsp.stackexchange.com/questions/2725/how-to-perform-a-rubberband-correction-on-spectroscopic-data
+        """
+        # Find the convex hull
+        v = scipy.spatial.ConvexHull(np.array(list(zip(x, y)))).vertices
+        # Rotate convex hull vertices until they start from the lowest one
+        v = np.roll(v, -v.argmin())
+        # Leave only the ascending part
+        v = v[:v.argmax()]
+
+        # Create baseline using linear interpolation between vertices
+        z = np.interp(x, x[v], y[v])
+        y = y - z
+        return y, z
+
+
 class FitOptionsDialog(QMainWindow):
     closeSignal = QtCore.pyqtSignal()  # Signal in case Fit-parameter window is closed
 
@@ -2388,6 +2512,7 @@ class PlotWindow(QMainWindow):
         self.backup_data = plot_data
         self.spectrum = []
         self.functions = Functions(self)
+        self.blc = Baseline_Corrections(self)       # class for everything related to Baseline corrections
         self.inserted_text = []  # Storage for text inserted in the plot
         self.drawn_line = []  # Storage for lines and arrows drawn in the plot
         self.n_fit_fct = {  # number of fit functions (Lorentzian, Gaussian and Breit-Wigner-Fano)
@@ -2617,7 +2742,10 @@ class PlotWindow(QMainWindow):
         analysisLinReg = analysisMenu.addAction('Linear regression', self.linear_regression)
 
         # 3.3 Analysis base line correction
-        analysisMenu.addAction('Baseline Correction', self.menu_baseline_als)
+        analysisBaseline = analysisMenu.addMenu('&Baseline Corrections')
+        analysisBaseline.addAction('Asymmetric Least Square')
+        analysisBaseline.addAction('Rubberband')
+        analysisBaseline.triggered[QAction].connect(self.baseline)
 
         # 3.4 Analysis find peaks
         analysisMenu.addAction('Find Peak', self.find_peaks)
@@ -2744,9 +2872,9 @@ class PlotWindow(QMainWindow):
             self.setFocus()
 
     def del_broken_pixel(self):
-        '''
+        """
         Deletes data point with number 630+n*957, because this pixel is broken in CCD detector of LabRam
-        '''
+        """
         self.SelectDataset()
         for j in self.selectedDatasetNumber:
             a = 629
@@ -3116,11 +3244,10 @@ class PlotWindow(QMainWindow):
 
             print(x[idx_peaks])
 
-    def menu_baseline_als(self):
+    def baseline(self, action):
         self.SelectDataset()
         x_min, x_max = self.SelectArea()
-        p_start = '0.001'
-        lam_start = '10000000'
+        method = action.text()
         for n in self.selectedDatasetNumber:
             spct = self.spectrum[n]
             xs = spct.get_xdata()
@@ -3129,111 +3256,33 @@ class PlotWindow(QMainWindow):
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
-            self.Dialog_BaselineParameter = QDialog()
-            layout = QtWidgets.QGridLayout()
+            if method == 'Rubberband':
+                y_return = self.blc.rubberband(x, y)
+            elif method == 'Asymmetric Least Square':
+                y_return = self.blc.als_startparam(x, y, n)
+            else:
+                return
 
-            p_edit = QtWidgets.QLineEdit()
-            layout.addWidget(p_edit, 0, 0)
-            p_edit.setText(p_start)
-            p_label = QtWidgets.QLabel('p')
-            layout.addWidget(p_label, 0, 1)
+            if y_return is None:
+                return
+            else:
+                y_corr, y_bl = y_return
+                name = spct.get_label()
+                self.spectrum.append(self.ax.plot(x, y_corr, 'c-', label='{} (baseline-corrected)'.format(name))[0])
+                self.baseline, = self.ax.plot(x, y_bl, 'c--', label='baseline ({})'.format(name))
 
-            lam_edit = QtWidgets.QLineEdit()
-            layout.addWidget(lam_edit, 1, 0)
-            lam_edit.setText(lam_start)
-            lam_label = QtWidgets.QLabel('lambda')
-            layout.addWidget(lam_label, 1, 1)
+                ### Save background-corrected data ###
+                (fileBaseName, fileExtension) = os.path.splitext(name)
+                startFileDirName = os.path.dirname(self.selectedData[0][3])
+                startFileBaseName = startFileDirName + '/' + fileBaseName
+                startFileName = startFileBaseName + '_bgc.txt'
+                save_data = [x, y_corr]
+                save_data = np.transpose(save_data)
+                self.save_to_file('Save background-corrected data in file', startFileName, save_data)
 
-            p = float(p_edit.text())
-            lam = float(lam_edit.text())
-            xb, yb, zb = self.baseline_als(x, y, p, lam)
-            self.baseline, = self.ax.plot(xb, zb, 'c--', label='baseline ({})'.format(spct.get_label()))
-            self.blcSpektrum, = self.ax.plot(xb, yb, 'c-', label='baseline-corrected ({})'.format(spct.get_label()))
-            self.fig.canvas.draw()
-
-            self.finishbutton = QPushButton('Ok', self)
-            self.finishbutton.setCheckable(True)
-            self.finishbutton.setToolTip(
-                'Are you happy with the start parameters? \n Close the dialog window and save the baseline!')
-            self.finishbutton.clicked.connect(
-                lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text()), spct))
-            layout.addWidget(self.finishbutton, 2, 0)
-
-            self.closebutton = QPushButton('Close', self)
-            self.closebutton.setCheckable(True)
-            self.closebutton.setToolTip('Closes the dialog window and baseline is not saved.')
-            self.closebutton.clicked.connect(
-                lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text()), spct))
-            layout.addWidget(self.closebutton, 2, 1)
-
-            applybutton = QPushButton('Apply', self)
-            applybutton.setToolTip('Do you want to try the fit parameters? \n Lets do it!')
-            applybutton.clicked.connect(
-                lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text()), spct))
-            layout.addWidget(applybutton, 2, 2)
-
-            self.Dialog_BaselineParameter.setLayout(layout)
-            self.Dialog_BaselineParameter.setWindowTitle("Baseline Parameter")
-            self.Dialog_BaselineParameter.setWindowModality(Qt.ApplicationModal)
-            self.Dialog_BaselineParameter.exec_()
-            p_start = p_edit.text()
-            lam_start = lam_edit.text()
-
-    def baseline_als_call(self, x, y, p, lam, spct):
-        self.blcSpektrum.remove()
-        self.baseline.remove()
-        name = spct.get_label()
-        if self.closebutton.isChecked():
-            self.Dialog_BaselineParameter.close()
-        elif self.finishbutton.isChecked():
-            xb, yb, zb = self.baseline_als(x, y, p, lam)
-            self.spectrum.append(self.ax.plot(xb, yb, 'c-', label='{} (baseline-corrected)'.format(name))[0])
-            self.baseline, = self.ax.plot(xb, zb, 'c--', label='baseline ({})'.format(name))
-
-            ### Save background-corrected data ###
-            (fileBaseName, fileExtension) = os.path.splitext(name)
-            startFileDirName = os.path.dirname(self.selectedData[0][3])
-            startFileBaseName = startFileDirName + '/' + fileBaseName
-            startFileName = startFileBaseName + '_bgc.txt'
-            # save_data = [xb, yb, zb, x, y]
-            save_data = [xb, yb]
-            save_data = np.transpose(save_data)
-            self.save_to_file('Save background-corrected data in file', startFileName, save_data)
-
-            ### Append data ###
-            self.data.append([xb, yb, '{}_bgc'.format(fileBaseName), startFileName, '-', 0])
-
-            self.Dialog_BaselineParameter.close()
-        else:
-            xb, yb, zb = self.baseline_als(x, y, p, lam)
-            self.baseline, = self.ax.plot(xb, zb, 'c--', label='baseline ({})'.format(name))
-            self.blcSpektrum, = self.ax.plot(xb, yb, 'c-', label='baseline-corrected ({})'.format(name))
-        self.fig.canvas.draw()
-
-    def baseline_als(self, x, y, p, lam):
-        """
-        Baseline correction
-        based on: "Baseline Correction with Asymmetric Least SquaresSmoothing" from Eilers and Boelens
-        also look at: https://stackoverflow.com/questions/29156532/python-baseline-correction-library
-        """
-
-        niter = 10
-        # p = 0.001   			#asymmetry 0.001 <= p <= 0.1 is a good choice     recommended from Eilers and Boelens for Raman: 0.001    recommended from Simon: 0.0001
-        # lam = 10000000			#smoothness 10^2 <= lambda <= 10^9                     recommended from Eilers and Boelens for Raman: 10^7      recommended from Simon: 10^7
-        L = len(x)
-        D = sparse.csc_matrix(np.diff(np.eye(L), 2))
-        w = np.ones(L)
-        for i in range(niter):
-            W = sparse.spdiags(w, 0, L, L)
-            Z = W + lam * D.dot(D.transpose())
-            z = spsolve(Z, w * y)
-            w = p * (y > z) + (1 - p) * (y < z)
-        y = y - z
-
-        #        self.baseline,    = self.ax.plot(x, z, 'c--', label = 'baseline (' + self.selectedData[0][2] + ')')
-        #        self.blcSpektrum, = self.ax.plot(x, y, 'c-', label = 'baseline-corrected '+ self.selectedData[0][2])
-        #        self.fig.canvas.draw()
-        return x, y, z  # x - Raman Shift, y - background-corrected Intensity-values, z - background
+                ### Append data ###
+                self.data.append([x, y_corr, '{}_bgc'.format(fileBaseName), startFileName, '-', 0])
+                self.fig.canvas.draw()
 
     def linear_regression(self):
         self.SelectDataset()
