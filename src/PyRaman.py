@@ -179,6 +179,10 @@ class MainWindow(QMainWindow):
         self.PyramanIcon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/PyRaman_logo.png")
         self.pHomeRmn = None  # path of Raman File associated to the open project
         self.db_measurements = None
+        self.mainWidget = QtWidgets.QSplitter(self)
+        self.treeWidget = RamanTreeWidget(self)  # Qtreewidget, to controll open windows
+        self.tabWidget = QtWidgets.QTabWidget()
+        self.statusBar = QtWidgets.QStatusBar()
 
         self.create_mainwindow()
 
@@ -190,14 +194,11 @@ class MainWindow(QMainWindow):
         self.setWindowTitle('PyRaman')  # set window title
 
         # the user can control the size of child widgets by dragging the boundary between them
-        self.mainWidget = QtWidgets.QSplitter(self)
         self.mainWidget.setHandleWidth(10)
 
-        self.tabWidget = QtWidgets.QTabWidget()
         self.tabWidget.setTabsClosable(True)
         self.tabWidget.setMovable(True)
         self.tabWidget.tabCloseRequested.connect(self.close_tab)
-        self.treeWidget = RamanTreeWidget(self)  # Qtreewidget, to controll open windows
         self.treeWidget.itemDoubleClicked.connect(self.activate_window)
         self.treeWidget.itemClicked.connect(self.tree_window_options)
         self.treeWidget.itemDropped.connect(self.change_folder)
@@ -207,7 +208,6 @@ class MainWindow(QMainWindow):
         self.mainWidget.addWidget(self.tabWidget)
         self.setCentralWidget(self.mainWidget)
 
-        self.statusBar = QtWidgets.QStatusBar()
         self.setStatusBar(self.statusBar)
         self.show_statusbar_message('Welcome to PyRaman', 3000)
 
@@ -406,15 +406,15 @@ class MainWindow(QMainWindow):
                     pass
 
     def change_folder(self, droppedItem, itemAtDropLocation):
-        if itemAtDropLocation.parent() == None:
+        if itemAtDropLocation.parent() is None:
             new_folder = itemAtDropLocation
         else:
             new_folder = itemAtDropLocation.parent()
         foldername = new_folder.text(0)
         windowtyp = droppedItem.type()
         windowname = droppedItem.text(0)
-        previous_folder = droppedItem.parent().text(0)
-        if new_folder.type() == 0:  # dropevent in folder
+        if new_folder.type() == 0 and droppedItem.type() != 0:  # dropevent in folder
+            previous_folder = droppedItem.parent().text(0)
             self.tabWidget.setCurrentWidget(self.folder[previous_folder][1])
             wind = self.window[self.windowtypes[windowtyp]][windowname]
             mdi = self.folder[foldername][1]
