@@ -406,12 +406,14 @@ class MainWindow(QMainWindow):
                     pass
 
     def change_folder(self, droppedItem, itemAtDropLocation):
+        """function is called every time a qtreewidgetitem is dropped"""
         if itemAtDropLocation.parent() is None:
             new_folder = itemAtDropLocation
         else:
             new_folder = itemAtDropLocation.parent()
         foldername = new_folder.text(0)
         windowtyp = droppedItem.type()
+        print(windowtyp)
         windowname = droppedItem.text(0)
         if new_folder.type() == 0 and droppedItem.type() != 0:  # dropevent in folder
             previous_folder = droppedItem.parent().text(0)
