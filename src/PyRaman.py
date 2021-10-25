@@ -2513,6 +2513,7 @@ class PlotWindow(QMainWindow):
         self.mw = parent
         self.backup_data = plot_data
         self.spectrum = []
+        self.vert_line = None
         self.functions = Functions(self)
         self.blc = Baseline_Corrections(self)       # class for everything related to Baseline corrections
         self.inserted_text = []  # Storage for text inserted in the plot
@@ -2762,6 +2763,12 @@ class PlotWindow(QMainWindow):
     def create_sidetoolbar(self):
         toolbar = QtWidgets.QToolBar(self)
         self.addToolBar(QtCore.Qt.LeftToolBarArea, toolbar)
+
+        # Vertical line for comparison of peak positions
+        VertLineAct = QAction(QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Tool_Line.png"), 'Vertical Line', self)
+        VertLineAct.setStatusTip('Vertical line for comparison of peak position')
+        VertLineAct.triggered.connect(self.vertical_line)
+        toolbar.addAction(VertLineAct)
 
         # Tool to scale intensity of selected spectrum
         ScaleAct = QAction(QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Tool_Scale.png"), 'Scale', self)
@@ -3790,6 +3797,22 @@ class PlotWindow(QMainWindow):
         self.save_to_file('Save calculated ratios in file', filename, save_data)
 
     ########## Functions of toolbar ##########
+    def vertical_line(self):
+        if self.vert_line is not None:
+            print('Gibt es schon')
+            return
+        else:
+            self.ax.autoscale(False)
+            y_min, y_max = self.ax.get_ylim()
+            x_min, x_max = self.ax.get_xlim()
+            self.vert_line, = self.ax.plot([(x_min+x_max)/2, (x_min+x_max)/2], [y_min, y_max], 'r-', lw=1)
+            self.fig.canvas.draw()
+            LineBuilder(self.vert_line)
+            self.vert_line.remove()
+            self.fig.canvas.draw()
+            self.ax.autoscale(True)
+            self.vert_line = None
+
     def scale_spectrum(self):
         self.SelectDataset(True)
         for n in self.selectedDatasetNumber:
