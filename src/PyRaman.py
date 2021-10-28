@@ -1,5 +1,6 @@
 #Autor: Simon Brehm
 import beepy
+import io
 import math
 import matplotlib
 import matplotlib.colors as mcolors
@@ -316,8 +317,6 @@ class MainWindow(QMainWindow):
                     save_dict[key][win_name] = [win_type, [window.data, window.fig]]
                 elif win_type == 'Textwindow':
                     save_dict[key][win_name] = [win_type, window.text]
-                else:
-                    pass
 
         # Test if file can be saved
         saveControllParam = 0
@@ -374,19 +373,39 @@ class MainWindow(QMainWindow):
                 TreeItemMenu = QMenu()
                 ActRename = TreeItemMenu.addAction('Rename')
                 ActDelete = TreeItemMenu.addAction('Delete')
+                ActCopy = TreeItemMenu.addAction('Copy')
                 ac = TreeItemMenu.exec_(self.treeWidget.mapToGlobal(event.pos()))
-                # Rename
+                window_type = self.windowtypes[item.type()]
+
                 if ac == ActRename:
                     self.treeWidget.editItem(item)
                     self.treeWidget.itemChanged.connect(lambda item, column:
                                                         self.rename_window(item, column, item_text))
-                if ac == ActDelete:
+                elif ac == ActDelete:
                     if item.type() == 0:  # if item is folder:
                         self.close_folder(foldername=item.text(0))
                     else:
-                        windowtype = self.windowtypes[item.type()]
                         title = item.text(0)
-                        self.windowWidget[windowtype][title].close()
+                        self.windowWidget[window_type][title].close()
+                elif ac == ActCopy:
+                    window_name = item.text(0)
+                    window = self.window[window_type][window_name]
+                    if window_type == 'Spreadsheet':
+                        data = [window_type, window.data.copy()]
+                    elif window_type == 'Plotwindow':
+                        # no deepcopy of figure possible => pickle
+                        buf = io.BytesIO()
+                        pickle.dump(window.fig, buf)
+                        buf.seek(0)
+                        fig_copy = pickle.load(buf)
+                        data = [window_type, [window.data.copy(), fig_copy]]
+                    elif window_type == 'Textwindow':
+                        data = [window_type, window.text]
+                    else:
+                        return
+                    folder_name = self.tabWidget.tabText(self.tabWidget.currentIndex())
+                    self.new_window(folder_name, data[0], data[1], window_name+"_Copy")
+
         else:
             if event.button() == QtCore.Qt.RightButton:
                 TreeItemMenu = QMenu()
@@ -413,7 +432,6 @@ class MainWindow(QMainWindow):
             new_folder = itemAtDropLocation.parent()
         foldername = new_folder.text(0)
         windowtyp = droppedItem.type()
-        print(windowtyp)
         windowname = droppedItem.text(0)
         if new_folder.type() == 0 and droppedItem.type() != 0:  # dropevent in folder
             previous_folder = droppedItem.parent().text(0)
@@ -3799,7 +3817,6 @@ class PlotWindow(QMainWindow):
     ########## Functions of toolbar ##########
     def vertical_line(self):
         if self.vert_line is not None:
-            print('Gibt es schon')
             return
         else:
             self.ax.autoscale(False)
