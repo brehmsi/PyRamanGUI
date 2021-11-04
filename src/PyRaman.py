@@ -2771,6 +2771,9 @@ class PlotWindow(QMainWindow):
         # 3.4 Analysis find peaks
         analysisMenu.addAction('Find Peak', self.find_peaks)
 
+        # 3.5 Get Area below curve
+        analysisMenu.addAction('Get Area below Curve', self.detemine_area)
+
         self.show()
 
     def create_statusbar(self):
@@ -3259,6 +3262,17 @@ class PlotWindow(QMainWindow):
         self.fig.canvas.draw()
         self.ax.autoscale(True)
         return x_min, x_max
+
+    def detemine_area(self):
+        self.SelectDataset()
+        area = {}
+        for n in self.selectedDatasetNumber:
+            x = self.data[n][0]
+            y = self.data[n][1]
+            area[self.data[n][2]] = np.trapz(y, x)
+
+        print(area)
+        return area
 
     def find_peaks(self):
         self.SelectDataset()
