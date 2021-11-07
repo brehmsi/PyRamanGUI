@@ -18,7 +18,8 @@ from BrokenAxes import brokenaxes
 import matplotlib
 from matplotlib import cm, colors as mcolors, markers, image as mimage
 import matplotlib.backends.qt_editor._formlayout as formlayout
-from PyQt5 import QtGui
+from matplotlib.backends import qt_compat
+from PyQt5 import QtGui, QtWidgets
 
 
 def get_icon(name):
@@ -80,25 +81,32 @@ def figure_edit(axes, parent=None):
         _ticksize = 15
 
     if axis_is_broken:
-        axes_options = [(None, "<b>X-Axis</b>"),
-                        ('Label', ax.get_xlabel()),
-                        ('Label Pad', ax.xaxis.labelpad),
-                        sep,
-                        (None, "<b>Y-Axis</b>"),
-                        ('Label', ax.get_ylabel()),
-                        ('Label Pad', ax.yaxis.labelpad)]
+        axis_options = [
+            (None, "<b>X-Axis</b>"),
+            ('Scale', [ax1.get_xscale(), 'linear', 'log', 'logit']),
+            # ('Lower Limit', ax1.get_xlim()[0]),
+            # ('Upper Limit', ax1.get_xlim()[1]),
+            ('Tick Step Size', xtickspace),
+            sep,
+            (None, "<b>Y-Axis</b>"),
+            ('Scale', [ax1.get_yscale(), 'linear', 'log', 'logit']),
+            ('Lower Limit', ax1.get_ylim()[0]),
+            ('Upper Limit', ax1.get_ylim()[1]),
+            ('Tick Step Size', ytickspace)
+        ]
+
+        for idx, itm in enumerate(axes[1:]):
+            axis_options.insert(3 + idx * 3, (None, "%i. Segment" % (idx + 1)))
+            axis_options.insert(4 + idx * 3, ('Lower Limit', itm.get_xlim()[0]))
+            axis_options.insert(5 + idx * 3, ('Upper Limit', itm.get_xlim()[1]))
     else:
-        axes_options = [(None, "<b>X-Axis</b>"),
-                        ('Label', ax.get_xlabel()),
-                        ('Label Pad', ax.xaxis.labelpad),
+        axis_options = [(None, "<b>X-Axis</b>"),
                         ('Scale', [ax.get_xscale(), 'linear', 'log', 'logit']),
                         ('Lower Limit', ax.get_xlim()[0]),
                         ('Upper Limit', ax.get_xlim()[1]),
                         ('Tick Step Size', xtickspace),
                         sep,
                         (None, "<b>Y-Axis</b>"),
-                        ('Label', ax.get_ylabel()),
-                        ('Label Pad', ax.yaxis.labelpad),
                         ('Scale', [ax.get_yscale(), 'linear', 'log', 'logit']),
                         ('Lower Limit', ax.get_ylim()[0]),
                         ('Upper Limit', ax.get_ylim()[1]),
@@ -121,28 +129,15 @@ def figure_edit(axes, parent=None):
                ('Tick Size', _ticksize),
                #('Show grid', ax.xaxis._gridOnMajor),
                ('Show grid', ax.xaxis._major_tick_kw['gridOn']),
-               sep]
-    general.extend(axes_options)
-
-    if axis_is_broken:
-        broken_axis_options = [
-            (None, "<b>X-Axis</b>"),
-            ('Scale', [ax1.get_xscale(), 'linear', 'log', 'logit']),
-            # ('Lower Limit', ax1.get_xlim()[0]),
-            # ('Upper Limit', ax1.get_xlim()[1]),
-            ('Tick Step Size', xtickspace),
-            sep,
-            (None, "<b>Y-Axis</b>"),
-            ('Scale', [ax1.get_yscale(), 'linear', 'log', 'logit']),
-            ('Lower Limit', ax1.get_ylim()[0]),
-            ('Upper Limit', ax1.get_ylim()[1]),
-            ('Tick Step Size', ytickspace)
-        ]
-
-        for idx, itm in enumerate(axes[1:]):
-            broken_axis_options.insert(3 + idx * 3, (None, "%i. Segment" % (idx + 1)))
-            broken_axis_options.insert(4 + idx * 3, ('Lower Limit', itm.get_xlim()[0]))
-            broken_axis_options.insert(5 + idx * 3, ('Upper Limit', itm.get_xlim()[1]))
+               sep,
+               (None, "<b>X-Axis</b>"),
+               ('Label', ax.get_xlabel()),
+               ('Label Pad', ax.xaxis.labelpad),
+               sep,
+               (None, "<b>Y-Axis</b>"),
+               ('Label', ax.get_ylabel()),
+               ('Label Pad', ax.yaxis.labelpad)
+               ]
 
     if axl.legend_ is not None:
         old_legend = axl.get_legend()
@@ -349,10 +344,7 @@ def figure_edit(axes, parent=None):
     # Is there an image displayed?
     has_image = bool(images)
 
-    datalist = [(general, "Axes", "")]
-    if axis_is_broken:
-        datalist.append((broken_axis_options, "Broken Axes", ""))
-    datalist.append((legend, "Legend", ""))
+    datalist = [(general, "General", ""), (axis_options, "Axis", ""), (legend, "Legend", "")]
     if curves:
         datalist.append((curves, "Curves", ""))
     if images:
@@ -368,8 +360,7 @@ def figure_edit(axes, parent=None):
         figure = ax.get_figure()
 
         general = data.pop(0)
-        if axis_is_broken:
-            broken_axis_options = data.pop(0)
+        axis_options = data.pop(0)
         legend = data.pop(0)
         curves = data.pop(0) if has_curve else []
         images = data.pop(0) if has_image else []
@@ -379,10 +370,22 @@ def figure_edit(axes, parent=None):
             raise ValueError("Unexpected field")
 
         # Set / General
+        (title, titlesize, labelsize, ticksize, grid,
+         xlabel, xlabelpad, ylabel, ylabelpad) = general
+
+        ax.set_title(title)
+        ax.title.set_fontsize(titlesize)
+
+        ax.set_xlabel(xlabel)
+        ax.xaxis.labelpad = xlabelpad
+        ax.set_ylabel(ylabel)
+        ax.yaxis.labelpad = ylabelpad
+        ax.xaxis.label.set_size(labelsize)
+        ax.yaxis.label.set_size(labelsize)
+
         if axis_is_broken is False:
-            (title, titlesize, labelsize, ticksize, grid, xlabel, xlabelpad, xscale,
-             xlim_left, xlim_right, xtickspace, ylabel, ylabelpad, yscale, ylim_left, ylim_right, ytickspace,
-             xbreak, xbreak_start, xbreak_end, ybreak, ybreak_start, ybreak_end) = general
+            (xscale, xlim_left, xlim_right, xtickspace, yscale, ylim_left, ylim_right, ytickspace,
+             xbreak, xbreak_start, xbreak_end, ybreak, ybreak_start, ybreak_end) = axis_options
             if ax.get_xscale() != xscale:
                 ax.set_xscale(xscale)
             if ax.get_yscale() != yscale:
@@ -390,7 +393,7 @@ def figure_edit(axes, parent=None):
 
             if xtickspace == 0:
                 axes.xaxis.set_ticks([])
-            elif xtickspace != None:
+            elif xtickspace is not None:
                 xtick_space_start = math.ceil(xlim_left / xtickspace) * xtickspace
                 ax.xaxis.set_ticks(np.arange(xtick_space_start, xlim_right, xtickspace))
             ax.set_xlim(xlim_left, xlim_right)
@@ -399,18 +402,15 @@ def figure_edit(axes, parent=None):
 
             if ytickspace == 0:
                 ax.yaxis.set_ticks([])
-            elif ytickspace != None:
+            elif ytickspace is not None:
                 ytick_space_start = math.ceil(ylim_left / ytickspace) * ytickspace
                 ax.yaxis.set_ticks(np.arange(ytick_space_start, ylim_right, ytickspace))
             ax.set_ylim(ylim_left, ylim_right)
             ax.yaxis.set_tick_params(labelsize=ticksize)
             ax.grid(grid)
         else:
-            (title, titlesize, labelsize, ticksize, grid,
-             xlabel, xlabelpad, ylabel, ylabelpad) = general
-
             (xscale, xtickspace, *xlim,
-             yscale, ylim_left, ylim_right, ytickspace) = broken_axis_options
+             yscale, ylim_left, ylim_right, ytickspace) = axis_options
 
             xlim_left = []
             xlim_right = []
@@ -425,7 +425,7 @@ def figure_edit(axes, parent=None):
                 axes[1].set_yscale(yscale)
                 axes[2].set_yscale(yscale)
 
-            if xtickspace != None:
+            if xtickspace is not None:
                 xtick_space_start = math.ceil(xlim_left[0] / xtickspace) * xtickspace
                 axes[1].xaxis.set_ticks(np.arange(xtick_space_start, xlim_right[0], xtickspace))
                 axes[2].xaxis.set_ticks(np.arange(xtick_space_start, xlim_right[1], xtickspace))
@@ -434,7 +434,7 @@ def figure_edit(axes, parent=None):
             axes[1].xaxis.set_tick_params(labelsize=ticksize)
             axes[2].xaxis.set_tick_params(labelsize=ticksize)
 
-            if ytickspace != None:
+            if ytickspace is not None:
                 ytick_space_start = math.ceil(ylim_left / ytickspace) * ytickspace
                 axes[1].yaxis.set_ticks(np.arange(ytick_space_start, ylim_right, ytickspace))
                 axes[2].yaxis.set_ticks(np.arange(ytick_space_start, ylim_right, ytickspace))
@@ -445,15 +445,7 @@ def figure_edit(axes, parent=None):
             axes[1].grid(grid)
             axes[2].grid(grid)
 
-        ax.set_title(title)
-        ax.title.set_fontsize(titlesize)
 
-        ax.set_xlabel(xlabel)
-        ax.xaxis.labelpad = xlabelpad
-        ax.set_ylabel(ylabel)
-        ax.yaxis.labelpad = ylabelpad
-        ax.xaxis.label.set_size(labelsize)
-        ax.yaxis.label.set_size(labelsize)
 
          # Restore the unit data
         ax.xaxis.converter = xconverter
@@ -579,7 +571,11 @@ def figure_edit(axes, parent=None):
     if data is not None:
         apply_callback(data)
 
-
 # Monkey-patch original figureoptions
 from matplotlib.backends.qt_editor import figureoptions
 figureoptions.figure_edit = figure_edit
+
+
+
+
+
