@@ -51,6 +51,8 @@ import Database_Measurements  # see file Database_Measurements
 # 3. Spreadsheet
 # 4. Plot
 
+
+
 ########################################################################################################################
 # 1. Main window
 ########################################################################################################################
@@ -655,7 +657,7 @@ class TextWindow(QMainWindow):
         self.textfield.textChanged.connect(self.text_change)
 
     def create_menubar(self):
-        # create the menubar               
+        # create the menubar
         self.menubar = self.menuBar()
 
         # 1. Menu item: File
@@ -720,7 +722,7 @@ class TextWindow(QMainWindow):
 #####################################################################################################################################################
 
 # partly (Class SpreadSheetDelegate and class SpreadSheetItem) stolen from:
-# http://negfeedback.blogspot.com/2017/12/a-simple-gui-spreadsheet-in-less-than.html 
+# http://negfeedback.blogspot.com/2017/12/a-simple-gui-spreadsheet-in-less-than.html
 cellre = re.compile(r'\b[A-Z][0-9]\b')
 
 
@@ -1449,7 +1451,7 @@ class SpreadSheetWindow(QMainWindow):
         # get visual index of selected columns in sorted order
         selCol = sorted(set(self.headers.visualIndex(idx.column()) for idx in self.header_table.selectedIndexes()))
 
-        # Decides if line or dot plot       
+        # Decides if line or dot plot
         action = self.sender()
         if action.text() == 'Line Plot':
             plot_type = '-'
@@ -1592,16 +1594,17 @@ class Functions:
 
 
 class LineBuilder:
-    '''
+    """
     Plotting a vertical line in plot, e.g. to define area for fit
-    '''
+    """
 
     def __init__(self, line):
         self.line = line
         self.xs = line.get_xdata()[0]
         self.line.set_visible(True)
-        self.cid = line.figure.canvas.mpl_connect('button_press_event', self)
-        self.line.figure.canvas.start_event_loop(timeout=10000)
+        self.canvas = self.line.figure.canvas
+        self.cid = self.canvas.mpl_connect('button_press_event', self)
+        self.canvas.start_event_loop(timeout=10000)
 
     def __call__(self, event):
         if event.inaxes != self.line.axes:
@@ -1609,18 +1612,16 @@ class LineBuilder:
         elif event.button == 1:
             self.xs = event.xdata
             self.line.set_xdata([self.xs, self.xs])
-            self.line.figure.canvas.draw()
+            self.canvas.draw()
         elif event.button == 3:
-            self.line.figure.canvas.mpl_disconnect(self.cid)
-            self.line.figure.canvas.stop_event_loop(self)
-        else:
-            pass
+            self.canvas.mpl_disconnect(self.cid)
+            self.canvas.stop_event_loop(self)
 
 
-class MovingLines:
+class MoveSpectra:
     def __init__(self, line, scaling=False):
         """
-        Class to move lines
+        Class to move spectra
         Parameters
         ----------
         line: Line2D
@@ -1636,7 +1637,7 @@ class MovingLines:
         self.move_line = False  # check if right line is selected
 
         self.cid1 = self.c.mpl_connect('pick_event', self.onpick)
-        self.cid2 = self.c.mpl_connect('motion_notify_event', self.onmove)
+        self.cid2 = self.c.mpl_connect('button_press_event', self.onmove)
         self.cid3 = self.c.mpl_connect('button_release_event', self.onrelease)
 
         self.fig.canvas.start_event_loop(timeout=10000)
@@ -1647,19 +1648,19 @@ class MovingLines:
         self.move_line = True
 
     def onmove(self, event):
-        if self.move_line != True:
+        if not self.move_line:
             return
         # the click locations
         x_click = event.xdata
         y_click = event.ydata
 
-        if x_click == None or y_click == None:
+        if x_click is None or y_click is None:
             return
 
         # get index of nearest point
         ind = min(range(len(self.x)), key=lambda i: abs(self.x[i] - x_click))
 
-        if self.scaling == False:
+        if not self.scaling:
             shift_factor = y_click - self.y[ind]
             self.y = self.y + shift_factor
         else:
@@ -1670,10 +1671,11 @@ class MovingLines:
         self.fig.canvas.draw()
 
     def onrelease(self, event):
-        if self.move_line == True:
+        if self.move_line:
             self.fig.canvas.mpl_disconnect(self.cid1)
             self.fig.canvas.mpl_disconnect(self.cid2)
             self.fig.canvas.mpl_disconnect(self.cid3)
+            self.move_line = False
             self.fig.canvas.stop_event_loop(self)
 
 
@@ -2674,11 +2676,11 @@ class PlotWindow(QMainWindow):
             self.update_legend(new_handles, new_labels)
             self.ax.figure.canvas.draw()
         elif event.artist in self.spectrum and event.mouseevent.button == 3:
-            self.lineDialog = QMenu()
-            # self.lineDialog.addAction("Go to Spreadsheet", lambda: self.go_to_spreadsheet(event.artist))
+            line_dialog = QMenu()
+            line_dialog.addAction("Go to Spreadsheet", lambda: self.go_to_spreadsheet(event.artist))
             point = self.mapToGlobal(
                 QtCore.QPoint(event.mouseevent.x, self.frameGeometry().height() - event.mouseevent.y))
-            self.lineDialog.exec_(point)
+            line_dialog.exec_(point)
         else:
             pass
 
@@ -2797,13 +2799,13 @@ class PlotWindow(QMainWindow):
         ScaleAct.triggered.connect(self.scale_spectrum)
         toolbar.addAction(ScaleAct)
 
-        # Tool to shift selected spectrum in y-direction       
+        # Tool to shift selected spectrum in y-direction
         ShiftAct = QAction(QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Tool_Shift.png"), 'Shift', self)
         ShiftAct.setStatusTip('Tool to shift selected spectrum in y-direction')
         ShiftAct.triggered.connect(self.shift_spectrum)
         toolbar.addAction(ShiftAct)
 
-        # Tool to draw line       
+        # Tool to draw line
         DrawAct = QAction(QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Arrow.png"), 'Draw', self)
         DrawAct.setStatusTip('Tool to draw lines and arrows')
         DrawAct.triggered.connect(self.draw_line)
@@ -2817,7 +2819,7 @@ class PlotWindow(QMainWindow):
 
         self.show()
 
-    ########## Functions and other stuff ##########
+    #### Functions and other stuff ####
     def go_to_spreadsheet(self, line):
         line_index = self.spectrum.index(line)
         if len(self.data[line_index]) == 7:
@@ -2833,9 +2835,10 @@ class PlotWindow(QMainWindow):
             spreadsheet = self.mw.window['Spreadsheet'][spreadsheet_name]
             header_name = self.data[line_index][2]
             for j in range(spreadsheet.data_table.columnCount()):
-                if spreadsheet.data_table.horizontalHeaderItem(j).text() == header_name + '(Y)':
+                if spreadsheet.header_table.horizontalHeaderItem(j).text() == header_name + ' (Y)':
                     self.mw.show_statusbar_message(header_name, 4000)
-                    spreadsheet.data_table.setCurrentCell(0, j)
+                    spreadsheet.header_table.setCurrentCell(0, j)
+                    break
                 else:
                     continue
 
@@ -3847,14 +3850,14 @@ class PlotWindow(QMainWindow):
     def scale_spectrum(self):
         self.SelectDataset(True)
         for n in self.selectedDatasetNumber:
-            ms = MovingLines(self.spectrum[n], scaling=True)
+            ms = MoveSpectra(self.spectrum[n], scaling=True)
             self.spectrum[n] = ms.line
             self.data[n][1] = ms.y
 
     def shift_spectrum(self):
         self.SelectDataset(True)
         for n in self.selectedDatasetNumber:
-            ms = MovingLines(self.spectrum[n])
+            ms = MoveSpectra(self.spectrum[n])
             self.spectrum[n] = ms.line
             self.data[n][1] = ms.y
 
