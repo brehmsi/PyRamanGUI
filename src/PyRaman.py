@@ -52,7 +52,6 @@ import Database_Measurements  # see file Database_Measurements
 # 4. Plot
 
 
-
 ########################################################################################################################
 # 1. Main window
 ########################################################################################################################
@@ -3418,7 +3417,7 @@ class PlotWindow(QMainWindow):
         x_max = 4000
 
         # parameter for background-correction
-        p = 0.001  # asymmetry 0.001 <= p <= 0.1 is a good choice  recommended from Eilers and Boelens for Raman: 0.001
+        p = 0.0005  # asymmetry 0.001 <= p <= 0.1 is a good choice  recommended from Eilers and Boelens for Raman: 0.001
         # recommended from Simon: 0.0001
         lam = 10000000  # smoothness 10^2 <= lambda <= 10^9         recommended from Eilers and Boelens for Raman: 10^7
         # recommended from Simon: 10^7
@@ -3446,7 +3445,7 @@ class PlotWindow(QMainWindow):
         pBoundsUp = []
         inf = np.inf
 
-        pStart.append((1360, 80, 30))  # D-Bande
+        pStart.append((1350, 150, 30))  # D-Bande
         pBoundsLow.append((1335, 0, 0))
         pBoundsUp.append((1385, inf, 150))
 
@@ -3460,7 +3459,7 @@ class PlotWindow(QMainWindow):
         pBoundsLow.append((1420, 0, 0))
         pBoundsUp.append((1440, inf, 100))
 
-        pStart.append((1600, 200, 30, -10))  # G-Peak (BWF)
+        pStart.append((1590, 200, 30, -10))  # G-Peak (BWF)
         pBoundsLow.append((1575, 0, 0, -inf))
         pBoundsUp.append((1630, inf, inf, inf))
 
@@ -3487,15 +3486,16 @@ class PlotWindow(QMainWindow):
             working_x = x[np.where((x > x_min) & (x < x_max))]
             working_y = y[np.where((x > x_min) & (x < x_max))]
 
-            xb, yb, zb = self.baseline_als(working_x, working_y, p, lam)
-            self.baseline, = self.ax.plot(xb, zb, 'c--', label='baseline ({})'.format(self.spectrum[n].get_label()))
-            self.blcSpektrum, = self.ax.plot(xb, yb, 'c-',
+            yb, zb = self.blc.asy_least_square(working_x, working_y, p, lam)
+            baseline, = self.ax.plot(working_x, zb, 'c--', label='baseline ({})'.format(self.spectrum[n].get_label()))
+            blcSpektrum, = self.ax.plot(working_x, yb, 'c-',
                                              label='baseline-corrected ({})'.format(self.spectrum[n].get_label()))
             self.fig.canvas.draw()
 
             # limit data to fitarea
-            working_x = xb[np.where((xb > x_min_fit) & (xb < x_max_fit))]
-            working_y = yb[np.where((xb > x_min_fit) & (xb < x_max_fit))]
+            working_y = yb[np.where((working_x > x_min_fit) & (working_x < x_max_fit))]
+            working_x = working_x[np.where((working_x > x_min_fit) & (working_x < x_max_fit))]
+
             try:
                 popt, pcov = curve_fit(self.functions.FctSumme, working_x, working_y, p0=p_start, bounds=p_bounds,
                                        absolute_sigma=False)
