@@ -1636,7 +1636,7 @@ class MoveSpectra:
         self.move_line = False  # check if right line is selected
 
         self.cid1 = self.c.mpl_connect('pick_event', self.onpick)
-        self.cid2 = self.c.mpl_connect('button_press_event', self.onmove)
+        self.cid2 = self.c.mpl_connect('motion_notify_event', self.onmove)
         self.cid3 = self.c.mpl_connect('button_release_event', self.onrelease)
 
         self.fig.canvas.start_event_loop(timeout=10000)
@@ -2143,14 +2143,14 @@ class FitOptionsDialog(QMainWindow):
     closeSignal = QtCore.pyqtSignal()  # Signal in case Fit-parameter window is closed
 
     def __init__(self, parent):
-        super(FitOptionsDialog, self).__init__(parent=parent)
-        '''
+        """
         Options Dialog for Fitprocess
 
         Parameters
         ----------
         parent: PlotWindow
-        '''
+        """
+        super(FitOptionsDialog, self).__init__(parent=parent)
         self.parent = parent
         self.n_fit_fct = {  # number of fit functions (Lorentzian, Gaussian and Breit-Wigner-Fano)
             'Lorentz': 0,
@@ -2224,9 +2224,9 @@ class FitOptionsDialog(QMainWindow):
         fileMenu.addAction('Load Start Parameter', self.load_start_parameter)
 
     def add_function(self, fct_name, fct_values):
-        '''
+        """
         add fit function to table
-        '''
+        """
 
         n = len(self.fit_fcts) + 1  # Number of functions
         self.fit_fcts.update({n: {}})
