@@ -467,7 +467,11 @@ class MainWindow(QMainWindow):
                 index = self.tabWidget.indexOf(self.folder[new_text][1])
                 self.tabWidget.setTabText(index, new_text)
             else:
-                win = self.windowWidget[windowtype][old_text]
+                try:
+                    win = self.windowWidget[windowtype][old_text]
+                except KeyError as e:
+                    self.treeWidget.itemChanged.disconnect()
+                    return
                 win.setWindowTitle(new_text)
                 self.window[windowtype][new_text] = self.window[windowtype].pop(old_text)
                 self.windowWidget[windowtype][new_text] = self.windowWidget[windowtype].pop(old_text)
@@ -3100,7 +3104,7 @@ class PlotWindow(QMainWindow):
 
     def fit_single_peak(self, q):
         self.SelectDataset()
-        if self.selectedDatasetNumber != []:
+        if self.selectedDatasetNumber:
             x_min, x_max = self.SelectArea()
             self.n_fit_fct[q.text()] = 1
             p_start = self.get_start_values()
@@ -3113,7 +3117,13 @@ class PlotWindow(QMainWindow):
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
-            popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0=p_start)  # , bounds=([0, 500], [200, 540]))
+            try:
+                popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0=p_start)  # , bounds=([0, 500], [200, 540]))
+            except RuntimeError or ValueError as e:
+                self.mw.show_statusbar_message(str(e), 4000)
+                self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
+                return
+
             x1 = np.linspace(min(x), max(x), 1000)
             self.ax.plot(x1, self.functions.FctSumme(x1, *popt), '-r')
             self.fig.canvas.draw()
@@ -3129,7 +3139,7 @@ class PlotWindow(QMainWindow):
 
     def fit_peaks(self):
         self.SelectDataset()
-        if self.selectedDatasetNumber != []:
+        if self.selectedDatasetNumber:
             x_min, x_max = self.SelectArea()
             fitdialog = FitOptionsDialog(self)
             fitdialog.show()
@@ -3137,7 +3147,7 @@ class PlotWindow(QMainWindow):
             fitdialog.closeSignal.connect(loop.quit)
             loop.exec_()
             continue_fit = fitdialog.continue_fit
-            if continue_fit == True:
+            if continue_fit:
                 pass
             else:
                 return
@@ -3418,7 +3428,7 @@ class PlotWindow(QMainWindow):
 
         # parameter for background-correction
         p = 0.0005  # asymmetry 0.001 <= p <= 0.1 is a good choice  recommended from Eilers and Boelens for Raman: 0.001
-        # recommended from Simon: 0.0001
+        # recommended from Simon: 0.0005
         lam = 10000000  # smoothness 10^2 <= lambda <= 10^9         recommended from Eilers and Boelens for Raman: 10^7
         # recommended from Simon: 10^7
 
