@@ -445,9 +445,7 @@ def figure_edit(axes, parent=None):
             axes[1].grid(grid)
             axes[2].grid(grid)
 
-
-
-         # Restore the unit data
+        # Restore the unit data
         ax.xaxis.converter = xconverter
         ax.yaxis.converter = yconverter
         ax.xaxis.set_units(xunits)
@@ -546,7 +544,7 @@ def figure_edit(axes, parent=None):
 
             fill.set_facecolor(face_color)
 
-            if remove_fill == True:
+            if remove_fill:
                 try:
                     fill.remove()
                 except ValueError as e:

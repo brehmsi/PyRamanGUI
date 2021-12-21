@@ -10,6 +10,7 @@ import numpy as np
 import operator
 import os
 import pickle
+import rampy as rp
 import re
 import scipy
 import sympy as sp
@@ -2021,7 +2022,7 @@ class DataSetSelecter(QtWidgets.QDialog):
         self.close()
 
 
-class Baseline_Corrections():
+class BaselineCorrections():
     def __init__(self, pw):
         self.pw = pw    # contains parent: class PlotWindow
         self.p_start = '0.001'
@@ -2048,7 +2049,7 @@ class Baseline_Corrections():
         p = float(p_edit.text())
         lam = float(lam_edit.text())
         yb, zb = self.asy_least_square(x, y, p, lam)
-        self.baseline, = self.pw.ax.plot(x, zb, 'c--', label='baseline ({})'.format(spct.get_label()))
+        self.base_line, = self.pw.ax.plot(x, zb, 'c--', label='baseline ({})'.format(spct.get_label()))
         self.blcSpektrum, = self.pw.ax.plot(x, yb, 'c-', label='baseline-corrected ({})'.format(spct.get_label()))
         self.pw.fig.canvas.draw()
 
@@ -2085,7 +2086,7 @@ class Baseline_Corrections():
 
     def baseline_als_call(self, x, y, p, lam, spct):
         self.blcSpektrum.remove()
-        self.baseline.remove()
+        self.base_line.remove()
         name = spct.get_label()
         if self.closebutton.isChecked():
             self.Dialog_BaselineParameter.close()
@@ -2096,7 +2097,7 @@ class Baseline_Corrections():
             self.return_value = yb, zb
         else:
             yb, zb = self.asy_least_square(x, y, p, lam)
-            self.baseline, = self.pw.ax.plot(x, zb, 'c--', label='baseline ({})'.format(name))
+            self.base_line, = self.pw.ax.plot(x, zb, 'c--', label='baseline ({})'.format(name))
             self.blcSpektrum, = self.pw.ax.plot(x, yb, 'c-', label='baseline-corrected ({})'.format(name))
         self.pw.fig.canvas.draw()
 
@@ -2116,14 +2117,10 @@ class Baseline_Corrections():
         for i in range(niter):
             W = sparse.spdiags(w, 0, L, L)
             Z = W + lam * D.dot(D.transpose())
-            z = spsolve(Z, w * y)
-            w = p * (y > z) + (1 - p) * (y < z)
-        y = y - z
-
-        #        self.baseline,    = self.ax.plot(x, z, 'c--', label = 'baseline (' + self.selectedData[0][2] + ')')
-        #        self.blcSpektrum, = self.ax.plot(x, y, 'c-', label = 'baseline-corrected '+ self.selectedData[0][2])
-        #        self.fig.canvas.draw()
-        return y, z  #y - background-corrected Intensity-values, z - background
+            base = spsolve(Z, w * y)
+            w = p * (y > base) + (1 - p) * (y < base)
+        y = y - base
+        return y, base  # y - background-corrected Intensity-values, z - background
 
     def rubberband(self, x, y):
         """
@@ -2138,9 +2135,18 @@ class Baseline_Corrections():
         v = v[:v.argmax()]
 
         # Create baseline using linear interpolation between vertices
-        z = np.interp(x, x[v], y[v])
-        y = y - z
-        return y, z
+        base = np.interp(x, x[v], y[v])
+        y = y - base
+        return y, base # y - background-corrected Intensity-values, base - background
+
+    def drPLS(self, x, y):
+        """(automatic) Baseline correction method based on doubly reweighted penalized least squares.
+        Xu et al., Applied Optics 58(14):3913-3920."""
+        roi = np.array([[0, 100], [200, 220], [280, 290], [420, 430], [480, 500]])
+        y, base = rp.baseline(x, y, roi, 'drPLS')
+        y = [i for i in y]
+        base = [i for i in base]
+        return y, base
 
 
 class FitOptionsDialog(QMainWindow):
@@ -2538,7 +2544,7 @@ class PlotWindow(QMainWindow):
         self.spectrum = []
         self.vert_line = None
         self.functions = Functions(self)
-        self.blc = Baseline_Corrections(self)       # class for everything related to Baseline corrections
+        self.blc = BaselineCorrections(self)       # class for everything related to Baseline corrections
         self.inserted_text = []  # Storage for text inserted in the plot
         self.drawn_line = []  # Storage for lines and arrows drawn in the plot
         self.n_fit_fct = {  # number of fit functions (Lorentzian, Gaussian and Breit-Wigner-Fano)
@@ -2567,8 +2573,8 @@ class PlotWindow(QMainWindow):
         if self.fig is None:  # new Plot
             self.fig = Figure(figsize=(15, 9))
             self.ax = self.fig.add_subplot(111)
-            self.Canvas = FigureCanvasQTAgg(self.fig)
-            layout.addWidget(self.Canvas)
+            self.canvas = FigureCanvasQTAgg(self.fig)
+            layout.addWidget(self.canvas)
 
             for j in self.data:
                 if isinstance(j[5], (np.ndarray, np.generic)):  # errors
@@ -2587,8 +2593,8 @@ class PlotWindow(QMainWindow):
         else:  # loaded Plot
             # self.fig._remove_ax = lambda: None
             self.ax = self.fig.axes[0]
-            self.Canvas = FigureCanvasQTAgg(self.fig)
-            layout.addWidget(self.Canvas)
+            self.canvas = FigureCanvasQTAgg(self.fig)
+            layout.addWidget(self.canvas)
             for j in self.ax.lines:
                 self.spectrum.append(j)
             it = []
@@ -2601,7 +2607,7 @@ class PlotWindow(QMainWindow):
                 else:
                     pass
             self.ax.get_legend()
-        toolbar = MyCustomToolbar(self.Canvas)
+        toolbar = MyCustomToolbar(self.canvas)
         toolbar.signal_remove_line.connect(self.remove_line)
         self.addToolBar(toolbar)
         self.ax.get_legend().set_picker(5)
@@ -2771,12 +2777,19 @@ class PlotWindow(QMainWindow):
         analysisBaseline = analysisMenu.addMenu('&Baseline Corrections')
         analysisBaseline.addAction('Asymmetric Least Square')
         analysisBaseline.addAction('Rubberband')
+        analysisBaseline.addAction('Doubly Reweighted Penalized Least Squares')
         analysisBaseline.triggered[QAction].connect(self.baseline)
 
-        # 3.4 Analysis find peaks
+        # 3.3 Smoothing
+        analysisSmoothing = analysisMenu.addMenu('&Smoothing')
+        analysisSmoothing.addAction('Savitsky-Golay')
+        analysisSmoothing.addAction('Whittaker')
+        analysisSmoothing.triggered[QAction].connect(self.smoothing)
+
+        # 3.5 Analysis find peaks
         analysisMenu.addAction('Find Peak', self.find_peaks)
 
-        # 3.5 Get Area below curve
+        # 3.6 Get Area below curve
         analysisMenu.addAction('Get Area below Curve', self.detemine_area)
 
         self.show()
@@ -2950,7 +2963,7 @@ class PlotWindow(QMainWindow):
         self.SelectDataset()
         for n in self.selectedDatasetNumber:
             norm_factor = numpy.amax(self.data[n][1])
-            if select_peak == True:
+            if select_peak:
                 dpp = DataPointPicker(self.spectrum[n], np.where(self.data[n][1] == norm_factor))
                 idx = dpp.idx
                 norm_factor = self.data[n][1][idx]
@@ -2959,7 +2972,7 @@ class PlotWindow(QMainWindow):
             self.spectrum[n].set_data(self.data[n][0], self.data[n][1])
             self.fig.canvas.draw()
             # Save normalized data
-            if self.data[n][3] != None:
+            if self.data[n][3] is not None:
                 (fileBaseName, fileExtension) = os.path.splitext(self.data[n][2])
                 startFileDirName = os.path.dirname(self.data[n][3])
                 startFileBaseName = startFileDirName + '/' + fileBaseName
@@ -3313,6 +3326,8 @@ class PlotWindow(QMainWindow):
                 y_return = self.blc.rubberband(x, y)
             elif method == 'Asymmetric Least Square':
                 y_return = self.blc.als_startparam(x, y, n)
+            elif method == 'Doubly Reweighted Penalized Least Squares':
+                y_return = self.blc.drPLS(x, y)
             else:
                 return
 
@@ -3322,7 +3337,7 @@ class PlotWindow(QMainWindow):
                 y_corr, y_bl = y_return
                 name = spct.get_label()
                 self.spectrum.append(self.ax.plot(x, y_corr, 'c-', label='{} (baseline-corrected)'.format(name))[0])
-                self.baseline, = self.ax.plot(x, y_bl, 'c--', label='baseline ({})'.format(name))
+                self.base_line, = self.ax.plot(x, y_bl, 'c--', label='baseline ({})'.format(name))
 
                 ### Save background-corrected data ###
                 (fileBaseName, fileExtension) = os.path.splitext(name)
@@ -3336,6 +3351,20 @@ class PlotWindow(QMainWindow):
                 ### Append data ###
                 self.data.append([x, y_corr, '{}_bgc'.format(fileBaseName), startFileName, '-', 0])
                 self.fig.canvas.draw()
+
+    def smoothing(self, action):
+        self.SelectDataset()
+        method = action.text()
+        for n in self.selectedDatasetNumber:
+            spct = self.spectrum[n]
+            x = spct.get_xdata()
+            y = spct.get_ydata()
+            if method == "Savitsky-Golay":
+                y_smooth = rp.smooth(x, y, method="savgol", window_length=15, polyorder=3)
+            elif method == "Whittaker":
+                y_smooth = rp.smooth(x, y, method="whittaker",Lambda=10**0.5)
+            spct.set_ydata(y_smooth)
+            self.fig.canvas.draw()
 
     def linear_regression(self):
         self.SelectDataset()
@@ -3894,7 +3923,7 @@ class PlotWindow(QMainWindow):
 
     def pick_point_for_text(self, event):
         pos = [event.xdata, event.ydata]
-        text = self.ax.annotate(r'''*''', pos, picker=5)
+        text = self.ax.annotate(r'''*''', pos, picker=5, fontsize=24)
         self.inserted_text.append(InsertText(text, self.mw))
         self.fig.canvas.mpl_disconnect(self.pick_text_point_connection)
         self.fig.canvas.draw()
