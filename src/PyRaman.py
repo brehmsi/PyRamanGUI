@@ -2025,30 +2025,41 @@ class DataSetSelecter(QtWidgets.QDialog):
 class BaselineCorrections():
     def __init__(self, pw):
         self.pw = pw    # contains parent: class PlotWindow
-        self.p_start = '0.001'
-        self.lam_start = '10000000'
+
+        # start parameter for different methods
+        self.p_start = {'Asymmetric Least Square': '0.001',
+                        'Asymmetrically Reweighted Penalized Least Squares': '0.001',
+                        'Doubly Reweighted Penalized Least Squares': '0.0001'}
+        self.lam_start = {'Asymmetric Least Square': '10000000',
+                          'Asymmetrically Reweighted Penalized Least Squares': '10000000',
+                          'Doubly Reweighted Penalized Least Squares': '1000000'}
+
         self.return_value = None
 
-    def als_startparam(self, x, y, n):
+    def als_startparam(self, x, y, n, method):
         spct = self.pw.spectrum[n]
+
+        # dialog to get baseline parameter p and lambda
         self.Dialog_BaselineParameter = QDialog()
         layout = QtWidgets.QGridLayout()
-
         p_edit = QtWidgets.QLineEdit()
         layout.addWidget(p_edit, 0, 0)
-        p_edit.setText(self.p_start)
-        p_label = QtWidgets.QLabel('p')
+        p_edit.setText(self.p_start[method])
+        if method == 'Asymmetric Least Square':
+            p_label = QtWidgets.QLabel('p')
+        else:
+            p_label = QtWidgets.QLabel('ratio')
         layout.addWidget(p_label, 0, 1)
 
         lam_edit = QtWidgets.QLineEdit()
         layout.addWidget(lam_edit, 1, 0)
-        lam_edit.setText(self.lam_start)
+        lam_edit.setText(self.lam_start[method])
         lam_label = QtWidgets.QLabel('lambda')
         layout.addWidget(lam_label, 1, 1)
 
         p = float(p_edit.text())
         lam = float(lam_edit.text())
-        yb, zb = self.asy_least_square(x, y, p, lam)
+        yb, zb = self.get_baseline(x, y, p, lam, method=method)
         self.base_line, = self.pw.ax.plot(x, zb, 'c--', label='baseline ({})'.format(spct.get_label()))
         self.blcSpektrum, = self.pw.ax.plot(x, yb, 'c-', label='baseline-corrected ({})'.format(spct.get_label()))
         self.pw.fig.canvas.draw()
@@ -2058,33 +2069,33 @@ class BaselineCorrections():
         self.finishbutton.setToolTip(
             'Are you happy with the start parameters? \n Close the dialog window and save the baseline!')
         self.finishbutton.clicked.connect(
-            lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text()), spct))
+            lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text()), spct, method))
         layout.addWidget(self.finishbutton, 2, 0)
 
         self.closebutton = QPushButton('Close', self.pw)
         self.closebutton.setCheckable(True)
         self.closebutton.setToolTip('Closes the dialog window and baseline is not saved.')
         self.closebutton.clicked.connect(
-            lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text()), spct))
+            lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text()), spct, method))
         layout.addWidget(self.closebutton, 2, 1)
 
         applybutton = QPushButton('Apply', self.pw)
         applybutton.setToolTip('Do you want to try the fit parameters? \n Lets do it!')
         applybutton.clicked.connect(
-            lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text()), spct))
+            lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text()), spct, method))
         layout.addWidget(applybutton, 2, 2)
 
         self.Dialog_BaselineParameter.setLayout(layout)
-        self.Dialog_BaselineParameter.setWindowTitle("Baseline Parameter")
+        self.Dialog_BaselineParameter.setWindowTitle("Baseline Parameter ({})".format(method))
         self.Dialog_BaselineParameter.setWindowModality(Qt.ApplicationModal)
         self.Dialog_BaselineParameter.exec_()
 
-        self.p_start = p_edit.text()
-        self.lam_start = lam_edit.text()
+        self.p_start[method] = p_edit.text()
+        self.lam_start[method] = lam_edit.text()
 
         return self.return_value
 
-    def baseline_als_call(self, x, y, p, lam, spct):
+    def baseline_als_call(self, x, y, p, lam, spct, method):
         self.blcSpektrum.remove()
         self.base_line.remove()
         name = spct.get_label()
@@ -2092,14 +2103,27 @@ class BaselineCorrections():
             self.Dialog_BaselineParameter.close()
             self.return_value = None
         elif self.finishbutton.isChecked():
-            yb, zb = self.asy_least_square(x, y, p, lam)
+            yb, zb = self.get_baseline(x, y, p, lam, method=method)
             self.Dialog_BaselineParameter.close()
             self.return_value = yb, zb
         else:
-            yb, zb = self.asy_least_square(x, y, p, lam)
+            yb, zb = self.get_baseline(x, y, p, lam, method=method)
             self.base_line, = self.pw.ax.plot(x, zb, 'c--', label='baseline ({})'.format(name))
             self.blcSpektrum, = self.pw.ax.plot(x, yb, 'c-', label='baseline-corrected ({})'.format(name))
         self.pw.fig.canvas.draw()
+
+    def get_baseline(self, x, y, p, lam, method):
+        if method == 'Asymmetric Least Square':
+            y_return = self.asy_least_square(x, y, p, lam)
+        elif method == 'Asymmetrically Reweighted Penalized Least Squares':
+            y_return = self.arPLS(x, y, p, lam)
+        elif method == 'Doubly Reweighted Penalized Least Squares':
+            y_return = self.drPLS(x, y, p, lam)
+        else:
+            print('This method is not implemented')
+            return
+
+        return y_return
 
     def asy_least_square(self, x, y, p, lam):
         """
@@ -2109,8 +2133,10 @@ class BaselineCorrections():
         """
 
         niter = 10
-        # p = 0.001   			#asymmetry 0.001 <= p <= 0.1 is a good choice     recommended from Eilers and Boelens for Raman: 0.001    recommended from Simon: 0.0001
-        # lam = 10000000			#smoothness 10^2 <= lambda <= 10^9                     recommended from Eilers and Boelens for Raman: 10^7      recommended from Simon: 10^7
+        # p = 0.001   			#asymmetry 0.001 <= p <= 0.1 is a good choice
+        # recommended from Eilers and Boelens for Raman: 0.001    recommended from Simon: 0.0001
+        # lam = 10000000			#smoothness 10^2 <= lambda <= 10^9
+        # recommended from Eilers and Boelens for Raman: 10^7      recommended from Simon: 10^7
         L = len(x)
         D = sparse.csc_matrix(np.diff(np.eye(L), 2))
         w = np.ones(L)
@@ -2139,11 +2165,22 @@ class BaselineCorrections():
         y = y - base
         return y, base # y - background-corrected Intensity-values, base - background
 
-    def drPLS(self, x, y):
+    def arPLS(self, x, y, ratio, lam):
+        """(automatic) Baseline correction using asymmetrically reweighted penalized least squares smoothing.
+        Baek et al. 2015, Analyst 140: 250-257;"""
+        # roi is not needed for this baseline, but still is a requirement when calling the function.
+        roi = np.array([[0, 100], [200, 220], [280, 290], [420, 430], [480, 500]])
+        y, base = rp.baseline(x, y, roi, 'arPLS', lam=lam, ratio=ratio)
+        y = [i for i in y]
+        base = [i for i in base]
+        return y, base
+
+    def drPLS(self, x, y, ratio, lam):
         """(automatic) Baseline correction method based on doubly reweighted penalized least squares.
         Xu et al., Applied Optics 58(14):3913-3920."""
+        # roi is not needed for this baseline, but still is a requirement when calling the function.
         roi = np.array([[0, 100], [200, 220], [280, 290], [420, 430], [480, 500]])
-        y, base = rp.baseline(x, y, roi, 'drPLS')
+        y, base = rp.baseline(x, y, roi, 'drPLS', ratio=ratio, lam=lam)
         y = [i for i in y]
         base = [i for i in base]
         return y, base
@@ -2778,6 +2815,7 @@ class PlotWindow(QMainWindow):
         analysisBaseline.addAction('Asymmetric Least Square')
         analysisBaseline.addAction('Rubberband')
         analysisBaseline.addAction('Doubly Reweighted Penalized Least Squares')
+        analysisBaseline.addAction('Asymmetrically Reweighted Penalized Least Squares')
         analysisBaseline.triggered[QAction].connect(self.baseline)
 
         # 3.3 Smoothing
@@ -3324,8 +3362,8 @@ class PlotWindow(QMainWindow):
 
             if method == 'Rubberband':
                 y_return = self.blc.rubberband(x, y)
-            elif method == 'Asymmetric Least Square':
-                y_return = self.blc.als_startparam(x, y, n)
+            elif method == 'Asymmetric Least Square' or 'Asymmetrically Reweighted Penalized Least Squares':
+                y_return = self.blc.als_startparam(x, y, n, method=method)
             elif method == 'Doubly Reweighted Penalized Least Squares':
                 y_return = self.blc.drPLS(x, y)
             else:
