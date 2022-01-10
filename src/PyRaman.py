@@ -169,13 +169,11 @@ class MainWindow(QMainWindow):
 
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
-        self.windowtypes = ['Folder', 'Spreadsheet', 'Plotwindow', 'Textwindow']
+        self.window_types = ['Folder', 'Spreadsheet', 'Plotwindow', 'Textwindow']
         self.window = {}  # dictionary with windows
-        self.windowNames = {}
         self.windowWidget = {}
-        for j in self.windowtypes:
+        for j in self.window_types:
             self.window[j] = {}
-            self.windowNames[j] = []
             self.windowWidget[j] = {}
         self.folder = {}  # key = foldername, value = [Qtreewidgetitem, QmdiArea]
         self.FileName = os.path.dirname(__file__)  # path of this python file
@@ -218,7 +216,7 @@ class MainWindow(QMainWindow):
 
     def create_menubar(self):
         """
-        create a menubar
+        create a menu bar
         """
         menu = self.menuBar()
         File = menu.addMenu('File')
@@ -311,7 +309,7 @@ class MainWindow(QMainWindow):
             save_dict[key] = {}
             for j in range(val[0].childCount()):
                 win_name = val[0].child(j).text(0)
-                win_type = self.windowtypes[val[0].child(j).type()]
+                win_type = self.window_types[val[0].child(j).type()]
                 window = self.window[win_type][win_name]
                 if win_type == 'Spreadsheet':
                     save_dict[key][win_name] = [win_type, window.data]
@@ -361,36 +359,36 @@ class MainWindow(QMainWindow):
         if winTypInt == 0:  #
             self.tabWidget.setCurrentWidget(self.folder[text][1])
         else:
-            windowtype = self.windowtypes[winTypInt]
+            windowtype = self.window_types[winTypInt]
             win = self.windowWidget[windowtype][text]
             currentFolder = item.parent().text(0)
             self.tabWidget.setCurrentWidget(self.folder[currentFolder][1])
             self.folder[currentFolder][1].setActiveSubWindow(win)
             win.showMaximized()
 
-    def tree_window_options(self, event, item):
-        if item is not None:
+    def tree_window_options(self, event, tree_item):
+        if tree_item is not None:
             if event.button() == QtCore.Qt.RightButton:
-                item_text = item.text(0)
+                item_text = tree_item.text(0)
                 TreeItemMenu = QMenu()
                 ActRename = TreeItemMenu.addAction('Rename')
                 ActDelete = TreeItemMenu.addAction('Delete')
                 ActCopy = TreeItemMenu.addAction('Copy')
                 ac = TreeItemMenu.exec_(self.treeWidget.mapToGlobal(event.pos()))
-                window_type = self.windowtypes[item.type()]
+                window_type = self.window_types[tree_item.type()]
 
                 if ac == ActRename:
-                    self.treeWidget.editItem(item)
+                    self.treeWidget.editItem(tree_item)
                     self.treeWidget.itemChanged.connect(lambda item, column:
                                                         self.rename_window(item, column, item_text))
                 elif ac == ActDelete:
-                    if item.type() == 0:  # if item is folder:
-                        self.close_folder(foldername=item.text(0))
+                    if tree_item.type() == 0:  # if item is folder:
+                        self.close_folder(foldername=tree_item.text(0))
                     else:
-                        title = item.text(0)
+                        title = tree_item.text(0)
                         self.windowWidget[window_type][title].close()
                 elif ac == ActCopy:
-                    window_name = item.text(0)
+                    window_name = tree_item.text(0)
                     window = self.window[window_type][window_name]
                     if window_type == 'Spreadsheet':
                         data = [window_type, window.data.copy()]
@@ -423,8 +421,6 @@ class MainWindow(QMainWindow):
                     self.new_window(None, 'Spreadsheet', None, None)
                 elif ac == ActNewText:
                     self.new_window(None, 'Textwindow', '', None)
-                else:
-                    pass
 
     def change_folder(self, droppedItem, itemAtDropLocation):
         """function is called every time a qtreewidgetitem is dropped"""
@@ -438,12 +434,12 @@ class MainWindow(QMainWindow):
         if new_folder.type() == 0 and droppedItem.type() != 0:  # dropevent in folder
             previous_folder = droppedItem.parent().text(0)
             self.tabWidget.setCurrentWidget(self.folder[previous_folder][1])
-            wind = self.window[self.windowtypes[windowtyp]][windowname]
+            wind = self.window[self.window_types[windowtyp]][windowname]
             mdi = self.folder[foldername][1]
             new_subwindow = mdi.addSubWindow(wind)
             previous_mdi = self.folder[previous_folder][1]
             previous_mdi.removeSubWindow(wind)
-            self.windowWidget[self.windowtypes[windowtyp]][windowname] = new_subwindow
+            self.windowWidget[self.window_types[windowtyp]][windowname] = new_subwindow
             self.delete_empty_subwindows(previous_mdi)
         else:
             return
@@ -456,10 +452,35 @@ class MainWindow(QMainWindow):
 
     def rename_window(self, item, column, old_text):
         new_text = item.text(column)
-        windowtype = self.windowtypes[item.type()]
+        windowtype = self.window_types[item.type()]
 
-        if new_text in self.windowNames[windowtype]:  # in case name is already assigned
-            self.treeWidget.itemChanged.disconnect()
+        if new_text == old_text:
+            self.show_statusbar_message('Something went wrong', 4000)
+            i = 1
+            while i <= 100:
+                new_text = "{} {}".format(windowtype, i)
+                if new_text in self.window[windowtype].keys():
+                    i += 1
+                else:
+                    break
+            item.setText(0, new_text)
+            window_names = []
+            for wt in self.window_types:
+                window_names.append(self.window[wt].keys())
+            window_names = [item for sublist in window_names for item in sublist]
+            tree_items_names = []
+            for i in range(self.treeWidget.topLevelItemCount()):
+                c = self.treeWidget.topLevelItem(i)
+                for j in range(c.childCount()):
+                    tree_items_names.append(c.child(j).text(0))
+            old_text = set(window_names).difference(set(tree_items_names)).pop()
+            new_text = set(tree_items_names).difference(set(window_names)).pop()
+
+        if new_text in self.window[windowtype].keys():  # in case name is already assigned
+            try:
+                self.treeWidget.itemChanged.disconnect()
+            except TypeError as e:
+                print(e)
             item.setText(0, old_text)
             self.show_statusbar_message('Name is already assigned', 4000)
         else:
@@ -476,11 +497,12 @@ class MainWindow(QMainWindow):
                 win.setWindowTitle(new_text)
                 self.window[windowtype][new_text] = self.window[windowtype].pop(old_text)
                 self.windowWidget[windowtype][new_text] = self.windowWidget[windowtype].pop(old_text)
-                index = self.windowNames[windowtype].index(old_text)
                 self.window[windowtype][new_text].setWindowTitle(new_text)
                 self.update_spreadsheet_menubar()
-            self.windowNames[windowtype][index] = new_text
-            self.treeWidget.itemChanged.disconnect()
+            try:
+                self.treeWidget.itemChanged.disconnect()
+            except TypeError as e:
+                print(e)
 
     def rearange(self, q):
         # rearange open windows
@@ -501,7 +523,7 @@ class MainWindow(QMainWindow):
             i = 1
             while i <= 100:
                 title = windowtype + ' ' + str(i)
-                if title in self.windowNames[windowtype]:
+                if title in self.window[windowtype].keys():
                     i += 1
                 else:
                     break
@@ -547,7 +569,6 @@ class MainWindow(QMainWindow):
         self.windowWidget[windowtype][title] = self.folder[foldername][1].addSubWindow(self.window[windowtype][title])
         self.window[windowtype][title].setWindowTitle(title)
         self.window[windowtype][title].show()
-        self.windowNames[windowtype].append(title)
 
         item = QTreeWidgetItem([title], type=windowtypeInt)
         item.setIcon(0, icon)
@@ -574,12 +595,11 @@ class MainWindow(QMainWindow):
         self.folder[title][0].setIcon(0, QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/folder.png"))
         self.treeWidget.addTopLevelItem(self.folder[title][0])
         self.treeWidget.expandItem(self.folder[title][0])
-        self.windowNames['Folder'].append(title)
         self.folder[title].append(QtWidgets.QMdiArea(self))  # widget for multi document interface area
         self.tabWidget.addTab(self.folder[title][1], self.PyramanIcon, title)
 
     def add_Plot(self, pw_name, plotData):
-        # add spectrum to existing plotwindow
+        """ add spectrum to existing plotwindow """
         for j in plotData:
             j[4] = self.window['Plotwindow'][pw_name].spectrum[0].get_linestyle()
         self.window['Plotwindow'][pw_name].add_plot(plotData)
@@ -587,7 +607,6 @@ class MainWindow(QMainWindow):
     def close_window(self, windowtype, title):
         del self.window[windowtype][title]
         del self.windowWidget[windowtype][title]
-        self.windowNames[windowtype].remove(title)
         items = self.treeWidget.findItems(title, Qt.MatchFixedString | Qt.MatchRecursive)
 
         self.folder[items[0].parent().text(0)][0].removeChild(items[0])
@@ -1049,6 +1068,7 @@ class SpreadSheetWindow(QMainWindow):
         plotAdd = plotMenu.addMenu('&Add to')
         for j in self.mw.window['Plotwindow'].keys():
             plotAdd.addAction(j, self.get_plot_data)
+        plotMenu.addAction('Plot all', lambda: self.get_plot_data(plot_all=True))
 
         self.show()
 
@@ -1329,7 +1349,12 @@ class SpreadSheetWindow(QMainWindow):
         for j in range(n_newFiles):
             # read first line to get header
             with open(newFiles[j]) as f:
-                firstline = f.readline()
+                try:
+                    firstline = f.readline()
+                except UnicodeDecodeError as e:
+                    print(e, newFiles[j])
+                    n_newFiles -= 1
+                    continue
             # check if file has a header (starts with #)
             if firstline[0] == '#':
                 firstline = firstline[1:-2]  # remove '#' at beginning and '\n' at end
@@ -1448,12 +1473,17 @@ class SpreadSheetWindow(QMainWindow):
             self.header_table.setItem(r, self.cols - 1, QTableWidgetItem())
             self.header_table.item(r, self.cols - 1).setBackground(QtGui.QColor(255, 255, 200))
 
-    def get_plot_data(self):
+    def get_plot_data(self, plot_all=False):
         """ get data from selected columns and prepares data for plot """
 
         self.plot_data = []  # [X-data, Y-data, label, filename, plottype, yerr, spreadsheet-title]
-        # get visual index of selected columns in sorted order
-        selCol = sorted(set(self.headers.visualIndex(idx.column()) for idx in self.header_table.selectedIndexes()))
+
+        if plot_all is True:
+            selCol = [idx for idx, d in enumerate(self.data) if d["type"] == "Y"]
+            print(selCol)
+        else:
+            # get visual index of selected columns in sorted order
+            selCol = sorted(set(self.headers.visualIndex(idx.column()) for idx in self.header_table.selectedIndexes()))
 
         # Decides if line or dot plot
         action = self.sender()
@@ -1461,6 +1491,8 @@ class SpreadSheetWindow(QMainWindow):
             plot_type = '-'
         elif action.text() == 'Dot Plot':
             plot_type = 'o'
+        elif action.text() == 'Plot all':
+            plot_type = '-'
         else:
             plot_type = None
 
@@ -1524,7 +1556,7 @@ class SpreadSheetWindow(QMainWindow):
                 self.mw.show_statusbar_message('X and Y have different lengths', 4000)
                 return
         # emit signal to MainWindow to create new Plotwindow or add lines to existing plotwindow
-        if plot_type != None:
+        if plot_type is not None:
             self.new_pw_signal.emit()
         else:
             self.add_pw_signal.emit(action.text())
@@ -2772,7 +2804,10 @@ class PlotWindow(QMainWindow):
         # 2. menu item: Edit
         editMenu = menubar.addMenu('&Edit')
 
-        editMenu.addAction('Delete broken pixel - LabRam', self.del_broken_pixel)
+        editDelete = editMenu.addMenu('Delete broken pixel - LabRam')
+        editDelete.addAction("532nm")
+        editDelete.addAction("633nm")
+        editDelete.triggered[QAction].connect(self.del_broken_pixel)
 
         editDeletePixel = editMenu.addAction('Delete single datapoint', self.del_datapoint)
         editDeletePixel.setStatusTip(
@@ -2942,7 +2977,8 @@ class PlotWindow(QMainWindow):
             return
 
         if isinstance(data, (np.ndarray, np.generic)):
-            np.savetxt(SaveFileName, data)
+            np.savetxt(SaveFileName, data, fmt='%.5f')
+            np.savetxt(SaveFileName, data, fmt='%.5f')
         else:
             file = open(SaveFileName, 'w+')
             file.write(data)
@@ -2958,36 +2994,37 @@ class PlotWindow(QMainWindow):
             self.spectrum[j].set_data(self.data[j][0], self.data[j][1])
             self.setFocus()
 
-    def del_broken_pixel(self):
+    def del_broken_pixel(self, action):
         """
         Deletes data point with number 630+n*957, because this pixel is broken in CCD detector of LabRam
         """
+        data_idx_diff = {'532nm': 957, '633nm': 924}
         self.SelectDataset()
         for j in self.selectedDatasetNumber:
-            a = 629
-            grenze = 6
+            data_idx = 629         # index of first broken data point
+            border = 6
             print('Following data points of {} were deleted'.format(self.data[j][2]))
-            while a <= len(self.data[j][0]):
-                b = np.argmin(self.data[j][1][a - grenze:a + grenze])
-                if b == 0 or b == 12:
+            while data_idx <= len(self.data[j][0]):
+                data_min_idx = np.argmin(self.data[j][1][data_idx - border:data_idx + border])
+                if data_min_idx == 0 or data_min_idx == 2*border:
                     QMessageBox.about(self, "Title",
                                       "Please select this data point manually (around {} in the data set {})".format(
-                                          self.data[j][0][a], self.data[j][2]))
-                    pickDP = DataPointPicker(self.spectrum[j], a)
-                    a = pickDP.idx
+                                          self.data[j][0][data_idx], self.data[j][2]))
+                    pickDP = DataPointPicker(self.spectrum[j], data_idx)
+                    data_idx = pickDP.idx
                 else:
-                    a = a + b - grenze
+                    data_idx += data_min_idx - border
 
-                print(self.data[j][0][a], self.data[j][1][a])
-                self.data[j][0] = np.delete(self.data[j][0], a)
-                self.data[j][1] = np.delete(self.data[j][1], a)
-                a = a + 957
+                print(self.data[j][0][data_idx], self.data[j][1][data_idx])
+                self.data[j][0] = np.round(np.delete(self.data[j][0], data_idx), 5)
+                self.data[j][1] = np.delete(self.data[j][1], data_idx)
+                data_idx += data_idx_diff[action.text()]
 
             self.spectrum[j].set_data(self.data[j][0], self.data[j][1])
             self.setFocus()
             self.fig.canvas.draw()
 
-            ### Save data without defective data points ###
+            # Save data without defective data points
             startFileDirName = os.path.dirname(self.data[j][3])
             startFileName = startFileDirName + '/' + self.data[j][2]
             save_data = [self.data[j][0], self.data[j][1]]
