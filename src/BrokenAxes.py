@@ -154,7 +154,6 @@ class BrokenAxes:
         self.big_ax.yaxis.labelpad = 45
         self.big_ax.patch.set_facecolor('none')
 
-
         self.axs = []
         for igs in gs:
             ax = plt.Subplot(self.fig, igs)
@@ -193,10 +192,8 @@ class BrokenAxes:
 
         for ax in self.axs:
             for line in old_lines:
-                ax.plot(line.get_xdata(), line.get_ydata(), lw=line.get_lw(), ls=line.get_ls(), 
-                    c=line.get_c(), label= line.get_label())
-
-
+                ax.plot(line.get_xdata(), line.get_ydata(), lw=line.get_lw(), ls=line.get_ls(),
+                        c=line.get_c(), label=line.get_label())
 
         new_legend = self.axs[1].legend(
                                 ncol=leg_ncol,
@@ -208,7 +205,7 @@ class BrokenAxes:
 
     @staticmethod
     def draw_diag(ax, xpos, xlen, ypos, ylen, **kwargs):
-        return ax.plot((xpos - xlen, xpos + xlen), (ypos - ylen, ypos + ylen), label = '_nolegend_',
+        return ax.plot((xpos - xlen, xpos + xlen), (ypos - ylen, ypos + ylen), label='_nolegend_',
                        **kwargs)
 
     def draw_diags(self):
@@ -225,7 +222,7 @@ class BrokenAxes:
         ylen = self.d * np.sin(self.tilt * np.pi / 180) * size[0] / size[1]
         xlen = self.d * np.cos(self.tilt * np.pi / 180)
         d_kwargs = dict(transform=self.fig.transFigure, color=self.diag_color,
-                        clip_on=False, lw=rcParams['axes.linewidth'])
+                        clip_on=False, in_layout=True, lw=rcParams['axes.linewidth'])
 
         ds = []
         for ax in self.axs:
@@ -318,7 +315,9 @@ class BrokenAxes:
                             ax.xaxis.get_ticklocs()[0]
                             for ax in self.axs if ax.is_last_row())
         if ybase is None:
-            if self.axs[0].yaxis.get_scale() == 'log':
+            if not self.axs[0].get_yticks():
+                pass
+            elif self.axs[0].yaxis.get_scale() == 'log':
                 ybase = max(ax.yaxis.get_ticklocs()[1] /
                             ax.yaxis.get_ticklocs()[0]
                             for ax in self.axs if ax.is_first_col())
@@ -328,7 +327,9 @@ class BrokenAxes:
                             for ax in self.axs if ax.is_first_col())
 
         for ax in self.axs:
-            if ax.is_first_col():
+            if not self.axs[0].get_yticks():
+                pass
+            elif ax.is_first_col():
                 if ax.yaxis.get_scale() == 'log':
                     ax.yaxis.set_major_locator(ticker.LogLocator(ybase))
                 else:
@@ -369,7 +370,6 @@ class BrokenAxes:
         return self.big_ax.set_xlabel(label, labelpad=labelpad, **kwargs)
 
     def set_ylabel(self, label, labelpad=100, **kwargs):
-        #self.big_ax.xaxis.labelpad = labelpad
         return self.big_ax.set_ylabel(label, labelpad=labelpad, **kwargs)
 
     # def set_xlim(self, *args, **kwargs):

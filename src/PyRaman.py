@@ -1669,8 +1669,7 @@ class MoveSpectra:
         self.y = line.get_ydata()
         self.fig = self.line.figure
         self.c = self.fig.canvas
-
-        self.move_line = False  # check if right line is selected
+        self.move_line = False  # True if right line is selected, otherwise False
 
         self.cid1 = self.c.mpl_connect('pick_event', self.onpick)
         self.cid2 = self.c.mpl_connect('motion_notify_event', self.onmove)
@@ -2054,7 +2053,7 @@ class DataSetSelecter(QtWidgets.QDialog):
         self.close()
 
 
-class BaselineCorrections():
+class BaselineCorrections:
     def __init__(self, pw):
         self.pw = pw    # contains parent: class PlotWindow
 
@@ -2067,6 +2066,23 @@ class BaselineCorrections():
                           'Doubly Reweighted Penalized Least Squares': '1000000'}
 
         self.return_value = None
+
+    def rubberband(self, x, y):
+        """
+        Rubberband Baseline Correction
+        source: https://dsp.stackexchange.com/questions/2725/how-to-perform-a-rubberband-correction-on-spectroscopic-data
+        """
+        # Find the convex hull
+        v = scipy.spatial.ConvexHull(np.array(list(zip(x, y)))).vertices
+        # Rotate convex hull vertices until they start from the lowest one
+        v = np.roll(v, -v.argmin())
+        # Leave only the ascending part
+        v = v[:v.argmax()]
+
+        # Create baseline using linear interpolation between vertices
+        base = np.interp(x, x[v], y[v])
+        y = y - base
+        return y, base # y - background-corrected Intensity-values, base - background
 
     def als_startparam(self, x, y, n, method):
         spct = self.pw.spectrum[n]
@@ -2146,7 +2162,7 @@ class BaselineCorrections():
 
     def get_baseline(self, x, y, p, lam, method):
         if method == 'Asymmetric Least Square':
-            y_return = self.asy_least_square(x, y, p, lam)
+            y_return = self.ALS(x, y, p, lam)
         elif method == 'Asymmetrically Reweighted Penalized Least Squares':
             y_return = self.arPLS(x, y, p, lam)
         elif method == 'Doubly Reweighted Penalized Least Squares':
@@ -2157,10 +2173,11 @@ class BaselineCorrections():
 
         return y_return
 
-    def asy_least_square(self, x, y, p, lam):
+    def ALS(self, x, y, p, lam):
         """
-        Baseline correction
-        based on: "Baseline Correction with Asymmetric Least SquaresSmoothing" from Eilers and Boelens
+        baseline correction with Asymmetric Least Squares smoothing
+        based on: P. H. C. Eilers and H. F. M. Boelens. Baseline correction with asymmetric least squares smoothing.
+        Leiden University Medical Centre Report , 1(1):5, 2005. from Eilers and Boelens
         also look at: https://stackoverflow.com/questions/29156532/python-baseline-correction-library
         """
 
@@ -2175,27 +2192,10 @@ class BaselineCorrections():
         for i in range(niter):
             W = sparse.spdiags(w, 0, L, L)
             Z = W + lam * D.dot(D.transpose())
-            base = spsolve(Z, w * y)
-            w = p * (y > base) + (1 - p) * (y < base)
-        y = y - base
-        return y, base  # y - background-corrected Intensity-values, z - background
-
-    def rubberband(self, x, y):
-        """
-        Rubberband Baseline Correction
-        source: https://dsp.stackexchange.com/questions/2725/how-to-perform-a-rubberband-correction-on-spectroscopic-data
-        """
-        # Find the convex hull
-        v = scipy.spatial.ConvexHull(np.array(list(zip(x, y)))).vertices
-        # Rotate convex hull vertices until they start from the lowest one
-        v = np.roll(v, -v.argmin())
-        # Leave only the ascending part
-        v = v[:v.argmax()]
-
-        # Create baseline using linear interpolation between vertices
-        base = np.interp(x, x[v], y[v])
-        y = y - base
-        return y, base # y - background-corrected Intensity-values, base - background
+            baseline = spsolve(Z, w * y)
+            w = p * (y > baseline) + (1 - p) * (y < baseline)
+        y = y - baseline
+        return y, baseline  # y - background-corrected Intensity-values, baseline - baseline
 
     def arPLS(self, x, y, ratio, lam):
         """(automatic) Baseline correction using asymmetrically reweighted penalized least squares smoothing.
@@ -2841,6 +2841,7 @@ class PlotWindow(QMainWindow):
         analysisRoutine.addAction('D und G Bande', self.fit_D_G)
         analysisRoutine.addAction('Sulfur oxyanion ratios', self.ratio_H2O_sulfuroxyanion)
         analysisRoutine.addAction('Get m/I(G) (Hydrogen content)', self.hydrogen_estimation)
+        analysisRoutine.addAction('Norm to water peak', self.norm_to_water)
 
         # 3.2 Linear regression
         analysisLinReg = analysisMenu.addAction('Linear regression', self.linear_regression)
@@ -3600,7 +3601,7 @@ class PlotWindow(QMainWindow):
             working_x = x[np.where((x > x_min) & (x < x_max))]
             working_y = y[np.where((x > x_min) & (x < x_max))]
 
-            yb, zb = self.blc.asy_least_square(working_x, working_y, p, lam)
+            yb, zb = self.blc.ALS(working_x, working_y, p, lam)
             baseline, = self.ax.plot(working_x, zb, 'c--', label='baseline ({})'.format(self.spectrum[n].get_label()))
             blcSpektrum, = self.ax.plot(working_x, yb, 'c-',
                                              label='baseline-corrected ({})'.format(self.spectrum[n].get_label()))
@@ -3888,6 +3889,35 @@ class PlotWindow(QMainWindow):
             # save_data = np.transpose(save_data)
             # self.save_to_file('Save background-corrected data in file', startFileName, save_data)
 
+    def norm_to_water(self):
+        self.SelectDataset()
+        for n in self.selectedDatasetNumber:
+            # get data
+            spct = self.spectrum[n]
+            xs = self.data[n][0]
+            ys = self.data[n][1]
+
+            # background correction
+            yb, baseline = self.blc.ALS(xs, ys, p=0.0001, lam=100000000)
+
+            # norm spectrum regarding water peak
+            norm_factor = np.max(yb[np.argwhere((xs>3000) & (xs<3700))])
+            yb = yb / norm_factor
+            self.data[n][1] = yb
+            self.spectrum[n].set_data(xs, yb)
+            self.fig.canvas.draw()
+            # Save normalized data
+            if self.data[n][3] is not None:
+                (fileBaseName, fileExtension) = os.path.splitext(self.data[n][2])
+                startFileDirName = os.path.dirname(self.data[n][3])
+                startFileBaseName = startFileDirName + '/' + fileBaseName
+                startFileName = startFileBaseName + '_norm.txt'
+            else:
+                startFileName = None
+            save_data = [self.data[n][0], self.data[n][1]]
+            save_data = np.transpose(save_data)
+            self.save_to_file('Save normalized data in file', startFileName, save_data)
+
     def ratio_H2O_sulfuroxyanion(self):
         # this function calculates the intensity ratio of different peaks
         # simply by getting the maximum of a peak
@@ -3964,14 +3994,22 @@ class PlotWindow(QMainWindow):
     def scale_spectrum(self):
         self.SelectDataset(True)
         for n in self.selectedDatasetNumber:
-            ms = MoveSpectra(self.spectrum[n], scaling=True)
+            try:
+                ms = MoveSpectra(self.spectrum[n], scaling=True)
+            except RuntimeError as e:
+                print(e)
+                continue
             self.spectrum[n] = ms.line
             self.data[n][1] = ms.y
 
     def shift_spectrum(self):
         self.SelectDataset(True)
         for n in self.selectedDatasetNumber:
-            ms = MoveSpectra(self.spectrum[n])
+            try:
+                ms = MoveSpectra(self.spectrum[n])
+            except RuntimeError as e:
+                print(e)
+                continue
             self.spectrum[n] = ms.line
             self.data[n][1] = ms.y
 
