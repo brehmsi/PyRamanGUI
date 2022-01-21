@@ -273,9 +273,9 @@ class MainWindow(QMainWindow):
             self.close()
             return
 
-        file = open(self.pHomeRmn, 'rb')  # open file and save content in variable 'v' with pickle
-        v = pickle.load(file)
-        file.close()
+        # open file and save content in variable 'v' with pickle
+        with open(self.pHomeRmn, 'rb') as file:
+            v = pickle.load(file)
 
         self.treeWidget.clear()
         self.tabWidget.clear()
@@ -1368,7 +1368,10 @@ class SpreadSheetWindow(QMainWindow):
             except Exception as e:
                 print('{} \n probably the rows have different lengths'.format(e))
 
-            load_data[j] = np.transpose(load_data[j])
+            try:
+                load_data[j] = np.transpose(load_data[j])
+            except IndexError as e:
+                print("The data format is not readabel for PyRaman\n", e)
 
             if isinstance(load_data[j][0], float):
                 load_data[j] = [load_data[j], np.ones(len(load_data[j])) * np.nan]
@@ -2553,6 +2556,7 @@ class FitOptionsDialog(QMainWindow):
 
 class MyCustomToolbar(NavigationToolbar2QT):
     signal_remove_line = QtCore.pyqtSignal(object)
+    signal_broken_axis = QtCore.pyqtSignal()
     toolitems = [t for t in NavigationToolbar2QT.toolitems]
     # Add new toolitem at last position
 
@@ -2574,10 +2578,11 @@ class MyCustomToolbar(NavigationToolbar2QT):
     def edit_parameters(self):
         axes = self.canvas.figure.get_axes()
         if not axes:
-            QtWidgets.QMessageBox.warning(
-                self.canvas.parent(), "Error", "There are no axes to edit.")
+            QtWidgets.QMessageBox.warning(self.canvas.parent(), "Error", "There are no axes to edit.")
             return
         figureoptions.figure_edit(axes, self)
+        if figureoptions.figure_edit.axis_is_broken:
+            self.signal_broken_axis.emit()
 
     def _icon(self, name, color=None):
         if name == 'Layer.png':
@@ -2678,6 +2683,7 @@ class PlotWindow(QMainWindow):
             self.ax.get_legend()
         toolbar = MyCustomToolbar(self.canvas)
         toolbar.signal_remove_line.connect(self.remove_line)
+        toolbar.signal_broken_axis.connect(self.broken_axis)
         self.addToolBar(toolbar)
         self.ax.get_legend().set_picker(5)
 
@@ -2698,7 +2704,7 @@ class PlotWindow(QMainWindow):
             spect.set_marker(ma)
         handles, labels = self.ax.get_legend_handles_labels()
         self.update_legend(handles, labels)
-        self.fig.canvas.draw()
+        self.canvas.draw()
 
     def keyPressEvent(self, event):
         key = event.key
@@ -2720,6 +2726,11 @@ class PlotWindow(QMainWindow):
         i = self.spectrum.index(line)
         self.data.pop(i)
         self.spectrum.pop(i)
+
+    def broken_axis(self):
+        #self.ax = self.fig.axes[2]
+        #print(self.fig.axes)
+        pass
 
     def pickEvent(self, event):
         if event.mouseevent.dblclick == True and event.artist == self.ax.get_legend():
@@ -2752,7 +2763,7 @@ class PlotWindow(QMainWindow):
                         new_labels.append(labels[i])
 
             self.update_legend(new_handles, new_labels)
-            self.ax.figure.canvas.draw()
+            self.canvas.draw()
         elif event.artist in self.spectrum and event.mouseevent.button == 3:
             line_dialog = QMenu()
             line_dialog.addAction("Go to Spreadsheet", lambda: self.go_to_spreadsheet(event.artist))

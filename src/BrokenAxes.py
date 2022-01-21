@@ -101,13 +101,6 @@ class BrokenAxes:
 
         kwargs.update(ncols=ncols, nrows=nrows, height_ratios=height_ratios,
                       width_ratios=width_ratios)
-        # if subplot_spec:
-        #     gs = gridspec.GridSpecFromSubplotSpec(subplot_spec=subplot_spec,
-        #                                           *args, **kwargs)
-        #     self.big_ax = plt.Subplot(self.fig, subplot_spec)
-        # else:
-        #      gs = gridspec.GridSpec(*args, **kwargs)
-        #     self.big_ax = plt.Subplot(self.fig, gridspec.GridSpec(1, 1)[0])
 
         gs = gridspec.GridSpec(*args, **kwargs)
         self.big_ax = self.fig.gca() 
@@ -195,13 +188,19 @@ class BrokenAxes:
                 ax.plot(line.get_xdata(), line.get_ydata(), lw=line.get_lw(), ls=line.get_ls(),
                         c=line.get_c(), label=line.get_label())
 
-        new_legend = self.axs[1].legend(
+        self.big_ax.legend(self.axs[0].get_legend_handles_labels(),
                                 ncol=leg_ncol,
                                 fontsize=float(leg_fontsize),
                                 frameon=leg_frameon,
                                 shadow=leg_shadow,
                                 framealpha=leg_framealpha,
                                 fancybox=leg_fancybox)
+
+        # set order of axes
+        len_axs = len(self.axs)
+        for l in range(len_axs):
+            self.axs[l].set_zorder(l)
+        self.big_ax.set_zorder(l+1)
 
     @staticmethod
     def draw_diag(ax, xpos, xlen, ypos, ylen, **kwargs):
@@ -315,7 +314,7 @@ class BrokenAxes:
                             ax.xaxis.get_ticklocs()[0]
                             for ax in self.axs if ax.is_last_row())
         if ybase is None:
-            if not self.axs[0].get_yticks():
+            if self.axs[0].get_yticks() != []:
                 pass
             elif self.axs[0].yaxis.get_scale() == 'log':
                 ybase = max(ax.yaxis.get_ticklocs()[1] /
@@ -327,7 +326,7 @@ class BrokenAxes:
                             for ax in self.axs if ax.is_first_col())
 
         for ax in self.axs:
-            if not self.axs[0].get_yticks():
+            if self.axs[0].get_yticks() != []:
                 pass
             elif ax.is_first_col():
                 if ax.yaxis.get_scale() == 'log':
@@ -385,7 +384,7 @@ class BrokenAxes:
         return self.big_ax.get_figure()
 
     def legend(self, *args, **kwargs):
-        h, l = self.axs[0].get_legend_handles_labels()
+        h, l = self.axs[1].get_legend_handles_labels()
         return self.big_ax.legend(h, l, *args, **kwargs)
 
     def axis(self, *args, **kwargs):

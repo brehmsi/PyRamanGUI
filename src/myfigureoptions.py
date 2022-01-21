@@ -52,12 +52,12 @@ def figure_edit(axes, parent=None):
         ax, = axes
         ax1 = ax
         axl = ax
-        axis_is_broken = False
+        figure_edit.axis_is_broken = False
     else:
         ax = axes[0]         # main axis
         ax1 = axes[1]        # axis of first segment
         axl = axes[-1]       # axis of last segment
-        axis_is_broken = True
+        figure_edit.axis_is_broken = True
 
     # Get / General
     # Cast to builtin floats as they have nicer reprs.
@@ -80,7 +80,7 @@ def figure_edit(axes, parent=None):
     else:
         _ticksize = 15
 
-    if axis_is_broken:
+    if figure_edit.axis_is_broken:
         axis_options = [
             (None, "<b>X-Axis</b>"),
             ('Scale', [ax1.get_xscale(), 'linear', 'log', 'logit']),
@@ -139,8 +139,8 @@ def figure_edit(axes, parent=None):
                ('Label Pad', ax.yaxis.labelpad)
                ]
 
-    if axl.legend_ is not None:
-        old_legend = axl.get_legend()
+    if ax.legend_ is not None:
+        old_legend = ax.get_legend()
         _visible = old_legend._visible
         _draggable = old_legend._draggable is not None
         _ncol = old_legend._ncol
@@ -383,7 +383,7 @@ def figure_edit(axes, parent=None):
         ax.xaxis.label.set_size(labelsize)
         ax.yaxis.label.set_size(labelsize)
 
-        if axis_is_broken is False:
+        if figure_edit.axis_is_broken is False:
             (xscale, xlim_left, xlim_right, xtickspace, yscale, ylim_left, ylim_right, ytickspace,
              xbreak, xbreak_start, xbreak_end, ybreak, ybreak_start, ybreak_end) = axis_options
             if ax.get_xscale() != xscale:
@@ -453,7 +453,7 @@ def figure_edit(axes, parent=None):
         ax.xaxis._update_axisinfo()
         ax.yaxis._update_axisinfo()
 
-        if axis_is_broken is False:
+        if figure_edit.axis_is_broken is False:
             if xbreak is True and ybreak is True:
                 baxes = brokenaxes(xlims=((xlim_left, xbreak_start), (xbreak_end, xlim_right)),
                                   ylims=((ylim_left, ybreak_start), (ybreak_end, ylim_right)),
@@ -469,20 +469,17 @@ def figure_edit(axes, parent=None):
         (leg_visible, leg_draggable, leg_ncol, leg_fontsize, leg_frameon, leg_shadow,
          leg_fancybox, leg_framealpha, leg_picker) = legend
 
-        if axis_is_broken:
-            new_legend = axes[2].legend(ncol=leg_ncol,
-                                 fontsize=float(leg_fontsize),
-                                 frameon=leg_frameon,
-                                 shadow=leg_shadow,
-                                 framealpha=leg_framealpha,
-                                 fancybox=leg_fancybox)
+        if figure_edit.axis_is_broken:
+            handles, labels = axes[2].get_legend_handles_labels()
         else:
-            new_legend = ax.legend(ncol=leg_ncol,
-                                 fontsize=float(leg_fontsize),
-                                 frameon=leg_frameon,
-                                 shadow=leg_shadow,
-                                 framealpha=leg_framealpha,
-                                 fancybox=leg_fancybox)
+            handles, labels = ax.get_legend_handles_labels()
+        new_legend = ax.legend(handles, labels,
+                               ncol=leg_ncol,
+                               fontsize=float(leg_fontsize),
+                               frameon=leg_frameon,
+                               shadow=leg_shadow,
+                               framealpha=leg_framealpha,
+                               fancybox=leg_fancybox)
 
         new_legend.set_visible(leg_visible)
         new_legend.set_picker(leg_picker)
