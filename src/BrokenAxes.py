@@ -314,7 +314,7 @@ class BrokenAxes:
                             ax.xaxis.get_ticklocs()[0]
                             for ax in self.axs if ax.is_last_row())
         if ybase is None:
-            if self.axs[0].get_yticks() != []:
+            if not self.axs[0].get_yticks():
                 pass
             elif self.axs[0].yaxis.get_scale() == 'log':
                 ybase = max(ax.yaxis.get_ticklocs()[1] /
@@ -326,7 +326,7 @@ class BrokenAxes:
                             for ax in self.axs if ax.is_first_col())
 
         for ax in self.axs:
-            if self.axs[0].get_yticks() != []:
+            if not self.axs[0].get_yticks():
                 pass
             elif ax.is_first_col():
                 if ax.yaxis.get_scale() == 'log':
