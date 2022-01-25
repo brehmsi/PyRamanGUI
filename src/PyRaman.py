@@ -1671,14 +1671,12 @@ class MoveSpectra:
         self.x = line.get_xdata()
         self.y = line.get_ydata()
         self.fig = self.line.figure
-        self.c = self.fig.canvas
+        self.canvas = self.fig.canvas
         self.move_line = False  # True if right line is selected, otherwise False
-
-        self.cid1 = self.c.mpl_connect('pick_event', self.onpick)
-        self.cid2 = self.c.mpl_connect('motion_notify_event', self.onmove)
-        self.cid3 = self.c.mpl_connect('button_release_event', self.onrelease)
-
-        self.fig.canvas.start_event_loop(timeout=10000)
+        self.cid1 = self.canvas.mpl_connect('pick_event', self.onpick)
+        self.cid2 = self.canvas.mpl_connect('motion_notify_event', self.onmove)
+        self.cid3 = self.canvas.mpl_connect('button_release_event', self.onrelease)
+        self.canvas.start_event_loop(timeout=10000)
 
     def onpick(self, event):
         if event.artist != self.line:
@@ -1706,15 +1704,15 @@ class MoveSpectra:
             self.y = self.y * scale_factor
 
         self.line.set_ydata(self.y)
-        self.fig.canvas.draw()
+        self.canvas.draw()
 
     def onrelease(self, event):
         if self.move_line:
-            self.fig.canvas.mpl_disconnect(self.cid1)
-            self.fig.canvas.mpl_disconnect(self.cid2)
-            self.fig.canvas.mpl_disconnect(self.cid3)
+            self.canvas.mpl_disconnect(self.cid1)
+            self.canvas.mpl_disconnect(self.cid2)
+            self.canvas.mpl_disconnect(self.cid3)
             self.move_line = False
-            self.fig.canvas.stop_event_loop(self)
+            self.canvas.stop_event_loop(self)
 
 
 class LineDrawer:

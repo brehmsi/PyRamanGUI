@@ -455,22 +455,29 @@ def figure_edit(axes, parent=None):
 
         if figure_edit.axis_is_broken is False:
             if xbreak is True and ybreak is True:
-                baxes = brokenaxes(xlims=((xlim_left, xbreak_start), (xbreak_end, xlim_right)),
-                                  ylims=((ylim_left, ybreak_start), (ybreak_end, ylim_right)),
-                                  hspace=.05, fig=figure)
+                if xbreak_start < xbreak_end and ybreak_start < ybreak_end:
+                    baxes = brokenaxes(xlims=((xlim_left, xbreak_start), (xbreak_end, xlim_right)),
+                                       ylims=((ylim_left, ybreak_start), (ybreak_end, ylim_right)),
+                                       hspace=.05, fig=figure)
+                    figure_edit.axis_is_broken = True
             elif xbreak is True:
-                baxes = brokenaxes(xlims=((xlim_left, xbreak_start), (xbreak_end, xlim_right)), fig=figure)
+                if xbreak_start < xbreak_end:
+                    baxes = brokenaxes(xlims=((xlim_left, xbreak_start), (xbreak_end, xlim_right)), fig=figure)
+                    figure_edit.axis_is_broken = True
+                else:
+                    print("The first limit has to be smaller than the second one.")
             elif ybreak is True:
-                baxes = brokenaxes(ylims=((ylim_left, ybreak_start), (ybreak_end, ylim_right)), hspace=.05, fig=figure)
-            else:
-                pass
+                if ybreak_start < ybreak_end:
+                    baxes = brokenaxes(ylims=((ylim_left, ybreak_start), (ybreak_end, ylim_right)),
+                                       hspace=.05, fig=figure)
+                    figure_edit.axis_is_broken = True
 
         # Set / Legend
         (leg_visible, leg_draggable, leg_ncol, leg_fontsize, leg_frameon, leg_shadow,
          leg_fancybox, leg_framealpha, leg_picker) = legend
 
         if figure_edit.axis_is_broken:
-            handles, labels = axes[2].get_legend_handles_labels()
+            handles, labels = figure.axes[2].get_legend_handles_labels()
         else:
             handles, labels = ax.get_legend_handles_labels()
         new_legend = ax.legend(handles, labels,
