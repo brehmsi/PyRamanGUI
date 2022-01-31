@@ -15,8 +15,7 @@ import re
 import scipy
 import sympy as sp
 import sys
-import time
-from datetime import datetime
+from packaging import version
 
 from collections import ChainMap
 from matplotlib import *
@@ -24,7 +23,12 @@ from matplotlib.figure import Figure
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 import matplotlib.backends.qt_editor.figureoptions as figureoptions
-from matplotlib.backends.qt_compat import _setDevicePixelRatioF, _devicePixelRatioF
+if version.parse(matplotlib.__version__) <= version.parse('3.3.0'):
+    from matplotlib.backends.qt_compat import _setDevicePixelRatioF as _setDevicePixelRatio
+else:
+    from matplotlib.backends.qt_compat import _setDevicePixelRatio as _setDevicePixelRatio
+    print("This version of matplotlib will most likely not support all functions of PyRaman. Best version is 3.3.0")
+from matplotlib.backends.qt_compat import _devicePixelRatioF
 from numpy import pi
 from numpy.fft import fft, fftshift
 from PyQt5 import QtGui, QtWidgets, QtCore
@@ -1483,7 +1487,6 @@ class SpreadSheetWindow(QMainWindow):
 
         if plot_all is True:
             selCol = [idx for idx, d in enumerate(self.data) if d["type"] == "Y"]
-            print(selCol)
         else:
             # get visual index of selected columns in sorted order
             selCol = sorted(set(self.headers.visualIndex(idx.column()) for idx in self.header_table.selectedIndexes()))
@@ -2588,7 +2591,7 @@ class MyCustomToolbar(NavigationToolbar2QT):
         else:
             name = name.replace('.png', '_large.png')
             pm = QtGui.QPixmap(str(cbook._get_data_path('images', name)))
-            _setDevicePixelRatioF(pm, _devicePixelRatioF(self))
+            _setDevicePixelRatio(pm, _devicePixelRatioF(self))
             if color is not None:
                 mask = pm.createMaskFromColor(QtGui.QColor('black'),
                                               QtCore.Qt.MaskOutColor)
@@ -2840,7 +2843,7 @@ class PlotWindow(QMainWindow):
 
         analysisFitSingleFct = analysisFit.addMenu('&Single function')
         analysisFitSingleFct.addAction('Lorentz')
-        analysisFitSingleFct.addAction('Gaussian')
+        analysisFitSingleFct.addAction('Gauss')
         analysisFitSingleFct.addAction('Breit-Wigner-Fano')
         analysisFitSingleFct.triggered[QAction].connect(self.fit_single_peak)
 
@@ -3202,6 +3205,7 @@ class PlotWindow(QMainWindow):
 
     def fit_single_peak(self, q):
         self.SelectDataset()
+        print(q.text())
         if self.selectedDatasetNumber:
             x_min, x_max = self.SelectArea()
             self.n_fit_fct[q.text()] = 1
@@ -3216,12 +3220,12 @@ class PlotWindow(QMainWindow):
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
             try:
-                popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0=p_start)  # , bounds=([0, 500], [200, 540]))
+                popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0=p_start)
             except RuntimeError or ValueError as e:
                 self.mw.show_statusbar_message(str(e), 4000)
                 self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
                 return
-
+            print(popt)
             x1 = np.linspace(min(x), max(x), 1000)
             self.ax.plot(x1, self.functions.FctSumme(x1, *popt), '-r')
             self.fig.canvas.draw()
