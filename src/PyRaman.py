@@ -5,7 +5,7 @@ import math
 import matplotlib
 import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
-import matplotlib.backends.qt_editor._formlayout as formlayout
+
 import numpy as np
 import operator
 import os
@@ -29,15 +29,13 @@ else:
     from matplotlib.backends.qt_compat import _setDevicePixelRatio as _setDevicePixelRatio
     print("This version of matplotlib will most likely not support all functions of PyRaman. Best version is 3.3.0")
 from matplotlib.backends.qt_compat import _devicePixelRatioF
-from numpy import pi
-from numpy.fft import fft, fftshift
 from PyQt5 import QtGui, QtWidgets, QtCore
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, pyqtSlot, QObject
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QTableWidget, QVBoxLayout, QSizePolicy,
-                             QMessageBox, QPushButton, QCheckBox, QTreeWidgetItem, QTableWidgetItem, QItemDelegate,
-                             QLineEdit, QPushButton, QWidget, QMenu, QAction, QDialog, QFileDialog, QInputDialog,
-                             QAbstractItemView)
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QTableWidget, QMessageBox, QPushButton, QCheckBox,
+                             QTreeWidgetItem, QTableWidgetItem, QItemDelegate, QLineEdit, QPushButton, QWidget, QMenu,
+                             QAction, QDialog, QFileDialog, QAbstractItemView)
+from matplotlib.backends.qt_editor import _formlayout as formlayout
 from scipy import sparse
 from scipy import signal
 from scipy.optimize import curve_fit
@@ -1055,16 +1053,16 @@ class SpreadSheetWindow(QMainWindow):
         """ create the menubar """
         self.menubar = self.menuBar()
 
-        ### 1. menu item: File ###
+        # 1. menu item: File
         fileMenu = self.menubar.addMenu('&File')
         fileMenu.addAction('Save Data', self.file_save)
         fileMenu.addAction('Load Data', self.load_file)
 
-        ### 2. menu item: Edit
+        # 2. menu item: Edit
         editMenu = self.menubar.addMenu('&Edit')
         editMenu.addAction('New Column', self.new_col)
 
-        ### 3. menu item: Plot
+        # 3. menu item: Plot
         plotMenu = self.menubar.addMenu('&Plot')
         plotNew = plotMenu.addMenu('&New')
         plotNew.addAction('Line Plot', self.get_plot_data)
@@ -1085,13 +1083,13 @@ class SpreadSheetWindow(QMainWindow):
 
         self.header_table.setHorizontalHeaderLabels(headers)
 
-        ### open header_menu with right mouse click ###
+        # open header_menu with right mouse click
         self.headers = self.header_table.horizontalHeader()
         self.headers.setContextMenuPolicy(Qt.CustomContextMenu)
         self.headers.customContextMenuRequested.connect(self.show_header_context_menu)
         self.headers.setSelectionMode(QAbstractItemView.SingleSelection)
 
-        ### opens rename_header with double mouse click ###
+        # opens rename_header with double mouse click
         self.headerline = QtWidgets.QLineEdit()  # Create
         self.headerline.setWindowFlags(QtCore.Qt.FramelessWindowHint)  # Hide title bar
         self.headerline.setAlignment(QtCore.Qt.AlignLeft)  # Set the Alignmnet
@@ -1167,29 +1165,17 @@ class SpreadSheetWindow(QMainWindow):
         dialog_wavelength.setWindowTitle("Select a Wavelength")
         dialog_wavelength.setWindowModality(Qt.ApplicationModal)
         dialog_wavelength.exec_()
-        wl0 = float(cbox.currentText())
+        wl0 = cbox.currentText()
         if action.text() == "cm^-1 to nm":
-            # data
-            data_in_nm = self.data[selected_column]
-            data_in_nm["data"] = wl0 / (1 - data_in_nm["data"] * 10 ** (-7) * wl0)
-            data_in_nm["unit"] = "nm"
-            self.data.insert(selected_column + 1, data_in_nm)
-        elif action.text() == "nm to cm^-1":
-            data_per_cm = self.data[selected_column]
-            data_per_cm["data"] = (1 / wl0 - 1 / data_per_cm["data"]) * 10 ** 7
-            data_per_cm["unit"] = "cm-1"
-            self.data.insert(selected_column + 1, data_per_cm)
+            unit_text = "nm"
+            formula = f"{wl0}/(1-Col({selected_column})*0.0000001*{wl0})"
 
-        # table and header
-        self.data_table.insertColumn(selected_column + 1)
-        self.header_table.insertColumn(selected_column + 1)
-        for r in range(len(self.data[selected_column + 1]["data"])):
-            cell = SpreadSheetItem(self.cells, self.data[selected_column + 1]["data"][r])
-            self.cells[cellname(r, selected_column + 1)] = cell
-            self.data_table.setItem(r, selected_column + 1, cell)
-        self.create_header_items(start=selected_column + 1, end=selected_column + 2)
-        headers = ['{} ({})'.format(d['shortname'], d["type"]) for d in self.data]
-        self.header_table.setHorizontalHeaderLabels(headers)
+        elif action.text() == "nm to cm^-1":
+            unit_text = "cm^-1"
+            formula = f"((1/{wl0})-(1/Col({selected_column})))*10000000"
+
+        self.header_table.item(1, selected_column).setText(unit_text)
+        self.header_table.item(3, selected_column).setText(formula.format(wl0=wl0, selected_column=selected_column))
 
     def set_column_type(self, qaction, log_col):
         """
@@ -1584,7 +1570,7 @@ class SpreadSheetWindow(QMainWindow):
 #####################################################################################################################################################
 ### 4. Plot
 #####################################################################################################################################################
-class Functions:
+class FitFunctions:
     """
     Fit functions
     """
@@ -1645,19 +1631,25 @@ class LineBuilder:
         self.xs = line.get_xdata()[0]
         self.line.set_visible(True)
         self.canvas = self.line.figure.canvas
-        self.cid = self.canvas.mpl_connect('button_press_event', self)
+        self.cid_key = self.canvas.mpl_connect('key_press_event', self)
+        self.cid_button = self.canvas.mpl_connect('button_press_event', self)
         self.canvas.start_event_loop(timeout=10000)
 
     def __call__(self, event):
+        print(event.name)
         if event.inaxes != self.line.axes:
             return
-        elif event.button == 1:
-            self.xs = event.xdata
-            self.line.set_xdata([self.xs, self.xs])
-            self.canvas.draw()
-        elif event.button == 3:
-            self.canvas.mpl_disconnect(self.cid)
-            self.canvas.stop_event_loop(self)
+        elif event.name == 'button_press_event':
+            if event.button == 1:
+                self.xs = event.xdata
+                self.line.set_xdata([self.xs, self.xs])
+                self.canvas.draw()
+            elif event.button == 3 or event.key == QtCore.Qt.Key_Return:
+                self.canvas.mpl_disconnect(self.cid_button)
+                self.canvas.mpl_disconnect(self.cid_key)
+                self.canvas.stop_event_loop(self)
+        elif event.name == 'key_press_event':
+            print(event.key)
 
 
 class MoveSpectra:
@@ -2057,19 +2049,30 @@ class DataSetSelecter(QtWidgets.QDialog):
         self.close()
 
 
-class BaselineCorrections:
-    def __init__(self, pw):
-        self.pw = pw    # contains parent: class PlotWindow
-
-        # start parameter for different methods
-        self.p_start = {'Asymmetric Least Square': '0.001',
-                        'Asymmetrically Reweighted Penalized Least Squares': '0.001',
-                        'Doubly Reweighted Penalized Least Squares': '0.0001'}
-        self.lam_start = {'Asymmetric Least Square': '10000000',
-                          'Asymmetrically Reweighted Penalized Least Squares': '10000000',
-                          'Doubly Reweighted Penalized Least Squares': '1000000'}
-
-        self.return_value = None
+class BaselineCorrectionMethods:
+    """Class containing all implemented methods of base line correction"""
+    def __init__(self):
+        # all implemented baseline correction methods
+        self.methods = {'Rubberband':
+                            {'function': self.rubberband, 'parameter': {}},
+                        'Polynomial':
+                            {'function': self.polynomial, 'parameter': {'order': 1, 'roi': [[150, 160], [3800, 4000]]}},
+                        'Univariate Spline':
+                            {'function': self.unispline, 'parameter': {'s': 1e0, 'roi': [[150, 160], [3800, 4000]]}},
+                        'GCV Spline':
+                            {'function': self.gcvspline, 'parameter': {'s': 0.1, 'roi': [[150, 160], [3800, 4000]]}},
+                        'Asymmetric Least Square':
+                            {'function': self.ALS, 'parameter': {'p': 0.001, 'lambda': 10000000}},
+                        'Adaptive Iteratively Reweighted Penalized Least Squares':
+                            {'function': self.airPLS, 'parameter': {'lambda': 10000000}},
+                        'Asymmetrically Reweighted Penalized Least Squares':
+                            {'function': self.arPLS, 'parameter': {'lambda': 10000000}},
+                        'Doubly Reweighted Penalized Least Squares':
+                            {'function': self.drPLS, 'parameter': {'lambda': 1000000}}
+                        }
+        # contains current method, for baseline dialog
+        # start method is ASL
+        self.current_method = 'Asymmetric Least Square'
 
     def rubberband(self, x, y):
         """
@@ -2084,98 +2087,52 @@ class BaselineCorrections:
         v = v[:v.argmax()]
 
         # Create baseline using linear interpolation between vertices
-        base = np.interp(x, x[v], y[v])
-        y = y - base
-        return y, base # y - background-corrected Intensity-values, base - background
+        z = np.interp(x, x[v], y[v])
+        y = y - z
+        # y - background-corrected Intensity-values, z - background
+        return y, z
 
-    def als_startparam(self, x, y, n, method):
-        spct = self.pw.spectrum[n]
+    def polynomial(self, x, y, p_order, roi):
+        y, z = rp.baseline(x, y, np.array(roi), 'poly', polynomial_order=p_order)
+        y = y.flatten()
+        z = z.flatten()
+        return y, z
 
-        # dialog to get baseline parameter p and lambda
-        self.Dialog_BaselineParameter = QDialog()
-        layout = QtWidgets.QGridLayout()
-        p_edit = QtWidgets.QLineEdit()
-        layout.addWidget(p_edit, 0, 0)
-        p_edit.setText(self.p_start[method])
-        if method == 'Asymmetric Least Square':
-            p_label = QtWidgets.QLabel('p')
-        else:
-            p_label = QtWidgets.QLabel('ratio')
-        layout.addWidget(p_label, 0, 1)
+    def unispline(self, x, y, s, roi):
+        """
+        @param x: x data
+        @param y: y data
+        @param s: Positive smoothing factor used to choose the number of knots.
+        Number of knots will be increased until the smoothing condition is satisfied:
+        @param roi: region of interest
+        @return: baseline corrected y data and baseline z
+        """
+        try:
+            y, z = rp.baseline(x, y, np.array(roi), 'unispline', s=s)
+        except ValueError as e:
+            print(e)
+            return None
+        y = y.flatten()
+        z = z.flatten()
+        return y, z
 
-        lam_edit = QtWidgets.QLineEdit()
-        layout.addWidget(lam_edit, 1, 0)
-        lam_edit.setText(self.lam_start[method])
-        lam_label = QtWidgets.QLabel('lambda')
-        layout.addWidget(lam_label, 1, 1)
-
-        p = float(p_edit.text())
-        lam = float(lam_edit.text())
-        yb, zb = self.get_baseline(x, y, p, lam, method=method)
-        self.base_line, = self.pw.ax.plot(x, zb, 'c--', label='baseline ({})'.format(spct.get_label()))
-        self.blcSpektrum, = self.pw.ax.plot(x, yb, 'c-', label='baseline-corrected ({})'.format(spct.get_label()))
-        self.pw.fig.canvas.draw()
-
-        self.finishbutton = QPushButton('Ok', self.pw)
-        self.finishbutton.setCheckable(True)
-        self.finishbutton.setToolTip(
-            'Are you happy with the start parameters? \n Close the dialog window and save the baseline!')
-        self.finishbutton.clicked.connect(
-            lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text()), spct, method))
-        layout.addWidget(self.finishbutton, 2, 0)
-
-        self.closebutton = QPushButton('Close', self.pw)
-        self.closebutton.setCheckable(True)
-        self.closebutton.setToolTip('Closes the dialog window and baseline is not saved.')
-        self.closebutton.clicked.connect(
-            lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text()), spct, method))
-        layout.addWidget(self.closebutton, 2, 1)
-
-        applybutton = QPushButton('Apply', self.pw)
-        applybutton.setToolTip('Do you want to try the fit parameters? \n Lets do it!')
-        applybutton.clicked.connect(
-            lambda: self.baseline_als_call(x, y, float(p_edit.text()), float(lam_edit.text()), spct, method))
-        layout.addWidget(applybutton, 2, 2)
-
-        self.Dialog_BaselineParameter.setLayout(layout)
-        self.Dialog_BaselineParameter.setWindowTitle("Baseline Parameter ({})".format(method))
-        self.Dialog_BaselineParameter.setWindowModality(Qt.ApplicationModal)
-        self.Dialog_BaselineParameter.exec_()
-
-        self.p_start[method] = p_edit.text()
-        self.lam_start[method] = lam_edit.text()
-
-        return self.return_value
-
-    def baseline_als_call(self, x, y, p, lam, spct, method):
-        self.blcSpektrum.remove()
-        self.base_line.remove()
-        name = spct.get_label()
-        if self.closebutton.isChecked():
-            self.Dialog_BaselineParameter.close()
-            self.return_value = None
-        elif self.finishbutton.isChecked():
-            yb, zb = self.get_baseline(x, y, p, lam, method=method)
-            self.Dialog_BaselineParameter.close()
-            self.return_value = yb, zb
-        else:
-            yb, zb = self.get_baseline(x, y, p, lam, method=method)
-            self.base_line, = self.pw.ax.plot(x, zb, 'c--', label='baseline ({})'.format(name))
-            self.blcSpektrum, = self.pw.ax.plot(x, yb, 'c-', label='baseline-corrected ({})'.format(name))
-        self.pw.fig.canvas.draw()
-
-    def get_baseline(self, x, y, p, lam, method):
-        if method == 'Asymmetric Least Square':
-            y_return = self.ALS(x, y, p, lam)
-        elif method == 'Asymmetrically Reweighted Penalized Least Squares':
-            y_return = self.arPLS(x, y, p, lam)
-        elif method == 'Doubly Reweighted Penalized Least Squares':
-            y_return = self.drPLS(x, y, p, lam)
-        else:
-            print('This method is not implemented')
-            return
-
-        return y_return
+    def gcvspline(self, x, y, s, roi):
+        """
+        @param x: x data
+        @param y: y data
+        @param s: Positive smoothing factor used to choose the number of knots.
+        Number of knots will be increased until the smoothing condition is satisfied:
+        @param roi: region of interest
+        @return: baseline corrected y data and baseline z
+        """
+        try:
+            y, z = rp.baseline(x, y, np.array(roi), 'gcvspline', s=s)
+        except UnboundLocalError:
+            print('ERROR: Install gcvspline to use this mode (needs a working FORTRAN compiler).')
+            return None
+        y = y.flatten()
+        z = z.flatten()
+        return y, z
 
     def ALS(self, x, y, p, lam):
         """
@@ -2184,7 +2141,6 @@ class BaselineCorrections:
         Leiden University Medical Centre Report , 1(1):5, 2005. from Eilers and Boelens
         also look at: https://stackoverflow.com/questions/29156532/python-baseline-correction-library
         """
-
         niter = 10
         # p = 0.001   			#asymmetry 0.001 <= p <= 0.1 is a good choice
         # recommended from Eilers and Boelens for Raman: 0.001    recommended from Simon: 0.0001
@@ -2196,30 +2152,345 @@ class BaselineCorrections:
         for i in range(niter):
             W = sparse.spdiags(w, 0, L, L)
             Z = W + lam * D.dot(D.transpose())
-            baseline = spsolve(Z, w * y)
-            w = p * (y > baseline) + (1 - p) * (y < baseline)
-        y = y - baseline
-        return y, baseline  # y - background-corrected Intensity-values, baseline - baseline
+            z = spsolve(Z, w * y)
+            w = p * (y > z) + (1 - p) * (y < z)
+        y = y - z
+        return y, z  # y - background-corrected Intensity-values, baseline - baseline
 
-    def arPLS(self, x, y, ratio, lam):
+    def airPLS(self, x, y, lam, ratio=0.001):
+        """
+        adaptive  iteratively  reweighted  penalized  least  squares
+        based on: Zhi-Min  Zhang,  Shan  Chen,  and  Yi-Zeng Liang.
+        Baseline correction using adaptive iteratively reweighted penalized least squares.
+        Analyst, 135(5):1138–1146, 2010.
+        code from https://github.com/charlesll/rampy/blob/master/rampy/baseline.py
+        """
+
+        N = len(y)
+        D = sparse.csc_matrix(np.diff(np.eye(N), 2))
+        w = np.ones(N)
+        iter = 0
+        while True:
+            iter += 1
+            W = sparse.spdiags(w, 0, N, N)
+            Z = W + lam * D.dot(D.transpose())
+            z = sparse.linalg.spsolve(Z, w * y)
+            d = y - z
+            # make d- and get w^t with m and s
+            dn = d[d < 0]
+            wt = 0 * (y >= z) + np.exp(iter * (y - z) / np.linalg.norm(dn)) * (y < z)
+            # check exit condition and backup
+            if np.linalg.norm(dn) < ratio * np.linalg.norm(y):
+                break
+            w = wt
+        y = y - z
+        return y, z
+
+    def arPLS(self, x, y, lam, ratio=0.001):
         """(automatic) Baseline correction using asymmetrically reweighted penalized least squares smoothing.
         Baek et al. 2015, Analyst 140: 250-257;"""
-        # roi is not needed for this baseline, but still is a requirement when calling the function.
-        roi = np.array([[0, 100], [200, 220], [280, 290], [420, 430], [480, 500]])
-        y, base = rp.baseline(x, y, roi, 'arPLS', lam=lam, ratio=ratio)
-        y = [i for i in y]
-        base = [i for i in base]
-        return y, base
 
-    def drPLS(self, x, y, ratio, lam):
+        N = len(y)
+        D = sparse.csc_matrix(np.diff(np.eye(N), 2))
+        w = np.ones(N)
+
+        while True:
+            W = sparse.spdiags(w, 0, N, N)
+            Z = W + lam * D.dot(D.transpose())
+            z = sparse.linalg.spsolve(Z, w * y)
+            d = y - z
+            # make d- and get w^t with m and s
+            dn = d[d < 0]
+            m = np.mean(dn)
+            s = np.std(dn)
+            wt = 1.0 / (1 + np.exp(2 * (d - (2 * s - m)) / s))
+            # check exit condition and backup
+            if np.linalg.norm(w - wt) / np.linalg.norm(w) < ratio:
+                break
+            w = wt
+        y = y - z
+        return y, z
+
+    def drPLS(self, x, y, lam, ratio=0.0001):
         """(automatic) Baseline correction method based on doubly reweighted penalized least squares.
         Xu et al., Applied Optics 58(14):3913-3920."""
         # roi is not needed for this baseline, but still is a requirement when calling the function.
         roi = np.array([[0, 100], [200, 220], [280, 290], [420, 430], [480, 500]])
-        y, base = rp.baseline(x, y, roi, 'drPLS', ratio=ratio, lam=lam)
-        y = [i for i in y]
-        base = [i for i in base]
-        return y, base
+        y, z = rp.baseline(x, y, roi, 'drPLS', ratio=ratio, lam=lam)
+        y = y.flatten()
+        z = z.flatten()
+        return y, z
+
+
+class BaselineCorrectionsDialog(QMainWindow):
+    def __init__(self, parent, blc_methods):
+        super(BaselineCorrectionsDialog, self).__init__(parent=parent)
+        # contains parent: class PlotWindow
+        self.pw = parent
+
+        # get axis and figure of PlotWindow
+        self.ax = self.pw.ax
+        self.fig = self.pw.fig
+
+        self.blcm = blc_methods
+        self.methods = self.blcm.methods
+
+        self.spectrum = None
+        self.x = None
+        self.y = None
+        # list containing vertical spans (matplotlib.patches.Polygon) to color regions of interests
+        self.roi_spans = []
+
+        self.parameter_editor = {}
+        self.parameter_label = {}
+
+    def get_baseline(self, x, y, spectrum):
+        self.x = x
+        self.y = y
+        self.spectrum = spectrum
+
+        self.plot_baseline()
+        self.create_dialog()
+        self.apply_call()
+
+    def create_dialog(self):
+        # layouts
+        main_layout = QtWidgets.QVBoxLayout()
+        mthd_prmtr_layout = QtWidgets.QHBoxLayout()
+        self.parameter_layout = QtWidgets.QGridLayout()
+
+        method_group = self.create_method_group()
+        self.fill_parameter_layout()
+        parameter_group = QtWidgets.QGroupBox('Parameter')
+        button_layout = self.create_buttons()
+
+        # set layouts
+        parameter_group.setLayout(self.parameter_layout)
+        mthd_prmtr_layout.addWidget(method_group)
+        mthd_prmtr_layout.addWidget(parameter_group)
+        main_layout.addLayout(mthd_prmtr_layout)
+        main_layout.addLayout(button_layout)
+        widget = QtWidgets.QWidget()
+        widget.setLayout(main_layout)
+        self.setCentralWidget(widget)
+        self.setWindowTitle("Baseline")
+        self.setWindowModality(Qt.ApplicationModal)
+        self.show()
+
+    def create_method_group(self):
+        method_layout = QtWidgets.QVBoxLayout()
+        method_group = QtWidgets.QGroupBox('Methods')
+        # method checkboxes
+        method_check_group = QtWidgets.QButtonGroup(self)
+        method_check_group.setExclusive(True)
+        for meth in self.methods.keys():
+            cb = QCheckBox(meth)
+            method_layout.addWidget(cb)
+            method_check_group.addButton(cb)
+            method_check_group.addButton(cb)
+            if meth == self.blcm.current_method:
+                cb.setChecked(True)
+        method_check_group.buttonClicked.connect(self.method_change)
+        method_group.setLayout(method_layout)
+        return method_group
+
+    def fill_parameter_layout(self):
+        idx = 0
+        for key, val in self.methods[self.blcm.current_method]['parameter'].items():
+            if key == "roi":
+                self.add_roi_editors(val, idx)
+                continue
+            self.parameter_label[key] = QtWidgets.QLabel(key)
+            self.parameter_editor[key] = QtWidgets.QLineEdit()
+            self.parameter_layout.addWidget(self.parameter_editor[key], idx, 0)
+            self.parameter_layout.addWidget(self.parameter_label[key], idx, 1)
+            self.parameter_editor[key].setText(str(val))
+            self.methods[self.blcm.current_method]['parameter'][key] = float(self.parameter_editor[key].text())
+            idx += 1
+
+    def add_roi_editors(self, roi, idx):
+        roi_editors = []
+        roi_layout_v = QtWidgets.QVBoxLayout()
+        button_layout_v = QtWidgets.QVBoxLayout()
+        button_layout_h = QtWidgets.QHBoxLayout()
+        self.parameter_label['roi'] = QtWidgets.QLabel('regions of interest')
+        button_add = QtWidgets.QPushButton('+')
+        button_remove = QtWidgets.QPushButton('-')
+        button_layout_h.addWidget(button_add)
+        button_layout_h.addWidget(button_remove)
+        button_layout_v.addWidget(self.parameter_label['roi'])
+        button_layout_v.addLayout(button_layout_h)
+        button_add.clicked.connect(self.add_roi)
+        button_remove.clicked.connect(self.del_roi)
+        self.parameter_layout.addLayout(button_layout_v, idx, 1)
+        for i, r in enumerate(roi):
+            roi_layout_h = QtWidgets.QHBoxLayout()
+            editor1 = QtWidgets.QLineEdit()
+            editor1.setText(str(r[0]))
+            roi_layout_h.addWidget(editor1)
+            editor2 = QtWidgets.QLineEdit()
+            editor2.setText(str(r[1]))
+            roi_layout_h.addWidget(editor2)
+            roi_layout_v.addLayout(roi_layout_h)
+            roi_editors.append([editor1, editor2])
+            self.methods[self.blcm.current_method]['parameter']['roi'][i] = [float(editor1.text()),
+                                                                             float(editor2.text())]
+        self.parameter_layout.addLayout(roi_layout_v, idx, 0)
+        self.parameter_editor['roi'] = roi_editors
+
+    def add_roi(self):
+        try:
+            last_roi = self.methods[self.blcm.current_method]['parameter']['roi'][-1][1]
+        except IndexError:
+            last_roi = 140
+        self.methods[self.blcm.current_method]['parameter']['roi'].append([last_roi+10, last_roi+40])
+        self.method_change()
+
+    def del_roi(self):
+        try:
+            del self.methods[self.blcm.current_method]['parameter']['roi'][-1]
+        except IndexError:
+            pass
+        self.method_change()
+
+    def sort_roi(self, roi_list):
+        return (sorted(roi_list, key=lambda x: x[0]))
+
+    def create_buttons(self):
+        # buttons for ok, close and apply
+        button_layout = QtWidgets.QHBoxLayout()
+
+        self.finishbutton = QPushButton('Ok')
+        self.finishbutton.setCheckable(True)
+        self.finishbutton.setToolTip('Are you happy with the start parameters? '
+                                     '\n Close the dialog window and save the baseline!')
+        self.finishbutton.clicked.connect(self.finish_call)
+        button_layout.addWidget(self.finishbutton)
+
+        self.closebutton = QPushButton('Close')
+        self.closebutton.setCheckable(True)
+        self.closebutton.setToolTip('Closes the dialog window and baseline is not saved.')
+        self.closebutton.clicked.connect(self.close)
+        button_layout.addWidget(self.closebutton)
+
+        applybutton = QPushButton('Apply')
+        applybutton.setToolTip('Do you want to try the fit parameters? \n Lets do it!')
+        applybutton.clicked.connect(self.apply_call)
+        button_layout.addWidget(applybutton)
+
+        return button_layout
+
+    def plot_baseline(self):
+        params = self.methods[self.blcm.current_method]["parameter"].values()
+        return_value = self.methods[self.blcm.current_method]['function'](self.x, self.y, *params)
+        if return_value is None:
+            return
+        else:
+            yb, zb = return_value
+        self.base_line, = self.ax.plot(self.x, zb, 'c--', label='baseline ({})'.format(self.spectrum.get_label()))
+        self.blcSpektrum, = self.ax.plot(self.x, yb, 'c-', label='baseline-corrected ({})'.format(self.spectrum.get_label()))
+        self.fig.canvas.draw()
+
+    def method_change(self, button=None):
+        if button is not None:
+            self.blcm.current_method = button.text()
+
+        # clear layout
+        self.clear_layout(self.parameter_layout)
+
+        self.parameter_editor = {}
+        self.parameter_label = {}
+
+        # create new layout
+        self.fill_parameter_layout()
+        self.update()
+
+    def clear_layout(self, layout):
+        for i in reversed(range(layout.count())):
+            widget = layout.itemAt(i).widget()
+            if widget is None:
+                self.clear_layout(layout.itemAt(i))
+            else:
+                widget.setParent(None)
+
+    def clear_plot(self):
+        try:
+            self.blcSpektrum.remove()
+        except ValueError:
+            return
+        self.base_line.remove()
+        for rs in self.roi_spans:
+            rs.remove()
+        self.roi_spans = []
+        self.fig.canvas.draw()
+
+    def finish_call(self):
+        params = self.methods[self.blcm.current_method]["parameter"].values()
+        name = self.spectrum.get_label()
+        for key, val in self.parameter_editor.items():
+            if key == 'roi':
+                for i, roi_pe in enumerate(val):
+                    roi_start = float(roi_pe[0].text())
+                    roi_end = float(roi_pe[1].text())
+                    self.methods[self.blcm.current_method]["parameter"]['roi'][i] = [roi_start, roi_end]
+                self.methods[self.blcm.current_method]["parameter"]['roi'] = self.sort_roi(
+                    self.methods[self.blcm.current_method]["parameter"]['roi'])
+                continue
+            self.methods[self.blcm.current_method]["parameter"][key] = float(val.text())
+        return_value = self.methods[self.blcm.current_method]['function'](self.x, self.y, *params)
+        if return_value is None:
+            self.close()
+            return
+        else:
+            yb, zb = return_value
+
+        # Plot
+        self.pw.spectrum.append(self.ax.plot(self.x, yb, 'c-', label='{} (baseline-corrected)'.format(name))[0])
+        self.ax.plot(self.x, zb, 'c--', label='baseline ({})'.format(name))
+
+        self.close()
+
+        # Save baseline corrected data
+        (fileBaseName, fileExtension) = os.path.splitext(name)
+        startFileDirName = os.path.dirname(self.pw.selectedData[0][3])
+        startFileBaseName = startFileDirName + '/' + fileBaseName
+        startFileName = startFileBaseName + '_bgc.txt'
+        save_data = [self.x, yb]
+        save_data = np.transpose(save_data)
+        self.pw.save_to_file('Save background-corrected data in file', startFileName, save_data)
+
+        # Append data
+        self.pw.data.append([self.x, yb, '{}_bgc'.format(fileBaseName), startFileName, '-', 0])
+        self.fig.canvas.draw()
+
+    def apply_call(self):
+        params = self.methods[self.blcm.current_method]["parameter"].values()
+        name = self.spectrum.get_label()
+        self.clear_plot()
+        for key, val in self.parameter_editor.items():
+            if key == 'roi':
+                for i, roi_pe in enumerate(val):
+                    roi_start = float(roi_pe[0].text())
+                    roi_end = float(roi_pe[1].text())
+                    self.methods[self.blcm.current_method]["parameter"]['roi'][i] = [roi_start, roi_end]
+                    self.roi_spans.append(self.ax.axvspan(roi_start, roi_end, alpha=0.5, color='yellow'))
+                self.methods[self.blcm.current_method]["parameter"]['roi'] = self.sort_roi(
+                    self.methods[self.blcm.current_method]["parameter"]['roi'])
+                continue
+            self.methods[self.blcm.current_method]["parameter"][key] = float(val.text())
+        return_value = self.methods[self.blcm.current_method]['function'](self.x, self.y, *params)
+        if return_value is None:
+            self.close()
+            return
+        else:
+            yb, zb = return_value
+        self.base_line, = self.ax.plot(self.x, zb, 'c--', label='baseline ({})'.format(name))
+        self.blcSpektrum, = self.ax.plot(self.x, yb, 'c-', label='baseline-corrected ({})'.format(name))
+        self.fig.canvas.draw()
+
+    def closeEvent(self, event):
+        self.clear_plot()
+        event.accept()
 
 
 class FitOptionsDialog(QMainWindow):
@@ -2567,6 +2838,7 @@ class MyCustomToolbar(NavigationToolbar2QT):
 
     def __init__(self, plotCanvas):
         NavigationToolbar2QT.__init__(self, plotCanvas, parent=None)
+        self.setWindowTitle("Top Toolbar")
 
     def layer_content(self):
         Layer_Legend = QDialog()
@@ -2618,8 +2890,8 @@ class PlotWindow(QMainWindow):
         self.backup_data = plot_data
         self.spectrum = []
         self.vert_line = None
-        self.functions = Functions(self)
-        self.blc = BaselineCorrections(self)       # class for everything related to Baseline corrections
+        self.functions = FitFunctions(self)
+        self.blc = BaselineCorrectionMethods()       # class for everything related to Baseline corrections
         self.inserted_text = []  # Storage for text inserted in the plot
         self.drawn_line = []  # Storage for lines and arrows drawn in the plot
         self.n_fit_fct = {  # number of fit functions (Lorentzian, Gaussian and Breit-Wigner-Fano)
@@ -2715,7 +2987,7 @@ class PlotWindow(QMainWindow):
                 self.spectrum[k].set_xdata(j[0])
                 self.spectrum[k].set_ydata(j[1])
                 k = k + 1
-            self.fig.canvas.draw()
+            self.canvas.draw()
         else:
             pass
 
@@ -2806,7 +3078,7 @@ class PlotWindow(QMainWindow):
         new_legend.set_picker(leg_picker)
         new_legend.set_draggable(leg_draggable)
 
-    ########## Bars (menubar, toolbar, statusbar) ##########
+    # Bars (menubar, toolbar, statusbar)
     def create_menubar(self):
         menubar = self.menuBar()
         # 1. menu item: File
@@ -2851,20 +3123,15 @@ class PlotWindow(QMainWindow):
 
         analysisRoutine = analysisMenu.addMenu('&Analysis routines')
         analysisRoutine.addAction('D und G Bande', self.fit_D_G)
-        analysisRoutine.addAction('Sulfur oxyanion ratios', self.ratio_H2O_sulfuroxyanion)
+        analysisRoutine.addAction('Fit Sulfur oxyanion spectrum', self.fit_sulfuroxyanion)
         analysisRoutine.addAction('Get m/I(G) (Hydrogen content)', self.hydrogen_estimation)
         analysisRoutine.addAction('Norm to water peak', self.norm_to_water)
 
         # 3.2 Linear regression
-        analysisLinReg = analysisMenu.addAction('Linear regression', self.linear_regression)
+        analysisMenu.addAction('Linear regression', self.linear_regression)
 
         # 3.3 Analysis base line correction
-        analysisBaseline = analysisMenu.addMenu('&Baseline Corrections')
-        analysisBaseline.addAction('Asymmetric Least Square')
-        analysisBaseline.addAction('Rubberband')
-        analysisBaseline.addAction('Doubly Reweighted Penalized Least Squares')
-        analysisBaseline.addAction('Asymmetrically Reweighted Penalized Least Squares')
-        analysisBaseline.triggered[QAction].connect(self.baseline)
+        analysisMenu.addAction('Baseline Corrections', self.baseline)
 
         # 3.3 Smoothing
         analysisSmoothing = analysisMenu.addMenu('&Smoothing')
@@ -2886,7 +3153,7 @@ class PlotWindow(QMainWindow):
         self.show()
 
     def create_sidetoolbar(self):
-        toolbar = QtWidgets.QToolBar(self)
+        toolbar = QtWidgets.QToolBar("Vertical Sidebar", self)
         self.addToolBar(QtCore.Qt.LeftToolBarArea, toolbar)
 
         # Vertical line for comparison of peak positions
@@ -3035,7 +3302,7 @@ class PlotWindow(QMainWindow):
 
             self.spectrum[j].set_data(self.data[j][0], self.data[j][1])
             self.setFocus()
-            self.fig.canvas.draw()
+            self.canvas.draw()
 
             # Save data without defective data points
             startFileDirName = os.path.dirname(self.data[j][3])
@@ -3058,7 +3325,7 @@ class PlotWindow(QMainWindow):
 
             self.data[n][1] = self.data[n][1] / norm_factor
             self.spectrum[n].set_data(self.data[n][0], self.data[n][1])
-            self.fig.canvas.draw()
+            self.canvas.draw()
             # Save normalized data
             if self.data[n][3] is not None:
                 (fileBaseName, fileExtension) = os.path.splitext(self.data[n][2])
@@ -3134,7 +3401,7 @@ class PlotWindow(QMainWindow):
         line = self.ax.plot(x1, y, label='subtracted Spectrum')
         self.spectrum.append(line)
 
-        self.fig.canvas.draw()
+        self.canvas.draw()
 
     def get_start_values(self):
         self.Dialog_FitParameter = QDialog()
@@ -3228,7 +3495,7 @@ class PlotWindow(QMainWindow):
             print(popt)
             x1 = np.linspace(min(x), max(x), 1000)
             self.ax.plot(x1, self.functions.FctSumme(x1, *popt), '-r')
-            self.fig.canvas.draw()
+            self.canvas.draw()
 
             print('\n {} {}'.format(self.spectrum[j].get_label(), q.text()))
             parmeter_name = ['Background', r'Raman Shift in cm^-1', 'Intensity', 'FWHM', 'additional Parameter']
@@ -3276,7 +3543,7 @@ class PlotWindow(QMainWindow):
                 self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
                 return
 
-            ### Plot the Fit Data ###
+            # Plot the Fit Data
             x1 = np.linspace(min(x), max(x), 1000)
             self.ax.plot(x1, self.functions.FctSumme(x1, *popt), '-r')
 
@@ -3297,7 +3564,7 @@ class PlotWindow(QMainWindow):
                                                                         popt[4 * i + 3 * (aL + aG) + 4])
                     self.ax.plot(x1, y_fit, '--g')
 
-            self.fig.canvas.draw()
+            self.canvas.draw()
 
             # Calculate Errors and R square
             perr = np.sqrt(np.diag(pcov))
@@ -3363,9 +3630,10 @@ class PlotWindow(QMainWindow):
         self.ax.autoscale(False)
         y_min, y_max = self.ax.get_ylim()
         x_min, x_max = self.ax.get_xlim()
-        line1, = self.ax.plot([x_min, x_min], [y_min, y_max], 'r-', lw=1)
-        line2, = self.ax.plot([x_max, x_max], [y_min, y_max], 'r-', lw=1)
-        self.fig.canvas.draw()
+        x_range = x_max-x_min
+        line1, = self.ax.plot([x_min+0.01*x_range, x_min+0.01*x_range], [y_min, y_max], 'r-', lw=1)
+        line2, = self.ax.plot([x_max-0.01*x_range, x_max-0.01*x_range], [y_min, y_max], 'r-', lw=1)
+        self.canvas.draw()
         self.mw.show_statusbar_message('Left click shifts limits, Right click  them', 4000)
         linebuilder1 = LineBuilder(line1)
         x_min = linebuilder1.xs  # lower limit
@@ -3373,7 +3641,7 @@ class PlotWindow(QMainWindow):
         x_max = linebuilder2.xs  # upper limit
         line1.remove()
         line2.remove()
-        self.fig.canvas.draw()
+        self.canvas.draw()
         self.ax.autoscale(True)
         return x_min, x_max
 
@@ -3399,10 +3667,10 @@ class PlotWindow(QMainWindow):
 
             print(x[idx_peaks])
 
-    def baseline(self, action):
+    def baseline(self):
         self.SelectDataset()
         x_min, x_max = self.SelectArea()
-        method = action.text()
+        baseline_methods = BaselineCorrectionMethods()
         for n in self.selectedDatasetNumber:
             spct = self.spectrum[n]
             xs = spct.get_xdata()
@@ -3411,35 +3679,16 @@ class PlotWindow(QMainWindow):
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
-            if method == 'Rubberband':
-                y_return = self.blc.rubberband(x, y)
-            elif method == 'Asymmetric Least Square' or 'Asymmetrically Reweighted Penalized Least Squares':
-                y_return = self.blc.als_startparam(x, y, n, method=method)
-            elif method == 'Doubly Reweighted Penalized Least Squares':
-                y_return = self.blc.drPLS(x, y)
-            else:
-                return
+            baseline_dialog = BaselineCorrectionsDialog(self, baseline_methods)
+            baseline_dialog.get_baseline(x, y, spct)
 
-            if y_return is None:
-                return
-            else:
-                y_corr, y_bl = y_return
-                name = spct.get_label()
-                self.spectrum.append(self.ax.plot(x, y_corr, 'c-', label='{} (baseline-corrected)'.format(name))[0])
-                self.base_line, = self.ax.plot(x, y_bl, 'c--', label='baseline ({})'.format(name))
-
-                ### Save background-corrected data ###
-                (fileBaseName, fileExtension) = os.path.splitext(name)
-                startFileDirName = os.path.dirname(self.selectedData[0][3])
-                startFileBaseName = startFileDirName + '/' + fileBaseName
-                startFileName = startFileBaseName + '_bgc.txt'
-                save_data = [x, y_corr]
-                save_data = np.transpose(save_data)
-                self.save_to_file('Save background-corrected data in file', startFileName, save_data)
-
-                ### Append data ###
-                self.data.append([x, y_corr, '{}_bgc'.format(fileBaseName), startFileName, '-', 0])
-                self.fig.canvas.draw()
+            # wait until QMainWindow is closes
+            loop = QtCore.QEventLoop()
+            baseline_dialog.closebutton.clicked.connect(loop.quit)
+            baseline_dialog.finishbutton.clicked.connect(loop.quit)
+            loop.exec_()
+            if baseline_dialog.closebutton.isChecked():
+                break
 
     def smoothing(self, action):
         self.SelectDataset()
@@ -3453,7 +3702,7 @@ class PlotWindow(QMainWindow):
             elif method == "Whittaker":
                 y_smooth = rp.smooth(x, y, method="whittaker",Lambda=10**0.5)
             spct.set_ydata(y_smooth)
-            self.fig.canvas.draw()
+            self.canvas.draw()
 
     def linear_regression(self):
         self.SelectDataset()
@@ -3479,7 +3728,7 @@ class PlotWindow(QMainWindow):
             # Plot determined linear function
             x1 = np.linspace(min(x), max(x), 1000)
             self.ax.plot(x1, self.functions.LinearFct(x1, *popt), '-r')
-            self.fig.canvas.draw()
+            self.canvas.draw()
 
             # Print results
             print('\n {}'.format(spct.get_label()))
@@ -3517,7 +3766,7 @@ class PlotWindow(QMainWindow):
             # Plot determined linear function
             x_plot = np.linspace(min(x), max(x), 1000)
             self.ax.plot(x_plot, self.functions.LinearFct(x_plot, *popt), '-r')
-            self.fig.canvas.draw()
+            self.canvas.draw()
 
             # get index of G peak
             idx_G = np.argmax(y)
@@ -3618,7 +3867,7 @@ class PlotWindow(QMainWindow):
             baseline, = self.ax.plot(working_x, zb, 'c--', label='baseline ({})'.format(self.spectrum[n].get_label()))
             blcSpektrum, = self.ax.plot(working_x, yb, 'c-',
                                              label='baseline-corrected ({})'.format(self.spectrum[n].get_label()))
-            self.fig.canvas.draw()
+            self.canvas.draw()
 
             # limit data to fitarea
             working_y = yb[np.where((working_x > x_min_fit) & (working_x < x_max_fit))]
@@ -3631,7 +3880,7 @@ class PlotWindow(QMainWindow):
                 self.mw.show_statusbar_message(str(e), 4000)
                 continue
 
-            ### Plot the Fit Data ###
+            # Plot the Fit Data
             x1 = np.linspace(min(working_x), max(working_x), 3000)
             y_L = []
             for j in range(aL):
@@ -3656,9 +3905,9 @@ class PlotWindow(QMainWindow):
             for j in y_BWF:
                 self.ax.plot(x1, j, '--g')
 
-            self.fig.canvas.draw()
+            self.canvas.draw()
 
-            #### Calculate Errors and R square ###
+            # Calculate Errors and R square
             perr = np.sqrt(np.diag(pcov))
 
             residuals = working_y - self.functions.FctSumme(working_x, *popt)
@@ -3666,22 +3915,15 @@ class PlotWindow(QMainWindow):
             ss_tot = numpy.sum((working_y - numpy.mean(working_y)) ** 2)
             r_squared = 1 - (ss_res / ss_tot)
 
-            #### Calculate Peak-Areas and there Errors ####
+            # Calculate Peak-Areas and there Errors
             r, a0, h, xc, b, Q = sp.symbols('r a0 h xc b Q', real=True)
 
             # Anti-Derivative of Lorentzian Function
-            # F_L = sp.integrate(a0 + h/(1 + (2*(r - xc)/b)**2), (r, x_min, x_max))
-            # F_L = sp.simplify(F_L)
-            # F_L = sp.trigsimp(F_L)
             F_L = (x_max_fit - x_min_fit) * a0 - b * h * sp.atan(2 * (xc - x_max_fit) / b) / 2 + b * h * sp.atan(
                 2 * (xc - x_min_fit) / b) / 2
             Flam_L = lambdify([a0, xc, h, b], F_L)
 
             # Anti-Derivative of Gaussian Function
-            # f_G = (a0 + h*sp.exp(-4*sp.log(2)*((r-xc)/b)*((r-xc)/b)))
-            # F_G = sp.integrate(f_G, (r, xmin, xmax))
-            # F_G = sp.simplify(F_G)
-            # F_G = sp.trigsimp(F_G)
             F_G = (4 * a0 * (x_max_fit - x_min_fit) * sp.sqrt(sp.log(2)) - sp.sqrt(sp.pi) * b * h * sp.erf(
                 2 * (xc - x_max_fit) * sp.sqrt(sp.log(2)) / b) +
                    sp.sqrt(sp.pi) * b * h * sp.erf(2 * (xc - x_min_fit) * sp.sqrt(sp.log(2)) / b)) / (
@@ -3689,10 +3931,6 @@ class PlotWindow(QMainWindow):
             Flam_G = lambdify([a0, xc, h, b], F_G)
 
             # Anti-Derivative of Breit-Wigner-Fano Function
-            # f_B = (a0 + BreitWignerFct(r, xc, h, b, Q))
-            # F_B = sp.integrate(f_B, (r, x_min, x_max))
-            # F_B = sp.simplify(F_B)
-            # F_B = sp.trigsimp(F_B)
             F_B = (Q * b * h * (sp.log(b ** 2 / 4 + xc ** 2 - 2 * xc * x_max_fit + x_max_fit ** 2) - sp.log(
                 b ** 2 / 4 + xc ** 2 - 2 * xc * x_min_fit + x_min_fit ** 2)) -
                    b * h * (Q - 1) * (Q + 1) * sp.atan(2 * (xc - x_max_fit) / b) + b * h * (Q - 1) * (Q + 1) * sp.atan(
@@ -3821,7 +4059,7 @@ class PlotWindow(QMainWindow):
                 else:
                     pass
 
-            ### Estimate Cluster size ###
+            # Estimate Cluster size
             # ID/IG = C(lambda)/L_a
             # mit C(514.5 nm) = 44 Angstrom
 
@@ -3832,7 +4070,7 @@ class PlotWindow(QMainWindow):
             ratio = I_D / I_G
             ratio_err = 0
 
-            # bring data into printable form
+            # get data into printable form
             print_table = [['Background', popt[0], perr[0]]]
             print_table.append(['', '', ''])
             for j in range(aL):
@@ -3869,21 +4107,19 @@ class PlotWindow(QMainWindow):
 
             (fileBaseName, fileExtension) = os.path.splitext(self.spectrum[n].get_label())
             startFileDirName = os.path.dirname(self.selectedData[0][3])
-            file_cluster = open(startFileDirName + "/ID-IG.txt", "a")
-            file_cluster.write('\n' + str(fileBaseName) + '   %.4f' % ratio + '   %.4f' % ratio_err)
-            file_cluster.close()
+            with open(startFileDirName + "/ID-IG.txt", "a") as file_cluster:
+                file_cluster.write('\n' + str(fileBaseName) + '   %.4f' % ratio + '   %.4f' % ratio_err)
 
             pos_G_max = pos_G + b_G / (2 * q_G)
-            file_GPosition = open(startFileDirName + "/G-Position.txt", "a")
-            file_GPosition.write('\n{} {:.4f}  {:.4f}'.format(fileBaseName, pos_G_max, 0.0))
-            file_GPosition.close()
+            with open(startFileDirName + "/G-Position.txt", "a") as file_GPosition:
+                file_GPosition.write('\n{} {:.4f}  {:.4f}'.format(fileBaseName, pos_G_max, 0.0))
 
-            ### Save the fit parameter ###
+            # Save the fit parameter
             startFileBaseName = startFileDirName + '/' + fileBaseName
             startFileName = startFileBaseName + '_fitpara.txt'
             # self.save_to_file('Save fit parameter in file', startFileName, save_data)
 
-            ### Save the Fit data ###
+            # Save the Fit data
             startFileName = startFileBaseName + '_fitdata.txt'
             save_data = [x1]
             for j in y_L:
@@ -3896,29 +4132,26 @@ class PlotWindow(QMainWindow):
             save_data = np.transpose(save_data)
             # self.save_to_file('Save fit data in file', startFileName, save_data)
 
-            ### Save background-corrected data ###
-            # startFileName = startFileBaseName + '_bgc.txt'
-            # save_data = [xb, yb]
-            # save_data = np.transpose(save_data)
-            # self.save_to_file('Save background-corrected data in file', startFileName, save_data)
-
     def norm_to_water(self):
+        """
+        performs baseline correction on data with Doubly Reweighted Penalized Least Squares and lambda=9000000
+        and than normalizes the spectra to the water peak
+        """
         self.SelectDataset()
         for n in self.selectedDatasetNumber:
             # get data
-            spct = self.spectrum[n]
             xs = self.data[n][0]
             ys = self.data[n][1]
 
             # background correction
-            yb, baseline = self.blc.ALS(xs, ys, p=0.0001, lam=100000000)
+            yb, baseline = self.blc.drPLS(xs, ys, lam=9000000)
 
             # norm spectrum regarding water peak
             norm_factor = np.max(yb[np.argwhere((xs>3000) & (xs<3700))])
             yb = yb / norm_factor
             self.data[n][1] = yb
             self.spectrum[n].set_data(xs, yb)
-            self.fig.canvas.draw()
+            self.canvas.draw()
             # Save normalized data
             if self.data[n][3] is not None:
                 (fileBaseName, fileExtension) = os.path.splitext(self.data[n][2])
@@ -3931,64 +4164,120 @@ class PlotWindow(QMainWindow):
             save_data = np.transpose(save_data)
             self.save_to_file('Save normalized data in file', startFileName, save_data)
 
-    def ratio_H2O_sulfuroxyanion(self):
-        # this function calculates the intensity ratio of different peaks
-        # simply by getting the maximum of a peak
-
+    def fit_sulfuroxyanion(self):
+        """function to fit region between 700 and 1400cm-1 in spectra with sulfuroxyanions with Lorentzians"""
+        # select spectra, which should be fitted
         self.SelectDataset()
-        save_data = []
+
+        # limit for fit region
+        x_min, x_max = [700, 1400]
+
+        # lists with positions and FWHM of all peaks in the fit region
+        # positions and FWHM of Persulfate (S_2O_8^2-) peaks
+        pos_PS = [802, 835, 1075]
+        fwhm_PS = [25, 15, 7]
+        # positions and FWHM of Caros acid (HSO_5^-)peaks
+        pos_Caros = [767, 884, 1057]
+        fwhm_Caros = [15, 15, 10]
+        # other peaks
+        peak_positions = [900, 982, 1030, 1045, 1190, 1256, 1291]
+        peak_fwhm = [25, 30, 15, 15, 55, 55, 35]
+        peak_positions.extend(pos_PS+pos_Caros)
+        peak_fwhm.extend(fwhm_PS+fwhm_Caros)
+
+        # sort list according to peak positions
+        peak_positions = sorted(peak_positions)
+        peak_fwhm = [f for _, f in sorted(zip(peak_positions, peak_fwhm))]
+
+        # number of fit functions
+        self.n_fit_fct['Lorentz'] = len(peak_positions)
+
         for n in self.selectedDatasetNumber:
+            peak_areas = []
+
+            # get data
             spct = self.spectrum[n]
             xs = spct.get_xdata()
             ys = spct.get_ydata()
 
-            ### get height of water peak
-            x_min, x_max = [3000, 3750]
+            # limit data
             y = ys[np.where((xs > x_min) & (xs < x_max))]
-            water_peak = max(y)
+            x = xs[np.where((xs > x_min) & (xs < x_max))]
 
-            ### get height of hydrogensulfate peak (at ca. 1050cm-1)
-            x_min, x_max = [1040, 1060]
-            y = ys[np.where((xs > x_min) & (xs < x_max))]
-            hydrogensulfate_peak = max(y)
+            # Fit parameter: initial guess and boundaries
+            p_start = [0]
+            p_bounds_low = [-0.001]
+            p_bounds_up = [np.inf]
+            for (start_pos, start_width) in zip(peak_positions, peak_fwhm):
+                start_height = max(y[np.where((x > (start_pos-3)) & (x < (start_pos+3)))])*0.9
+                if start_height < 0:
+                    start_height = 0
+                start_width = 15
+                p_start.extend([start_pos, start_height, start_width])
+                p_bounds_low.extend([start_pos-10, 0, 0])
+                p_bounds_up.extend([start_pos+10, np.inf, np.inf])
+            p_bounds = [p_bounds_low, p_bounds_up]
 
-            ### get height of sulfate peak (at ca. 980cm-1)
-            x_min, x_max = [970, 990]
-            y = ys[np.where((xs > x_min) & (xs < x_max))]
-            sulfate_peak = max(y)
+            try:
+                popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0=p_start, bounds=p_bounds, absolute_sigma=False)
+            except RuntimeError as e:
+                self.mw.show_statusbar_message(str(e), 4000)
+                continue
 
-            ### get height of peroxydisulfate peak (at ca. 835cm-1)
-            x_min, x_max = [825, 835]
-            y = ys[np.where((xs > x_min) & (xs < x_max))]
-            peroxydisulfate_peak = max(y)
+            # Plot the Fit Data
+            x_fit = np.linspace(x_min, x_max, 3000)
+            for j in range(self.n_fit_fct['Lorentz']):
+                y_Lorentz = self.functions.LorentzFct(x_fit, popt[1 + 3 * j], popt[2 + 3 * j], popt[3 + 3 * j])
+                peak_areas.append(np.trapz(y_Lorentz))
+                self.ax.plot(x_fit, popt[0] + y_Lorentz, '--g')
+            self.ax.plot(x_fit, self.functions.FctSumme(x_fit, *popt), '-r')
+            self.canvas.draw()
 
-            ### get height of peroxydisulfate peak (at ca. 1075cm-1)
-            x_min, x_max = [1060, 1085]
-            y = ys[np.where((xs > x_min) & (xs < x_max))]
-            peroxydisulfate_peak_2 = max(y)
+            # Calculate Errors and R square
+            perr = np.sqrt(np.diag(pcov))
 
-            # calculate ratios
+            residuals = y - self.functions.FctSumme(x, *popt)
+            ss_res = numpy.sum(residuals ** 2)
+            ss_tot = numpy.sum((y - numpy.mean(y)) ** 2)
+            r_squared = 1 - (ss_res / ss_tot)
 
-            r_sulfate_water = sulfate_peak / water_peak
-            r_peroxydisulfate_water = peroxydisulfate_peak / water_peak
-            r_peroxydisulfate_water_2 = peroxydisulfate_peak_2 / water_peak
-            r_hydrogensulfate_water = hydrogensulfate_peak / water_peak
+            # store fitparameter in table
+            print_table = [['Background', popt[0], perr[0]], ['', '', '']]
+            for j in range(self.n_fit_fct['Lorentz']):
+                print_table.append(['Lorentz %i' % (j + 1)])
+                print_table.append(['Raman Shift in cm-1', popt[j * 3 + 1], perr[j * 3 + 1]])
+                print_table.append(['Peak height in cps', popt[j * 3 + 2], perr[j * 3 + 2]])
+                print_table.append(['FWHM in cm-1', popt[j * 3 + 3], perr[j * 3 + 3]])
+                print_table.append(['Peak area in cps*cm-1', peak_areas[j], ''])
+                print_table.append(['', '', ''])
+            fit_parameter_table = tabulate(print_table, headers=['Parameters', 'Values', 'Errors'])
 
-            save_data.append(
-                [r_sulfate_water, r_peroxydisulfate_water, r_peroxydisulfate_water_2, r_hydrogensulfate_water])
+            # print fitparameter
+            print('\n')
+            print(self.spectrum[n].get_label(), "R^2={}".format(r_squared))
+            print(fit_parameter_table)
 
-            # print(sulfate_peak, hydrogensulfate_peak, peroxydisulfate_peak, peroxydisulfate_peak_2, water_peak)
+            # save the fit parameter
+            directory_name, file_name_spectrum = os.path.split(self.selectedData[n][3])
+            (fileBaseName, fileExtension) = os.path.splitext(file_name_spectrum)
+            file_name_parameter = '{}/{}_fitparameter.txt'.format(directory_name, fileBaseName)
+            self.save_to_file('Save fit parameter in file', file_name_parameter, fit_parameter_table)
 
-        filename = 'ratios.txt'
-        filepath = os.path.dirname(self.selectedData[0][3])
-        save_data = np.array(save_data)
-        print(save_data)
+            # get peak heights of persulfate and CarosAcid peaks
+            name = self.spectrum[n].get_label()
+            idx_PS = [peak_positions.index(p) for p in pos_PS]
+            idx_Caros = [peak_positions.index(p) for p in pos_Caros]
+            for j in idx_PS:
+                with open("{}/PS_intensity_PS{}cm-1.txt".format(directory_name, peak_positions[j]), "a") as f:
+                    f.write('\n{} {:.4f}  {:.4f}'.format(name, popt[3*j+2], perr[3*j+2]))
 
-        ### Save the ratios ###
-        filename = '{}/{}'.format(filepath, filename)
-        self.save_to_file('Save calculated ratios in file', filename, save_data)
+            for j in idx_Caros:
+                with open("{}/PS_intensity_Caros{}cm-1.txt".format(directory_name, peak_positions[j]), "a") as f:
+                    f.write('\n{} {:.4f}  {:.4f}'.format(name, popt[3 * j + 2], perr[3 * j + 2]))
 
-    ########## Functions of toolbar ##########
+        self.n_fit_fct['Lorentz'] = 0
+
+    ### Functions of toolbar ###
     def vertical_line(self):
         if self.vert_line is not None:
             return
@@ -3997,10 +4286,10 @@ class PlotWindow(QMainWindow):
             y_min, y_max = self.ax.get_ylim()
             x_min, x_max = self.ax.get_xlim()
             self.vert_line, = self.ax.plot([(x_min+x_max)/2, (x_min+x_max)/2], [y_min, y_max], 'r-', lw=1)
-            self.fig.canvas.draw()
+            self.canvas.draw()
             LineBuilder(self.vert_line)
             self.vert_line.remove()
-            self.fig.canvas.draw()
+            self.canvas.draw()
             self.ax.autoscale(True)
             self.vert_line = None
 
@@ -4028,13 +4317,13 @@ class PlotWindow(QMainWindow):
 
     def draw_line(self):
         self.selected_points = []
-        self.pick_arrow_points_connection = self.fig.canvas.mpl_connect('button_press_event',
+        self.pick_arrow_points_connection = self.canvas.mpl_connect('button_press_event',
                                                                         self.pick_points_for_arrow)
 
     def pick_points_for_arrow(self, event):
         self.selected_points.append([event.xdata, event.ydata])
         if len(self.selected_points) == 2:
-            self.fig.canvas.mpl_disconnect(self.pick_arrow_points_connection)
+            self.canvas.mpl_disconnect(self.pick_arrow_points_connection)
             posA = self.selected_points[0]
             posB = self.selected_points[1]
 
@@ -4042,17 +4331,17 @@ class PlotWindow(QMainWindow):
             arrow.set_figure(self.fig)
             self.ax.add_patch(arrow)
             self.drawn_line.append(LineDrawer(arrow))
-            self.fig.canvas.draw()
+            self.canvas.draw()
 
     def insert_text(self):
-        self.pick_text_point_connection = self.fig.canvas.mpl_connect('button_press_event', self.pick_point_for_text)
+        self.pick_text_point_connection = self.canvas.mpl_connect('button_press_event', self.pick_point_for_text)
 
     def pick_point_for_text(self, event):
         pos = [event.xdata, event.ydata]
         text = self.ax.annotate(r'''*''', pos, picker=5, fontsize=24)
         self.inserted_text.append(InsertText(text, self.mw))
-        self.fig.canvas.mpl_disconnect(self.pick_text_point_connection)
-        self.fig.canvas.draw()
+        self.canvas.mpl_disconnect(self.pick_text_point_connection)
+        self.canvas.draw()
 
     def closeEvent(self, event):
         close = QMessageBox()
