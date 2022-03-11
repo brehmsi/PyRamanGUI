@@ -23,7 +23,7 @@ from matplotlib.figure import Figure
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 import matplotlib.backends.qt_editor.figureoptions as figureoptions
-if version.parse(matplotlib.__version__) <= version.parse('3.3.0'):
+if version.parse(matplotlib.__version__) <= version.parse('3.3.3'):
     from matplotlib.backends.qt_compat import _setDevicePixelRatioF as _setDevicePixelRatio
 else:
     from matplotlib.backends.qt_compat import _setDevicePixelRatio as _setDevicePixelRatio
@@ -746,107 +746,6 @@ class TextWindow(QMainWindow):
 ### 3. Spreadsheet
 #####################################################################################################################################################
 
-# partly (Class SpreadSheetDelegate and class SpreadSheetItem) stolen from:
-# http://negfeedback.blogspot.com/2017/12/a-simple-gui-spreadsheet-in-less-than.html
-cellre = re.compile(r'\b[A-Z][0-9]\b')
-
-
-def cellname(i, j):
-    return '{}{}'.format(chr(ord('A') + j), i + 1)
-
-
-class SpreadSheetDelegate(QItemDelegate):
-    def __init__(self, parent=None):
-        super(SpreadSheetDelegate, self).__init__(parent)
-
-    def createEditor(self, parent, styleOption, index):
-        editor = QLineEdit(parent)
-        editor.editingFinished.connect(self.commitAndCloseEditor)
-        return editor
-
-    def commitAndCloseEditor(self):
-        editor = self.sender()
-        self.commitData.emit(editor)
-        self.closeEditor.emit(editor, QItemDelegate.NoHint)
-
-    def setEditorData(self, editor, index):
-        editor.setText(index.model().data(index, Qt.EditRole))
-
-    def setModelData(self, editor, model, index):
-        model.setData(index, editor.text())
-
-
-class SpreadSheetItem(QTableWidgetItem):
-    def __init__(self, siblings, wert):
-        super(SpreadSheetItem, self).__init__()
-        self.setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable | Qt.ItemIsDragEnabled)
-        self.siblings = siblings
-        self.value = np.nan
-        self.deps = set()
-        self.reqs = set()
-        self.wert = wert
-
-    def formula(self):
-        return super().data(Qt.DisplayRole)
-
-    def data(self, role):
-        if role == Qt.EditRole:
-            return self.formula()
-        if role == Qt.DisplayRole:
-            return self.display()
-
-        return super(SpreadSheetItem, self).data(role)
-
-    def calculate(self):
-        formula = self.formula()
-        if formula is None:
-            self.value = self.wert
-            if math.isnan(self.value):
-                self.value = ''
-            return
-
-        currentreqs = set(cellre.findall(formula))
-
-        name = cellname(self.row(), self.column())
-
-        if name == formula:
-            print('You should not do this!')
-            return
-
-        # Add this cell to the new requirement's dependents
-        for r in currentreqs - self.reqs:
-            self.siblings[r].deps.add(name)
-        # Add remove this cell from dependents no longer referenced
-        for r in self.reqs - currentreqs:
-            self.siblings[r].deps.remove(name)
-
-        # Look up the values of our required cells
-        reqvalues = {r: self.siblings[r].value for r in currentreqs}
-        # Build an environment with these values and basic math functions
-        environment = ChainMap(math.__dict__, reqvalues)
-        # Note that eval is DANGEROUS and should not be used in production
-        try:
-            self.value = eval(formula, {}, environment)
-        except NameError:  # occurs if letters were typed in
-            print('Only numbers please')
-            self.value = self.wert
-        except SyntaxError:
-            pass
-            # print('keine Ahnung was hier los ist')
-
-        self.reqs = currentreqs
-
-    def propagate(self):
-        for i in self.deps:
-            self.siblings[i].calculate()
-            self.siblings[i].propagate()
-
-    def display(self):
-        self.calculate()
-        self.propagate()
-        return str(self.value)
-
-
 class FormulaInterpreter:
     """
     class to analyse formulas typed in the formula field of the Spreadsheet header
@@ -933,10 +832,6 @@ class RamanSpreadSheet(QTableWidget):
 
     def __init__(self, *args, **kwargs):
         super(RamanSpreadSheet, self).__init__(*args, **kwargs)
-        # self.setDragEnabled(True)
-        # self.setAcceptDrops(True)
-        # self.setDropIndicatorShown(True)
-        # self.setDragDropMode(self.InternalMove)
         self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
         self.horizontalHeader().hide()
         self.p = self.parent()
@@ -989,7 +884,6 @@ class SpreadSheetWindow(QMainWindow):
 
     def __init__(self, data, parent):
         super(SpreadSheetWindow, self).__init__(parent)
-        self.cells = {}
         # structure of self.d (dictionary):
         # {'dataX with X = (0,1,2,..)' : data,'short name', 'X, Y or Yerr', if loaded: 'filename', 'Long Name',
         # 'Unit', 'Comments')
@@ -1027,11 +921,10 @@ class SpreadSheetWindow(QMainWindow):
 
     def create_table_items(self):
         """ fill the table items with data """
-        self.data_table.setItemDelegate(SpreadSheetDelegate(self))
+        # self.data_table.setItemDelegate(SpreadSheetDelegate(self))
         for c in range(self.cols):
             for r in range(len(self.data[c]["data"])):
-                cell = SpreadSheetItem(self.cells, self.data[c]["data"][r])
-                self.cells[cellname(r, c)] = cell
+                cell = QTableWidgetItem(str(self.data[c]["data"][r]))
                 self.data_table.setItem(r, c, cell)
         self.data_table.itemChanged.connect(self.update_data)
 
@@ -1241,7 +1134,7 @@ class SpreadSheetWindow(QMainWindow):
             if cr == (self.rows - 1):
                 self.data_table.insertRow(self.rows)
                 for i in range(self.cols):
-                    self.data_table.setItem(self.rows, i, QTableWidgetItem())
+                    self.data_table.setItem(self.rows, i, QTableWidgetItem(''))
                 self.rows = self.rows + 1
             else:
                 pass
@@ -1400,8 +1293,7 @@ class SpreadSheetWindow(QMainWindow):
 
         for c in range(cols_before, self.cols):
             for r in range(len(self.data[c]["data"])):
-                newcell = SpreadSheetItem(self.cells, self.data[c]["data"][r])
-                self.cells[cellname(r, c)] = newcell
+                newcell = QTableWidgetItem(str(self.data[c]["data"][r]))
                 self.data_table.setItem(r, c, newcell)
 
         self.pHomeTxt = FileName[0]
@@ -1414,7 +1306,6 @@ class SpreadSheetWindow(QMainWindow):
         if new_cell_content == '':
             self.data_table.takeItem(row, col)
             new_cell_content = np.nan
-
         try:
             self.data[col]["data"][row] = new_cell_content
         except IndexError:  # occurs if index is out of bounds
@@ -1442,8 +1333,7 @@ class SpreadSheetWindow(QMainWindow):
                 if new_data is not None:
                     self.data[col]["data"] = new_data
                     for r in range(len(self.data[col]["data"])):
-                        newcell = SpreadSheetItem(self.cells, self.data[col]["data"][r])
-                        self.cells[cellname(r, col)] = newcell
+                        newcell = QTableWidgetItem(str(self.data[col]["data"][r]))
                         self.data_table.setItem(r, col, newcell)
 
     def new_col(self):
@@ -1451,14 +1341,13 @@ class SpreadSheetWindow(QMainWindow):
         self.cols = self.cols + 1
         self.data_table.setColumnCount(self.cols)
         self.header_table.setColumnCount(self.cols)
-        self.data.append({"data": np.zeros(self.rows), "shortname": str(chr(ord('A') + self.cols - 2)),
+        self.data.append({"data": np.zeros(self.rows), "shortname": str(chr(ord('A') + self.cols - 1)),
                           "type": "Y", "filename": "", "longname": None, "unit": None,
                           "comments": None, "formula": None})
         headers = [d["shortname"] + '(' + d["type"] + ')' for d in self.data]
         self.header_table.setHorizontalHeaderLabels(headers)
         for i in range(self.rows):
-            cell = SpreadSheetItem(self.cells, 0)
-            self.cells[cellname(i, self.cols - 1)] = cell
+            cell = QTableWidgetItem('')
             self.data_table.setItem(i, self.cols - 1, cell)
 
         # Color header cells in yellow
@@ -1570,57 +1459,6 @@ class SpreadSheetWindow(QMainWindow):
 #####################################################################################################################################################
 ### 4. Plot
 #####################################################################################################################################################
-class FitFunctions:
-    """
-    Fit functions
-    """
-
-    def __init__(self, pw):
-        self.pw = pw
-
-    def LinearFct(self, x, a, b):
-        """ linear Function """
-        return a * x + b
-
-    def LorentzFct(self, x, xc, h, b):
-        """ definition of Lorentzian for fit process """
-        return h / (1 + (2 * (x - xc) / b) ** 2)
-
-    def GaussianFct(self, x, xc, h, b):
-        """ definition of Gaussian for fit process """
-        return h * np.exp(-4 * math.log(2) * ((x - xc) / b) * ((x - xc) / b))
-
-    def BreitWignerFct(self, x, xc, h, b, Q):
-        """definition of Breit-Wigner-Fano fucntion for fit process
-
-        (look e.g. "Interpretation of Raman spectra of disordered and amorphous carbon" von Ferrari und Robertson)
-        Q is BWF coupling coefficient
-        For Q^-1->0: the Lorentzian line is recovered
-        """
-        return h * (1 + 2 * (x - xc) / (Q * b)) ** 2 / (1 + (2 * (x - xc) / b) ** 2)
-
-    def FctSumme(self, x, *p):
-        """
-        Summing up the fit functions
-        @param x: x data
-        @param p: fitparameter
-        @return: fitted y data
-        """
-        a = self.pw.n_fit_fct['Lorentz']  # number of Lorentzians
-        b = self.pw.n_fit_fct['Gauss']  # number of Gaussians
-        c = self.pw.n_fit_fct['Breit-Wigner-Fano']  # number of Breit-Wigner-Fano functions
-        pL = 1
-        pG = 1 + a * 3
-        pB = 1 + a * 3 + b * 3
-        return p[0] + (
-                np.sum([self.LorentzFct(x, p[i * 3 + 1], p[i * 3 + 2], p[i * 3 + 3]) for i in range(a)], axis=0) +
-                np.sum([self.GaussianFct(x, p[i * 3 + pG], p[i * 3 + 1 + pG], p[i * 3 + 2 + pG]) for i in range(b)],
-                       axis=0) +
-                np.sum(
-                    [self.BreitWignerFct(x, p[i * 4 + pB], p[i * 4 + 1 + pB], p[i * 4 + 2 + pB], p[i * 4 + 3 + pB])
-                     for i in range(c)], axis=0))
-
-
 class LineBuilder:
     """
     Plotting a vertical line in plot, e.g. to define area for fit
@@ -1636,7 +1474,6 @@ class LineBuilder:
         self.canvas.start_event_loop(timeout=10000)
 
     def __call__(self, event):
-        print(event.name)
         if event.inaxes != self.line.axes:
             return
         elif event.name == 'button_press_event':
@@ -1728,6 +1565,7 @@ class LineDrawer:
         self.posA = list(posA)
         self.posB = list(posB)
         self.pickedPoint = None
+        self.arrow.set_picker(5)
 
         self.c.mpl_connect('pick_event', self.pickpoint)
         self.c.mpl_connect('motion_notify_event', self.movepoint)
@@ -1816,11 +1654,11 @@ class LineDrawer:
 
         optionsList = [(lineOptions, "Line", ""), (arrowOptions, "Arrow", ""), (positionOptions, 'Postion', '')]
 
-        selectedOptions = formlayout.fedit(optionsList, title="Line options")
+        selectedOptions = formlayout.fedit(optionsList, title="Line options", apply=self.apply_options)
         if selectedOptions is not None:
-            self.apply_callback(selectedOptions)
+            self.apply_options(selectedOptions)
 
-    def apply_callback(self, selectedOptions):
+    def apply_options(self, selectedOptions):
         lineOptions = selectedOptions[0]
         arrowOptions = selectedOptions[1]
         positionOptions = selectedOptions[2]
@@ -2492,6 +2330,55 @@ class BaselineCorrectionsDialog(QMainWindow):
         self.clear_plot()
         event.accept()
 
+class FitFunctions:
+    """
+    Fit functions
+    """
+
+    def __init__(self, pw):
+        self.pw = pw
+
+    def LinearFct(self, x, a, b):
+        """ linear Function """
+        return a * x + b
+
+    def LorentzFct(self, x, xc, h, b):
+        """ definition of Lorentzian for fit process """
+        return h / (1 + (2 * (x - xc) / b) ** 2)
+
+    def GaussianFct(self, x, xc, h, b):
+        """ definition of Gaussian for fit process """
+        return h * np.exp(-4 * math.log(2) * ((x - xc) / b) * ((x - xc) / b))
+
+    def BreitWignerFct(self, x, xc, h, b, Q):
+        """definition of Breit-Wigner-Fano fucntion for fit process
+
+        (look e.g. "Interpretation of Raman spectra of disordered and amorphous carbon" von Ferrari und Robertson)
+        Q is BWF coupling coefficient
+        For Q^-1->0: the Lorentzian line is recovered
+        """
+        return h * (1 + 2 * (x - xc) / (Q * b)) ** 2 / (1 + (2 * (x - xc) / b) ** 2)
+
+    def FctSumme(self, x, *p):
+        """
+        Summing up the fit functions
+        @param x: x data
+        @param p: fitparameter
+        @return: fitted y data
+        """
+        a = self.pw.n_fit_fct['Lorentz']  # number of Lorentzians
+        b = self.pw.n_fit_fct['Gauss']  # number of Gaussians
+        c = self.pw.n_fit_fct['Breit-Wigner-Fano']  # number of Breit-Wigner-Fano functions
+        pL = 1
+        pG = 1 + a * 3
+        pB = 1 + a * 3 + b * 3
+        return p[0] + (
+                np.sum([self.LorentzFct(x, p[i * 3 + 1], p[i * 3 + 2], p[i * 3 + 3]) for i in range(a)], axis=0) +
+                np.sum([self.GaussianFct(x, p[i * 3 + pG], p[i * 3 + 1 + pG], p[i * 3 + 2 + pG]) for i in range(b)],
+                       axis=0) +
+                np.sum(
+                    [self.BreitWignerFct(x, p[i * 4 + pB], p[i * 4 + 1 + pB], p[i * 4 + 2 + pB], p[i * 4 + 3 + pB])
+                     for i in range(c)], axis=0))
 
 class FitOptionsDialog(QMainWindow):
     closeSignal = QtCore.pyqtSignal()  # Signal in case Fit-parameter window is closed
@@ -2522,8 +2409,8 @@ class FitOptionsDialog(QMainWindow):
 
         # Button to add Fit function
         addbutton = QPushButton("Add Function")
-        addbutton.clicked.connect(lambda: self.add_function('Lorentz',
-                                                            [[520, 0, np.inf], [100, 0, np.inf], [25, 0, np.inf]]))
+        addbutton.clicked.connect(lambda: self.add_function(
+            'Lorentz', [[520, 0, np.inf], [100, 0, np.inf], [25, 0, np.inf]]))
         self.layout.addWidget(addbutton)
 
         # Button to remove fit funtion
@@ -2599,7 +2486,7 @@ class FitOptionsDialog(QMainWindow):
         # set items in new cell
         for r in range(rows - add_rows, rows):
             for c in range(self.table.columnCount()):
-                cell = QtWidgets.QTableWidgetItem()
+                cell = QtWidgets.QTableWidgetItem('')
                 self.table.setItem(r, c, cell)
 
         # add Combobox to select fit function
@@ -2676,7 +2563,7 @@ class FitOptionsDialog(QMainWindow):
             self.table.setVerticalHeaderLabels(self.vheaders)
             # set items in new cell
             for c in range(self.table.columnCount()):
-                cell = QtWidgets.QTableWidgetItem()
+                cell = QTableWidgetItem('')
                 self.table.setItem(row_index, c, cell)
             self.table.item(row_index, 1).setText('Additional Parameter')
             self.table.item(row_index, 1).setFlags(Qt.NoItemFlags)
@@ -2697,9 +2584,13 @@ class FitOptionsDialog(QMainWindow):
             pass
 
     def value_changed(self, item):
-        if item.text() == '' or self.table.item(item.row(), 3).text() == '' or self.table.item(item.row(),
-                                                                                               4).text() == '':
+        if item is None or self.table.item(item.row(), 3) is None or self.table.item(item.row(), 4) is None:
             return
+        elif item.text() == '' or self.table.item(item.row(), 3).text() == '' or \
+                self.table.item(item.row(), 4).text() == '':
+            return
+        else:
+            pass
         # check that lower bound is strictly less than upper bound
         if item.column() == 3:
             if float(item.text()) > float(self.table.item(item.row(), 4).text()):
@@ -2828,7 +2719,6 @@ class FitOptionsDialog(QMainWindow):
 
 class MyCustomToolbar(NavigationToolbar2QT):
     signal_remove_line = QtCore.pyqtSignal(object)
-    signal_broken_axis = QtCore.pyqtSignal()
     toolitems = [t for t in NavigationToolbar2QT.toolitems]
     # Add new toolitem at last position
 
@@ -2854,8 +2744,6 @@ class MyCustomToolbar(NavigationToolbar2QT):
             QtWidgets.QMessageBox.warning(self.canvas.parent(), "Error", "There are no axes to edit.")
             return
         figureoptions.figure_edit(axes, self)
-        if figureoptions.figure_edit.axis_is_broken:
-            self.signal_broken_axis.emit()
 
     def _icon(self, name, color=None):
         if name == 'Layer.png':
@@ -2926,12 +2814,12 @@ class PlotWindow(QMainWindow):
             for j in self.data:
                 if isinstance(j[5], (np.ndarray, np.generic)):  # errors
                     (spect, capline, barlinecol) = self.ax.errorbar(j[0], j[1], yerr=j[5], fmt=j[4],
-                                                                    picker=5, capsize=3,
+                                                                    picker=True, pickradius=5, capsize=3,
                                                                     label='_Hidden errorbar {}'.format(j[2]))
                     self.spectrum.append(spect)
                     spect.set_label(j[2])
                 else:
-                    self.spectrum.append(self.ax.plot(j[0], j[1], j[4], label=j[2], picker=5)[0])
+                    self.spectrum.append(self.ax.plot(j[0], j[1], j[4], label=j[2], picker=True, pickradius=5)[0])
             self.ax.legend(fontsize=legendfontsize)
             self.ax.set_xlabel(r'Raman shift / cm$^{-1}$', fontsize=labelfontsize)
             self.ax.set_ylabel(r'Intensity / cts/s', fontsize=labelfontsize)
@@ -2956,7 +2844,6 @@ class PlotWindow(QMainWindow):
             self.ax.get_legend()
         toolbar = MyCustomToolbar(self.canvas)
         toolbar.signal_remove_line.connect(self.remove_line)
-        toolbar.signal_broken_axis.connect(self.broken_axis)
         self.addToolBar(toolbar)
         self.ax.get_legend().set_picker(5)
 
@@ -2966,12 +2853,12 @@ class PlotWindow(QMainWindow):
         for j in new_data:
             self.data.append(j)
             if isinstance(j[5], (np.ndarray, np.generic)):
-                (spect, capline, barlinecol) = self.ax.errorbar(j[0], j[1], yerr=j[5], picker=5, capsize=3,
-                                                                label='_Hidden errorbar {}'.format(j[2]))
+                (spect, capline, barlinecol) = self.ax.errorbar(j[0], j[1], yerr=j[5], picker=True, pickradius=5,
+                                                                capsize=3, label='_Hidden errorbar {}'.format(j[2]))
                 self.spectrum.append(spect)
                 spect.set_label(j[2])
             else:
-                spect = self.ax.plot(j[0], j[1], label=j[2], picker=5)[0]
+                spect = self.ax.plot(j[0], j[1], label=j[2], picker=True, pickradius=5)[0]
                 self.spectrum.append(spect)
             spect.set_linestyle(ls)
             spect.set_marker(ma)
@@ -2999,11 +2886,6 @@ class PlotWindow(QMainWindow):
         i = self.spectrum.index(line)
         self.data.pop(i)
         self.spectrum.pop(i)
-
-    def broken_axis(self):
-        #self.ax = self.fig.axes[2]
-        #print(self.fig.axes)
-        pass
 
     def pickEvent(self, event):
         if event.mouseevent.dblclick == True and event.artist == self.ax.get_legend():
@@ -3403,7 +3285,7 @@ class PlotWindow(QMainWindow):
 
         self.canvas.draw()
 
-    def get_start_values(self):
+    def get_start_values(self, s_pos=3250, s_height=150, s_FWHM=300):
         self.Dialog_FitParameter = QDialog()
         layout_hor = QtWidgets.QHBoxLayout()
         layout1 = QtWidgets.QVBoxLayout()
@@ -3428,17 +3310,17 @@ class PlotWindow(QMainWindow):
 
                 position.append(QtWidgets.QLineEdit())
                 layout1.addWidget(position[j])
-                position[j].setText('3250')
+                position[j].setText(str(s_pos))
                 layout2.addWidget(QtWidgets.QLabel(r'Position in cm^-1'))
 
                 intensity.append(QtWidgets.QLineEdit())
                 layout1.addWidget(intensity[j])
-                intensity[j].setText('150')
+                intensity[j].setText(str(s_height))
                 layout2.addWidget(QtWidgets.QLabel('Intensity'))
 
                 FWHM.append(QtWidgets.QLineEdit())
                 layout1.addWidget(FWHM[j])
-                FWHM[j].setText('300')
+                FWHM[j].setText(str(s_FWHM))
                 layout2.addWidget(QtWidgets.QLabel('FWHM'))
 
                 BWF_parmeter.append(QtWidgets.QLineEdit())
@@ -3472,11 +3354,9 @@ class PlotWindow(QMainWindow):
 
     def fit_single_peak(self, q):
         self.SelectDataset()
-        print(q.text())
         if self.selectedDatasetNumber:
             x_min, x_max = self.SelectArea()
             self.n_fit_fct[q.text()] = 1
-            p_start = self.get_start_values()
         else:
             return
 
@@ -3485,6 +3365,18 @@ class PlotWindow(QMainWindow):
             ys = self.spectrum[j].get_ydata()
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
+            idx_peaks, properties = signal.find_peaks(y, height=0.3 * max(y), width=5, distance=50)
+            print(idx_peaks, properties)
+            if idx_peaks.size > 0:
+                p = round(x[idx_peaks[0]], 2)
+                h = round(properties['peak_heights'][0], 2)
+                w = round(properties['widths'][0], 2)
+            else:
+                # set start parameters arbitrary to silicon peak
+                p = 520
+                h = 100
+                w = 20
+            p_start = self.get_start_values(s_pos=p, s_height=h, s_FWHM=w)
 
             try:
                 popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0=p_start)
@@ -3492,7 +3384,6 @@ class PlotWindow(QMainWindow):
                 self.mw.show_statusbar_message(str(e), 4000)
                 self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
                 return
-            print(popt)
             x1 = np.linspace(min(x), max(x), 1000)
             self.ax.plot(x1, self.functions.FctSumme(x1, *popt), '-r')
             self.canvas.draw()
@@ -3500,8 +3391,8 @@ class PlotWindow(QMainWindow):
             print('\n {} {}'.format(self.spectrum[j].get_label(), q.text()))
             parmeter_name = ['Background', r'Raman Shift in cm^-1', 'Intensity', 'FWHM', 'additional Parameter']
             print_param = []
-            for idx, p in enumerate(popt):
-                print_param.append([parmeter_name[idx], p])
+            for idx, po in enumerate(popt):
+                print_param.append([parmeter_name[idx], po])
             print(tabulate(print_param, headers=['Parameters', 'Values']))
 
         self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
@@ -3624,7 +3515,8 @@ class PlotWindow(QMainWindow):
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
             self.data.append([x, y, '{}_cut'.format(spct.get_label()), self.selectedData[0][3]])
-            self.spectrum.append(self.ax.plot(x, y, label='{}_cut'.format(spct.get_label()), picker=5)[0])
+            self.spectrum.append(self.ax.plot(x, y, label='{}_cut'.format(spct.get_label()), picker=True,
+                                              pickradius=5)[0])
 
     def SelectArea(self):
         self.ax.autoscale(False)
@@ -3642,7 +3534,7 @@ class PlotWindow(QMainWindow):
         line1.remove()
         line2.remove()
         self.canvas.draw()
-        self.ax.autoscale(True)
+        #self.ax.autoscale(True)
         return x_min, x_max
 
     def detemine_area(self):
@@ -4317,8 +4209,7 @@ class PlotWindow(QMainWindow):
 
     def draw_line(self):
         self.selected_points = []
-        self.pick_arrow_points_connection = self.canvas.mpl_connect('button_press_event',
-                                                                        self.pick_points_for_arrow)
+        self.pick_arrow_points_connection = self.canvas.mpl_connect('button_press_event', self.pick_points_for_arrow)
 
     def pick_points_for_arrow(self, event):
         self.selected_points.append([event.xdata, event.ydata])
@@ -4327,7 +4218,7 @@ class PlotWindow(QMainWindow):
             posA = self.selected_points[0]
             posB = self.selected_points[1]
 
-            arrow = mpatches.FancyArrowPatch(posA, posB, mutation_scale=10, arrowstyle='-', picker=10)
+            arrow = mpatches.FancyArrowPatch(posA, posB, mutation_scale=10, arrowstyle='-', picker=50)
             arrow.set_figure(self.fig)
             self.ax.add_patch(arrow)
             self.drawn_line.append(LineDrawer(arrow))
@@ -4338,7 +4229,7 @@ class PlotWindow(QMainWindow):
 
     def pick_point_for_text(self, event):
         pos = [event.xdata, event.ydata]
-        text = self.ax.annotate(r'''*''', pos, picker=5, fontsize=24)
+        text = self.ax.annotate(r'''*''', pos, picker=True, fontsize=24)
         self.inserted_text.append(InsertText(text, self.mw))
         self.canvas.mpl_disconnect(self.pick_text_point_connection)
         self.canvas.draw()

@@ -514,7 +514,7 @@ def figure_edit(axes, parent=None):
                     if line.get_label() in fill_dict.keys():
                         pass
                     else:
-                        new_fill = axes.fill_between(line.get_xdata(), line.get_ydata(), color=color)
+                        new_fill = ax.fill_between(line.get_xdata(), line.get_ydata(), color=color)
                         new_fill.set_label('_Hidden Fill {}'.format(line.get_label()))
                         fill_dict[line.get_label()] = new_fill
                 if remove_line is True:
@@ -566,9 +566,9 @@ def figure_edit(axes, parent=None):
         # Redraw
         figure.canvas.draw()
 
-    data = formlayout.fedit(datalist, title="Figure options", parent=parent,
-                            icon=get_icon('qt4_editor_options.svg'),
-                            apply=apply_callback)
+    data = formlayout.fedit(datalist, title="Figure options", parent=parent, apply=apply_callback)
+                            # icon=get_icon('qt4_editor_options.svg'),
+
 
     if data is not None:
         apply_callback(data)
