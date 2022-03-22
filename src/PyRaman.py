@@ -890,7 +890,10 @@ class SpreadSheetWindow(QMainWindow):
         self.data = data
         self.mw = parent
         self.cols = len(self.data)  # number of columns
-        self.rows = max([len(d["data"]) for d in self.data])  # number of rows
+        if not self.data:
+            self.rows = 0
+        else:
+            self.rows = max([len(d["data"]) for d in self.data])  # number of rows
         self.pHomeTxt = None  # path of Txt-File
 
         self.central_widget = QWidget()
@@ -1216,7 +1219,7 @@ class SpreadSheetWindow(QMainWindow):
         cols_before = self.cols
         dialog = QFileDialog(self)
         dialog.setFileMode(QFileDialog.ExistingFiles)
-        dialog.setNameFilter(("Data (*.txt)"))
+        dialog.setNameFilter(("Data Files (*.txt *.asc *.dat)"))
         dialog.setViewMode(QFileDialog.List)
         dialog.setDirectory(self.pHomeTxt)
         if dialog.exec_():
@@ -1248,13 +1251,17 @@ class SpreadSheetWindow(QMainWindow):
 
             try:
                 load_data.append(np.loadtxt(newFiles[j]))
+                # load_data.append(np.genfromtxt(newFiles[j], missing_values='', filling_values=''))
             except Exception as e:
-                print('{} \n probably the rows have different lengths'.format(e))
+                self.mw.show_statusbar_message("The file couldn't be imported", 4000)
+                print('{} \nThe file could not be imported, maybe the columns have different lengths'.format(e))
+                return
 
             try:
                 load_data[j] = np.transpose(load_data[j])
             except IndexError as e:
                 print("The data format is not readabel for PyRaman\n", e)
+                return
 
             if isinstance(load_data[j][0], float):
                 load_data[j] = [load_data[j], np.ones(len(load_data[j])) * np.nan]
@@ -2744,6 +2751,11 @@ class MyCustomToolbar(NavigationToolbar2QT):
             QtWidgets.QMessageBox.warning(self.canvas.parent(), "Error", "There are no axes to edit.")
             return
         figureoptions.figure_edit(axes, self)
+
+    def save_figure(self, *args):
+        self.canvas.figure.dpi=700
+        # keep the default behaviour
+        super(MyCustomToolbar, self).save_figure(*args)
 
     def _icon(self, name, color=None):
         if name == 'Layer.png':
