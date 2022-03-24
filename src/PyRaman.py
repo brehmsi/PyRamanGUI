@@ -548,7 +548,7 @@ class MainWindow(QMainWindow):
             newSS = self.window[windowtype][title]
             newSS.new_pw_signal.connect(lambda: self.new_window(None, 'Plotwindow', [newSS.plot_data, None], None))
             newSS.add_pw_signal.connect(lambda pw_name: self.add_Plot(pw_name, newSS.plot_data))
-            icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/table.png")
+            icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Icon_spreadsheet.png")
         elif windowtype == 'Plotwindow':
             windowtypeInt = 2
             plotData, fig = windowcontent
@@ -572,12 +572,12 @@ class MainWindow(QMainWindow):
                 fig.set_size_inches([10, 10])
             self.window[windowtype][title] = PlotWindow(plotData, fig, self)
             self.update_spreadsheet_menubar()
-            icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/PlotWindow.png")
+            icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Icon_plotwindow.png")
         elif windowtype == 'Textwindow':
             windowtypeInt = 3
             txt = windowcontent
             self.window[windowtype][title] = TextWindow(self, txt)
-            icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/TextWindow.png")
+            icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Icon_textwindow.png")
         else:
             return
 
