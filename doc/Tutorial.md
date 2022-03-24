@@ -17,7 +17,7 @@ It consists of three main parts framed in red in the
 following picture; a menu bar at the top a side tree at the 
 left and a workspace containing the open windows.
 
-<img src="pics/Example_Mainwindow.png" alt="Main Window" width="400"/>)
+<img src="pics/Example_Mainwindow.png" alt="Main Window" width="400"/>
 
 The windows are organized in folders, so that the workspace only
 shows the windows of the selected folder. You can switch between 
