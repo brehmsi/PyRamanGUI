@@ -532,10 +532,7 @@ class MainWindow(QMainWindow):
 
         if windowtype == 'Spreadsheet':
             if windowcontent is None:
-                ssd = [{'data': np.full(9, np.nan), 'shortname': 'A', 'type': 'X', 'filename': None, "longname": None,
-                        "unit": None, "comments": None, "formula": None},
-                       {'data': np.full(9, np.nan), "shortname": 'B', "type": 'Y', "filename": None, "longname": None,
-                        "unit": None, "comments": None, "formula": None}]  # Spreadsheet- Data (for start only zeros)
+                ssd = windowcontent
             else:
                 # change old data format to new format
                 if isinstance(windowcontent, dict):
@@ -545,6 +542,7 @@ class MainWindow(QMainWindow):
                                     "longname": None, "unit": None, "comments": None, "formula": None})
                 else:
                     ssd = windowcontent
+
             windowtypeInt = 1
             self.window[windowtype][title] = SpreadSheetWindow(ssd, parent=self)
             newSS = self.window[windowtype][title]
@@ -554,9 +552,24 @@ class MainWindow(QMainWindow):
         elif windowtype == 'Plotwindow':
             windowtypeInt = 2
             plotData, fig = windowcontent
+            # change old data format to new format
+            if not isinstance(plotData[0], dict):
+                for idx, pd in enumerate(plotData):
+                    plotData[idx] = {"x": pd[0],
+                                     "y": pd[1],
+                                     "yerr": pd[5],
+                                     "plot type": pd[4],
+                                     "label": pd[2],
+                                     "xaxis": None,
+                                     "yaxis": None,
+                                     "filename": pd[3],
+                                     "spreadsheet title": pd[6]
+                                     }
+
             if fig is not None:
-                fig.set_size_inches([10, 10])  # necessary to avoid weird error:
+                # necessary to avoid weird error:
                 # (ValueError: figure size must be positive finite not [ 4.58 -0.09])
+                fig.set_size_inches([10, 10])
             self.window[windowtype][title] = PlotWindow(plotData, fig, self)
             self.update_spreadsheet_menubar()
             icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/PlotWindow.png")
@@ -860,7 +873,7 @@ class Header(QTableWidget):
         self.setFrameStyle(0)
 
         self.setSizePolicy(QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Minimum))
-        self.setVerticalHeaderLabels(['Long Name', 'Unit', 'Comments', 'F(x)='])
+        self.setVerticalHeaderLabels(['Name', 'Axis', 'Unit', 'Comments', 'F(x)='])
         hh = self.horizontalHeader()
         hh.sectionResized.connect(self.section_resized)
         hh.selectionModel().selectionChanged.connect(self.section_selected)
@@ -884,10 +897,15 @@ class SpreadSheetWindow(QMainWindow):
 
     def __init__(self, data, parent):
         super(SpreadSheetWindow, self).__init__(parent)
-        # structure of self.d (dictionary):
+        # structure of self.data (dictionary):
         # {'dataX with X = (0,1,2,..)' : data,'short name', 'X, Y or Yerr', if loaded: 'filename', 'Long Name',
-        # 'Unit', 'Comments')
-        self.data = data
+        # 'Axis Label', 'Unit', 'Comments')
+
+        if data is None:
+            self.data = [self.create_data(np.full(9, np.nan), shortname="A", type="X"),
+                         self.create_data(np.full(9, np.nan), shortname="B", type="Y")]
+        else:
+            self.data = data
         self.mw = parent
         self.cols = len(self.data)  # number of columns
         if not self.data:
@@ -897,7 +915,7 @@ class SpreadSheetWindow(QMainWindow):
         self.pHomeTxt = None  # path of Txt-File
 
         self.central_widget = QWidget()
-        self.header_table = Header(4, self.cols, parent=self)  # table header
+        self.header_table = Header(5, self.cols, parent=self)  # table header
         self.data_table = RamanSpreadSheet(self.rows, self.cols, parent=self)  # table widget
 
         # Layout of tables
@@ -922,6 +940,18 @@ class SpreadSheetWindow(QMainWindow):
         self.create_col_header()
         self.create_row_header()
 
+    def create_data(self, data_content, shortname="A", type="Y", filename=None):
+        data_dict = {"data": data_content,
+                     "shortname": shortname,
+                     "type": type,
+                     "filename": filename,
+                     "longname": None,
+                     "axis label": None,
+                     "unit": None,
+                     "comments": None,
+                     "formula": None}
+        return data_dict
+
     def create_table_items(self):
         """ fill the table items with data """
         # self.data_table.setItemDelegate(SpreadSheetDelegate(self))
@@ -933,7 +963,7 @@ class SpreadSheetWindow(QMainWindow):
 
     def create_header_items(self, start, end):
         for c in range(start, end):
-            for r, key in enumerate(["longname", "unit", "comments", "formula"]):
+            for r, key in enumerate(["longname", "axis label", "unit", "comments", "formula"]):
                 try:
                     item_text = self.data[c][key]
                 except KeyError:
@@ -1070,8 +1100,8 @@ class SpreadSheetWindow(QMainWindow):
             unit_text = "cm^-1"
             formula = f"((1/{wl0})-(1/Col({selected_column})))*10000000"
 
-        self.header_table.item(1, selected_column).setText(unit_text)
-        self.header_table.item(3, selected_column).setText(formula.format(wl0=wl0, selected_column=selected_column))
+        self.header_table.item(2, selected_column).setText(unit_text)
+        self.header_table.item(4, selected_column).setText(formula.format(wl0=wl0, selected_column=selected_column))
 
     def set_column_type(self, qaction, log_col):
         """
@@ -1219,7 +1249,7 @@ class SpreadSheetWindow(QMainWindow):
         cols_before = self.cols
         dialog = QFileDialog(self)
         dialog.setFileMode(QFileDialog.ExistingFiles)
-        dialog.setNameFilter(("Data Files (*.txt *.asc *.dat)"))
+        dialog.setNameFilter("Data Files (*.txt *.asc *.dat)")
         dialog.setViewMode(QFileDialog.List)
         dialog.setDirectory(self.pHomeTxt)
         if dialog.exec_():
@@ -1276,14 +1306,11 @@ class SpreadSheetWindow(QMainWindow):
                     col_type = 'Y'
 
                 if header[k] is None or len(header[k]) <= j:  # if header is None, use Filename as header
-                    self.data.append({"data": load_data[k][j], "shortname": str(FileName[k]), "type": col_type,
-                                      "filename": newFiles[k], "longname": None, "unit": None, "comments": None,
-                                      "formula": None})
+                    shortname = str(FileName[k])
                 else:
-                    self.data.append({"data": load_data[k][j], "shortname": header[k][j], "type": col_type,
-                                      "filename": newFiles[k], "longname": None, "unit": None, "comments": None,
-                                      "formula": None})
-
+                    shortname = header[k][j]
+                self.data.append(self.create_data(load_data[k][j], shortname=shortname,
+                                                  type=col_type, filename=newFiles[k]))
             self.cols = self.cols + lines[k]
 
         self.rows = max([len(d["data"]) for d in self.data])
@@ -1291,7 +1318,7 @@ class SpreadSheetWindow(QMainWindow):
         self.data_table.setColumnCount(self.cols)
         self.data_table.setRowCount(self.rows)
         self.header_table.setColumnCount(self.cols)
-        self.header_table.setRowCount(4)
+        self.header_table.setRowCount(5)
 
         # set header
         headers = ['{} ({})'.format(d["shortname"], d["type"]) for d in self.data]
@@ -1306,7 +1333,7 @@ class SpreadSheetWindow(QMainWindow):
         self.pHomeTxt = FileName[0]
 
     def update_data(self, item):
-        # if content of spreadsheet cell is changed, data stored in variable self.data is also changed
+        """ if content of spreadsheet cell is changed, data stored in variable self.data is also changed """
         new_cell_content = item.text()
         col = self.data_table.visualColumn(item.column())
         row = item.row()
@@ -1326,11 +1353,13 @@ class SpreadSheetWindow(QMainWindow):
 
         if row == 0:    # Long Name
             self.data[col]["longname"] = content
-        elif row == 1:  # Unit
+        elif row == 1:
+            self.data[col]["axis label"] = content
+        elif row == 2:  # Unit
             self.data[col]["unit"] = content
-        elif row == 2:  # Comments
+        elif row == 3:  # Comments
             self.data[col]["comments"] = content
-        elif row == 3:  # F(x) =
+        elif row == 4:  # F(x) =
             self.data[col]["formula"] = content
             if content is None or content == '':
                 return
@@ -1348,9 +1377,7 @@ class SpreadSheetWindow(QMainWindow):
         self.cols = self.cols + 1
         self.data_table.setColumnCount(self.cols)
         self.header_table.setColumnCount(self.cols)
-        self.data.append({"data": np.zeros(self.rows), "shortname": str(chr(ord('A') + self.cols - 1)),
-                          "type": "Y", "filename": "", "longname": None, "unit": None,
-                          "comments": None, "formula": None})
+        self.data.append(self.create_data(np.zeros(self.rows), shortname=str(chr(ord('A') + self.cols - 1))))
         headers = [d["shortname"] + '(' + d["type"] + ')' for d in self.data]
         self.header_table.setHorizontalHeaderLabels(headers)
         for i in range(self.rows):
@@ -1358,14 +1385,23 @@ class SpreadSheetWindow(QMainWindow):
             self.data_table.setItem(i, self.cols - 1, cell)
 
         # Color header cells in yellow
-        for r in range(4):
+        for r in range(5):
             self.header_table.setItem(r, self.cols - 1, QTableWidgetItem())
             self.header_table.item(r, self.cols - 1).setBackground(QtGui.QColor(255, 255, 200))
 
     def get_plot_data(self, plot_all=False):
         """ get data from selected columns and prepares data for plot """
-
-        self.plot_data = []  # [X-data, Y-data, label, filename, plottype, yerr, spreadsheet-title]
+        self.plot_data = [] # [X-data, Y-data, label, filename, plottype, yerr, spreadsheet-title]
+        plot_content = {"x": None,
+                        "y": None,
+                        "yerr": None,
+                        "plot type": None,
+                        "label": None,
+                        "xaxis": None,
+                        "yaxis": None,
+                        "filename": None,
+                        "spreadsheet title": None
+                        }
 
         if plot_all is True:
             selCol = [idx for idx, d in enumerate(self.data) if d["type"] == "Y"]
@@ -1384,7 +1420,7 @@ class SpreadSheetWindow(QMainWindow):
         else:
             plot_type = None
 
-            # iterate over all selected columns
+        # iterate over all selected columns
         for c in selCol:
             if self.data[c]["type"] != 'Y':
                 self.mw.show_statusbar_message('Please only select Y-columns!', 4000)
@@ -1398,9 +1434,9 @@ class SpreadSheetWindow(QMainWindow):
                             label = self.data[c]["shortname"]
                         else:
                             label = self.data[c]["longname"]
-                        self.plot_data.append([self.data[k]["data"], self.data[c]["data"],
-                                               label, self.data[c]["filename"], plot_type])
+
                         m = c + 1
+                        yerr = None
                         while m <= self.cols:
                             if m == self.cols:
                                 yerr = None
@@ -1410,10 +1446,25 @@ class SpreadSheetWindow(QMainWindow):
                                 m = self.cols + 1
                             else:
                                 m = m + 1
-                        self.plot_data[-1].append(yerr)
+                        self.plot_data.append(plot_content.copy())
+                        self.plot_data[-1]["x"] = self.data[k]["data"]
+                        self.plot_data[-1]["y"] = self.data[c]["data"]
+                        self.plot_data[-1]["filename"] = self.data[c]["filename"]
+                        self.plot_data[-1]["label"] = label
+                        self.plot_data[-1]["plot type"] = plot_type
+                        self.plot_data[-1]["yerr"] = yerr
+                        if self.data[k]["axis label"] is not None or self.data[k]["axis label"] == '':
+                            self.plot_data[-1]["xaxis"] = self.data[k]["axis label"]
+                            if self.data[k]["unit"] is not None or self.data[k]["unit"] == '':
+                                self.plot_data[-1]["xaxis"] += " / {}".format(self.data[k]["unit"])
+                        if self.data[c]["axis label"] is not None or self.data[c]["axis label"] == '':
+                            self.plot_data[-1]["yaxis"] = self.data[c]["axis label"]
+                            if self.data[c]["unit"] is not None or self.data[c]["unit"] == "":
+                                self.plot_data[-1]["yaxis"] += " / {}".format(self.data[c]["unit"])
                         k = -2
                     else:
                         k = k - 1
+
                 if k == -1:
                     self.mw.show_statusbar_message('At least one dataset Y has no assigned X dataset.', 4000)
                     return
@@ -1422,25 +1473,26 @@ class SpreadSheetWindow(QMainWindow):
         # append Spreadsheet instance
         for pd in self.plot_data:
             # delete all values, which are nan
-            if len(pd[0]) == len(pd[1]):
-                x_bool = np.logical_not(np.isnan(pd[0]))
+            if len(pd["x"]) == len(pd["y"]):
+                x_bool = np.logical_not(np.isnan(pd["x"]))
                 if all(x_bool) is False:
-                    pd[0] = pd[0][x_bool]
-                    pd[1] = pd[1][x_bool]
+                    pd["x"] = pd["x"][x_bool]
+                    pd["y"] = pd["y"][x_bool]
                     # Error
-                    if pd[5] is not None:
-                        pd[5] = pd[5][x_bool]
+                    if pd["yerr"] is not None:
+                        pd["yerr"] = pd["yerr"][x_bool]
 
-                y_bool = np.logical_not(np.isnan(pd[1]))
+                y_bool = np.logical_not(np.isnan(pd["y"]))
                 if all(y_bool) is False:
-                    pd[0] = pd[0][y_bool]
-                    pd[1] = pd[1][y_bool]
+                    pd["x"] = pd["x"][y_bool]
+                    pd["y"] = pd["y"][y_bool]
                     # Error
-                    if pd[5] is not None:
-                        pd[5] = pd[5][y_bool]
+                    if pd["yerr"] is not None:
+                        pd["yerr"] = pd["yerr"][y_bool]
 
-                pd.append(self.windowTitle())
+                pd["spreadsheet title"] = self.windowTitle()
             else:
+                print(pd)
                 self.mw.show_statusbar_message('X and Y have different lengths', 4000)
                 return
         # emit signal to MainWindow to create new Plotwindow or add lines to existing plotwindow
@@ -2753,7 +2805,6 @@ class MyCustomToolbar(NavigationToolbar2QT):
         figureoptions.figure_edit(axes, self)
 
     def save_figure(self, *args):
-        self.canvas.figure.dpi=700
         # keep the default behaviour
         super(MyCustomToolbar, self).save_figure(*args)
 
@@ -2777,7 +2828,7 @@ class PlotWindow(QMainWindow):
     """
     Parameters
     ----------
-    plot_data: array    # [X-Data, Y-Data, label, ...]
+    plot_data: array containing dict
     """
 
     closeWindowSignal = QtCore.pyqtSignal(str, str)  # Signal in case plotwindow is closed
@@ -2787,7 +2838,6 @@ class PlotWindow(QMainWindow):
         self.fig = fig
         self.data = plot_data
         self.mw = parent
-        self.backup_data = plot_data
         self.spectrum = []
         self.vert_line = None
         self.functions = FitFunctions(self)
@@ -2823,18 +2873,25 @@ class PlotWindow(QMainWindow):
             self.canvas = FigureCanvasQTAgg(self.fig)
             layout.addWidget(self.canvas)
 
-            for j in self.data:
-                if isinstance(j[5], (np.ndarray, np.generic)):  # errors
-                    (spect, capline, barlinecol) = self.ax.errorbar(j[0], j[1], yerr=j[5], fmt=j[4],
+            for d in self.data:
+                if d["yerr"] is not None:  # errors
+                    (spect, capline, barlinecol) = self.ax.errorbar(d["x"], d["y"], yerr=d["yerr"], fmt=d["plot type"],
                                                                     picker=True, pickradius=5, capsize=3,
-                                                                    label='_Hidden errorbar {}'.format(j[2]))
+                                                                    label='_Hidden errorbar {}'.format(d["label"]))
                     self.spectrum.append(spect)
-                    spect.set_label(j[2])
+                    spect.set_label(d["label"])
                 else:
-                    self.spectrum.append(self.ax.plot(j[0], j[1], j[4], label=j[2], picker=True, pickradius=5)[0])
+                    self.spectrum.append(self.ax.plot(d["x"], d["y"], d["plot type"], label=d["label"],
+                                                      picker=True, pickradius=5)[0])
             self.ax.legend(fontsize=legendfontsize)
-            self.ax.set_xlabel(r'Raman shift / cm$^{-1}$', fontsize=labelfontsize)
-            self.ax.set_ylabel(r'Intensity / cts/s', fontsize=labelfontsize)
+            if self.data[0]["xaxis"] is None:
+                self.data[0]["xaxis"] = r'Raman shift / cm$^{-1}$'
+
+            if self.data[0]["yaxis"] is None:
+                self.data[0]["yaxis"] = r'Intensity / cts/s'
+
+            self.ax.set_xlabel(self.data[0]["xaxis"], fontsize=labelfontsize)
+            self.ax.set_ylabel(self.data[0]["yaxis"], fontsize=labelfontsize)
             self.ax.xaxis.set_tick_params(labelsize=tickfontsize)
             self.ax.yaxis.set_tick_params(labelsize=tickfontsize)
         else:  # loaded Plot
@@ -2862,33 +2919,22 @@ class PlotWindow(QMainWindow):
     def add_plot(self, new_data):
         ls = self.spectrum[0].get_linestyle()
         ma = self.spectrum[0].get_marker()
-        for j in new_data:
-            self.data.append(j)
-            if isinstance(j[5], (np.ndarray, np.generic)):
-                (spect, capline, barlinecol) = self.ax.errorbar(j[0], j[1], yerr=j[5], picker=True, pickradius=5,
-                                                                capsize=3, label='_Hidden errorbar {}'.format(j[2]))
+        for d in new_data:
+            self.data.append(d)
+            if d["yerr"] is not None:
+                (spect, capline, barlinecol) = self.ax.errorbar(d["x"], d["y"], yerr=d["yerr"], picker=True,
+                                                                pickradius=5, capsize=3,
+                                                                label='_Hidden errorbar {}'.format(d["label"]))
                 self.spectrum.append(spect)
-                spect.set_label(j[2])
+                spect.set_label(d["label"])
             else:
-                spect = self.ax.plot(j[0], j[1], label=j[2], picker=True, pickradius=5)[0]
+                spect = self.ax.plot(d["x"], d["y"], label=d["label"], picker=True, pickradius=5)[0]
                 self.spectrum.append(spect)
             spect.set_linestyle(ls)
             spect.set_marker(ma)
         handles, labels = self.ax.get_legend_handles_labels()
         self.update_legend(handles, labels)
         self.canvas.draw()
-
-    def keyPressEvent(self, event):
-        key = event.key
-        if key == (Qt.Key_Control and Qt.Key_Z):
-            k = 0
-            for j in self.backup_data:
-                self.spectrum[k].set_xdata(j[0])
-                self.spectrum[k].set_ydata(j[1])
-                k = k + 1
-            self.canvas.draw()
-        else:
-            pass
 
     def remove_line(self, line):
         """
@@ -3085,8 +3131,8 @@ class PlotWindow(QMainWindow):
     #### Functions and other stuff ####
     def go_to_spreadsheet(self, line):
         line_index = self.spectrum.index(line)
-        if len(self.data[line_index]) == 7:
-            spreadsheet_name = self.data[line_index][6]
+        if self.data[line_index]["spreadsheet title"]:
+            spreadsheet_name = self.data[line_index]["spreadsheet title"]
             item = self.mw.treeWidget.findItems(spreadsheet_name, Qt.MatchFixedString | Qt.MatchRecursive)
             for j in item:  # select spreadsheet if there are several items with same name
                 if j.type() == 1:
@@ -3096,7 +3142,7 @@ class PlotWindow(QMainWindow):
                     continue
             self.mw.activate_window(spreadsheet_item)
             spreadsheet = self.mw.window['Spreadsheet'][spreadsheet_name]
-            header_name = self.data[line_index][2]
+            header_name = self.data[line_index]["label"]
             for j in range(spreadsheet.data_table.columnCount()):
                 if spreadsheet.header_table.horizontalHeaderItem(j).text() == header_name + ' (Y)':
                     self.mw.show_statusbar_message(header_name, 4000)
@@ -3105,11 +3151,8 @@ class PlotWindow(QMainWindow):
                 else:
                     continue
 
-        elif len(self.data[line]) == 6:
-            self.mw.show_statusbar_message(
-                'This functions will be available, in future projects. This project is too old', 3000)
         else:
-            self.mw.show_statusbar_message('This is weird!', 3000)
+            self.mw.show_statusbar_message('OOPS! Something went wrong!', 3000)
 
     def SelectDataset(self, select_only_one=False):
         data_sets_name = []
@@ -3129,13 +3172,13 @@ class PlotWindow(QMainWindow):
 
     def menu_save_to_file(self):
         self.SelectDataset()
-        for j in self.selectedData:
-            if j[3] is not None:
-                startFileDirName = os.path.dirname(j[3])
-                startFileName = '{}/{}'.format(startFileDirName, j[2])
+        for d in self.selectedData:
+            if d["filename"] is not None:
+                startFileDirName = os.path.dirname(d["filename"])
+                startFileName = '{}/{}'.format(startFileDirName, d["label"])
             else:
                 startFileName = None
-            save_data = [j[0], j[1]]
+            save_data = [d["x"], d["y"]]
             save_data = np.transpose(save_data)
             self.save_to_file('Save data selected data in file', startFileName, save_data)
 
@@ -3163,9 +3206,9 @@ class PlotWindow(QMainWindow):
         for j in self.selectedDatasetNumber:
             pickDP = DataPointPicker(self.spectrum[j], 0)
             idx = pickDP.idx
-            self.data[j][0] = np.delete(self.data[j][0], idx)
-            self.data[j][1] = np.delete(self.data[j][1], idx)
-            self.spectrum[j].set_data(self.data[j][0], self.data[j][1])
+            self.data[j]["x"] = np.delete(self.data[j]["x"], idx)
+            self.data[j]["y"] = np.delete(self.data[j]["y"], idx)
+            self.spectrum[j].set_data(self.data[j]["y"], self.data[j]["y"])
             self.setFocus()
 
     def del_broken_pixel(self, action):
@@ -3177,31 +3220,31 @@ class PlotWindow(QMainWindow):
         for j in self.selectedDatasetNumber:
             data_idx = 629         # index of first broken data point
             border = 6
-            print('Following data points of {} were deleted'.format(self.data[j][2]))
-            while data_idx <= len(self.data[j][0]):
-                data_min_idx = np.argmin(self.data[j][1][data_idx - border:data_idx + border])
+            print('Following data points of {} were deleted'.format(self.data[j]["label"]))
+            while data_idx <= len(self.data[j]["x"]):
+                data_min_idx = np.argmin(self.data[j]["y"][data_idx - border:data_idx + border])
                 if data_min_idx == 0 or data_min_idx == 2*border:
                     QMessageBox.about(self, "Title",
                                       "Please select this data point manually (around {} in the data set {})".format(
-                                          self.data[j][0][data_idx], self.data[j][2]))
+                                          self.data[j]["x"][data_idx], self.data[j]["y"]))
                     pickDP = DataPointPicker(self.spectrum[j], data_idx)
                     data_idx = pickDP.idx
                 else:
                     data_idx += data_min_idx - border
 
-                print(self.data[j][0][data_idx], self.data[j][1][data_idx])
-                self.data[j][0] = np.round(np.delete(self.data[j][0], data_idx), 5)
-                self.data[j][1] = np.delete(self.data[j][1], data_idx)
+                print(self.data[j]["x"][data_idx], self.data[j]["y"][data_idx])
+                self.data[j]["x"] = np.round(np.delete(self.data[j]["x"], data_idx), 5)
+                self.data[j]["y"] = np.delete(self.data[j]["y"], data_idx)
                 data_idx += data_idx_diff[action.text()]
 
-            self.spectrum[j].set_data(self.data[j][0], self.data[j][1])
+            self.spectrum[j].set_data(self.data[j]["x"], self.data[j]["y"])
             self.setFocus()
             self.canvas.draw()
 
             # Save data without defective data points
-            startFileDirName = os.path.dirname(self.data[j][3])
-            startFileName = startFileDirName + '/' + self.data[j][2]
-            save_data = [self.data[j][0], self.data[j][1]]
+            startFileDirName = os.path.dirname(self.data[j]["filename"])
+            startFileName = startFileDirName + '/' + self.data[j]["label"]
+            save_data = [self.data[j]["x"], self.data[j]["y"]]
             save_data = np.transpose(save_data)
             self.save_to_file('Save data without deleted data points in file', startFileName, save_data)
 
@@ -3211,24 +3254,24 @@ class PlotWindow(QMainWindow):
         """
         self.SelectDataset()
         for n in self.selectedDatasetNumber:
-            norm_factor = numpy.amax(self.data[n][1])
+            norm_factor = numpy.amax(self.data[n]["y"])
             if select_peak:
-                dpp = DataPointPicker(self.spectrum[n], np.where(self.data[n][1] == norm_factor))
+                dpp = DataPointPicker(self.spectrum[n], np.where(self.data[n]["y"] == norm_factor))
                 idx = dpp.idx
-                norm_factor = self.data[n][1][idx]
+                norm_factor = self.data[n]["y"][idx]
 
-            self.data[n][1] = self.data[n][1] / norm_factor
-            self.spectrum[n].set_data(self.data[n][0], self.data[n][1])
+            self.data[n]["y"] = self.data[n]["y"] / norm_factor
+            self.spectrum[n].set_data(self.data[n]["x"], self.data[n]["y"])
             self.canvas.draw()
             # Save normalized data
-            if self.data[n][3] is not None:
-                (fileBaseName, fileExtension) = os.path.splitext(self.data[n][2])
-                startFileDirName = os.path.dirname(self.data[n][3])
+            if self.data[n]["filename"] is not None:
+                (fileBaseName, fileExtension) = os.path.splitext(self.data[n]["label"])
+                startFileDirName = os.path.dirname(self.data[n]["filename"])
                 startFileBaseName = startFileDirName + '/' + fileBaseName
                 startFileName = startFileBaseName + '_norm.txt'
             else:
                 startFileName = None
-            save_data = [self.data[n][0], self.data[n][1]]
+            save_data = [self.data[n]["x"], self.data[n]["y"]]
             save_data = np.transpose(save_data)
             self.save_to_file('Save normalized data in file', startFileName, save_data)
 
@@ -3509,7 +3552,7 @@ class PlotWindow(QMainWindow):
 
             # Save fit parameter in file
             filename = self.spectrum[n].get_label()
-            startFileDirName = os.path.dirname(self.data[n][3])
+            startFileDirName = os.path.dirname(self.data[n]["filename"])
             filename = '{}/{}_fitparameter.txt'.format(startFileDirName, filename)
 
             self.save_to_file('Save fit parameter in file', filename, save_data)
@@ -3526,7 +3569,12 @@ class PlotWindow(QMainWindow):
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
-            self.data.append([x, y, '{}_cut'.format(spct.get_label()), self.selectedData[0][3]])
+            data_dict = {"x": x,
+                         "y": y,
+                         "label": '{}_cut'.format(spct.get_label()),
+                         "filename": self.selectedData[0]["filename"]}
+
+            self.data.append(data_dict)
             self.spectrum.append(self.ax.plot(x, y, label='{}_cut'.format(spct.get_label()), picker=True,
                                               pickradius=5)[0])
 
@@ -3553,9 +3601,9 @@ class PlotWindow(QMainWindow):
         self.SelectDataset()
         area = {}
         for n in self.selectedDatasetNumber:
-            x = self.data[n][0]
-            y = self.data[n][1]
-            area[self.data[n][2]] = np.trapz(y, x)
+            x = self.data[n]["x"]
+            y = self.data[n]["y"]
+            area[self.data[n]["label"]] = np.trapz(y, x)
 
         print(area)
         return area
@@ -3563,8 +3611,8 @@ class PlotWindow(QMainWindow):
     def find_peaks(self):
         self.SelectDataset()
         for n in self.selectedDatasetNumber:
-            x = self.data[n][0]
-            y = self.data[n][1]
+            x = self.data[n]["x"]
+            y = self.data[n]["y"]
             y_max = max(y)
 
             idx_peaks, properties = signal.find_peaks(y, height=0.3 * y_max, width=5, distance=50)
@@ -4044,8 +4092,8 @@ class PlotWindow(QMainWindow):
         self.SelectDataset()
         for n in self.selectedDatasetNumber:
             # get data
-            xs = self.data[n][0]
-            ys = self.data[n][1]
+            xs = self.data[n]["x"]
+            ys = self.data[n]["y"]
 
             # background correction
             yb, baseline = self.blc.drPLS(xs, ys, lam=9000000)
@@ -4053,18 +4101,18 @@ class PlotWindow(QMainWindow):
             # norm spectrum regarding water peak
             norm_factor = np.max(yb[np.argwhere((xs>3000) & (xs<3700))])
             yb = yb / norm_factor
-            self.data[n][1] = yb
+            self.data[n]["y"] = yb
             self.spectrum[n].set_data(xs, yb)
             self.canvas.draw()
             # Save normalized data
-            if self.data[n][3] is not None:
-                (fileBaseName, fileExtension) = os.path.splitext(self.data[n][2])
-                startFileDirName = os.path.dirname(self.data[n][3])
+            if self.data[n]["filename"] is not None:
+                (fileBaseName, fileExtension) = os.path.splitext(self.data[n]["label"])
+                startFileDirName = os.path.dirname(self.data[n]["filename"])
                 startFileBaseName = startFileDirName + '/' + fileBaseName
                 startFileName = startFileBaseName + '_norm.txt'
             else:
                 startFileName = None
-            save_data = [self.data[n][0], self.data[n][1]]
+            save_data = [self.data[n]["x"], self.data[n]["y"]]
             save_data = np.transpose(save_data)
             self.save_to_file('Save normalized data in file', startFileName, save_data)
 
@@ -4206,7 +4254,7 @@ class PlotWindow(QMainWindow):
                 print(e)
                 continue
             self.spectrum[n] = ms.line
-            self.data[n][1] = ms.y
+            self.data[n]["y"] = ms.y
 
     def shift_spectrum(self):
         self.SelectDataset(True)
@@ -4217,7 +4265,7 @@ class PlotWindow(QMainWindow):
                 print(e)
                 continue
             self.spectrum[n] = ms.line
-            self.data[n][1] = ms.y
+            self.data[n]["y"] = ms.y
 
     def draw_line(self):
         self.selected_points = []
