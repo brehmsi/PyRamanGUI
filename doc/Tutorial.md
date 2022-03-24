@@ -19,7 +19,7 @@ There are three different kinds of windows,
 [Plotwindow](#Plotwindow)
 [Textwindow](#Textwindow).
 They are explained in more detail in the following sections.
-<img src="pics\Example_MainWindow.PNG" alt="Picture of main window" width="75%">
+![image](pics/Example_MainWindow.PNG)
 
 ###  Spreadsheet 
 
