@@ -105,6 +105,8 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
         self.setDragDropMode(self.InternalMove)
         self.setSelectionMode(QAbstractItemView.SingleSelection)
 
+        self.dragged_item = None
+
     def mouseDoubleClickEvent(self, event):
         """
         Parameters
@@ -156,12 +158,20 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
         if itemAtDropLocation is None:
             # no drops outside of folders
             return
-        elif itemAtDropLocation.parent() != self.dragged_item.parent():
+        elif itemAtDropLocation != self.dragged_item.parent():
             # send signal if parents (folder) of item changes during drag-drop-event
             self.itemDropped.emit(self.dragged_item, itemAtDropLocation)
 
         # keep the default behaviour
         super(RamanTreeWidget, self).dropEvent(event)
+
+        if self.dragged_item.parent() is None:
+            print("The item was dropped outside a folder. This will cause some issues")
+            # print(self.dragged_item)
+            # print(itemAtDropLocation.childCount())
+            itemAtDropLocation.addChild(self.dragged_item)
+            itemAtDropLocation.setExpanded(True)
+            # print(itemAtDropLocation.childCount())
 
 
 class MainWindow(QMainWindow):
@@ -1453,13 +1463,13 @@ class SpreadSheetWindow(QMainWindow):
                         self.plot_data[-1]["label"] = label
                         self.plot_data[-1]["plot type"] = plot_type
                         self.plot_data[-1]["yerr"] = yerr
-                        if self.data[k]["axis label"] is not None or self.data[k]["axis label"] == '':
+                        if self.data[k]["axis label"] is not None and self.data[k]["axis label"] != '':
                             self.plot_data[-1]["xaxis"] = self.data[k]["axis label"]
-                            if self.data[k]["unit"] is not None or self.data[k]["unit"] == '':
+                            if self.data[k]["unit"] is not None and self.data[k]["unit"] != '':
                                 self.plot_data[-1]["xaxis"] += " / {}".format(self.data[k]["unit"])
-                        if self.data[c]["axis label"] is not None or self.data[c]["axis label"] == '':
+                        if self.data[c]["axis label"] is not None and self.data[c]["axis label"] != '':
                             self.plot_data[-1]["yaxis"] = self.data[c]["axis label"]
-                            if self.data[c]["unit"] is not None or self.data[c]["unit"] == "":
+                            if self.data[c]["unit"] is not None and self.data[c]["unit"] != "":
                                 self.plot_data[-1]["yaxis"] += " / {}".format(self.data[c]["unit"])
                         k = -2
                     else:
@@ -3128,6 +3138,19 @@ class PlotWindow(QMainWindow):
 
         self.show()
 
+    def create_data(self, x, y, yerr=None, type=None, label="_newline", filename=None, sstitle=None):
+        data_dict = {"x": x,
+                     "y": y,
+                     "yerr": yerr,
+                     "plot type": type,
+                     "label": label,
+                     "xaxis": None,
+                     "yaxis": None,
+                     "filename": filename,
+                     "spreadsheet title": sstitle
+                     }
+        return data_dict
+
     #### Functions and other stuff ####
     def go_to_spreadsheet(self, line):
         line_index = self.spectrum.index(line)
@@ -3334,8 +3357,9 @@ class PlotWindow(QMainWindow):
             y = y1 - y2
         else:
             return
-
-        line = self.ax.plot(x1, y, label='subtracted Spectrum')
+        line_label = "Subtracted Spectrum"
+        self.data.append(self.create_data(x1, y, label=line_label))
+        line, = self.ax.plot(x1, y, label=line_label)
         self.spectrum.append(line)
 
         self.canvas.draw()
