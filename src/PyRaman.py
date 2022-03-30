@@ -5,7 +5,6 @@ import math
 import matplotlib
 import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
-
 import numpy as np
 import operator
 import os
@@ -15,6 +14,7 @@ import re
 import scipy
 import sympy as sp
 import sys
+import prettytable
 from packaging import version
 
 from collections import ChainMap
@@ -2399,13 +2399,17 @@ class BaselineCorrectionsDialog(QMainWindow):
         self.clear_plot()
         event.accept()
 
+
 class FitFunctions:
     """
     Fit functions
     """
 
-    def __init__(self, pw):
-        self.pw = pw
+    def __init__(self):
+        # number of fit functions (Lorentzian, Gaussian and Breit-Wigner-Fano)
+        self.n_fit_fct = {'Lorentz': 0,
+                          'Gauss': 0,
+                          'Breit-Wigner-Fano': 0}
 
     def LinearFct(self, x, a, b):
         """ linear Function """
@@ -2435,13 +2439,13 @@ class FitFunctions:
         @param p: fitparameter
         @return: fitted y data
         """
-        a = self.pw.n_fit_fct['Lorentz']  # number of Lorentzians
-        b = self.pw.n_fit_fct['Gauss']  # number of Gaussians
-        c = self.pw.n_fit_fct['Breit-Wigner-Fano']  # number of Breit-Wigner-Fano functions
+        a = self.n_fit_fct['Lorentz']  # number of Lorentzians
+        b = self.n_fit_fct['Gauss']  # number of Gaussians
+        c = self.n_fit_fct['Breit-Wigner-Fano']  # number of Breit-Wigner-Fano functions
         pL = 1
         pG = 1 + a * 3
         pB = 1 + a * 3 + b * 3
-        return p[0] + (
+        return np.full(len(x), p[0]) + (
                 np.sum([self.LorentzFct(x, p[i * 3 + 1], p[i * 3 + 2], p[i * 3 + 3]) for i in range(a)], axis=0) +
                 np.sum([self.GaussianFct(x, p[i * 3 + pG], p[i * 3 + 1 + pG], p[i * 3 + 2 + pG]) for i in range(b)],
                        axis=0) +
@@ -2449,10 +2453,11 @@ class FitFunctions:
                     [self.BreitWignerFct(x, p[i * 4 + pB], p[i * 4 + 1 + pB], p[i * 4 + 2 + pB], p[i * 4 + 3 + pB])
                      for i in range(c)], axis=0))
 
+
 class FitOptionsDialog(QMainWindow):
     closeSignal = QtCore.pyqtSignal()  # Signal in case Fit-parameter window is closed
 
-    def __init__(self, parent):
+    def __init__(self, parent, x, y, spect):
         """
         Options Dialog for Fitprocess
 
@@ -2462,13 +2467,20 @@ class FitOptionsDialog(QMainWindow):
         """
         super(FitOptionsDialog, self).__init__(parent=parent)
         self.parent = parent
-        self.n_fit_fct = {  # number of fit functions (Lorentzian, Gaussian and Breit-Wigner-Fano)
-            'Lorentz': 0,
-            'Gauss': 0,
-            'Breit-Wigner-Fano': 0
-        }
+        self.x = x
+        self.y = y
+        self.spectrum = spect
+
+        # get canvas, axes and figure object of parent
+        self.canvas = self.parent.canvas
+        self.ax = self.parent.ax
+        self.fig = self.parent.fig
+
+        # plotted function
+        self.plotted_functions = []
+
         self.fit_fcts = {}
-        self.continue_fit = False
+        self.fit_functions = FitFunctions()
 
         self.create_dialog()
         self.create_menubar()
@@ -2476,21 +2488,32 @@ class FitOptionsDialog(QMainWindow):
     def create_dialog(self):
         self.layout = QtWidgets.QVBoxLayout()
 
+        button_layout_01 = QtWidgets.QHBoxLayout()
+        button_layout_02 = QtWidgets.QHBoxLayout()
+
         # Button to add Fit function
-        addbutton = QPushButton("Add Function")
-        addbutton.clicked.connect(lambda: self.add_function(
+        add_button = QPushButton("Add Function")
+        add_button.clicked.connect(lambda: self.add_function(
             'Lorentz', [[520, 0, np.inf], [100, 0, np.inf], [25, 0, np.inf]]))
-        self.layout.addWidget(addbutton)
+        button_layout_01.addWidget(add_button)
 
         # Button to remove fit funtion
-        removebutton = QPushButton('Remove Funtion')
-        removebutton.clicked.connect(self.remove_function)
-        self.layout.addWidget(removebutton)
+        remove_button = QPushButton('Remove Funtion')
+        remove_button.clicked.connect(self.remove_function)
+        button_layout_01.addWidget(remove_button)
 
         # OK Button => accept start values for fit
-        okbutton = QPushButton("OK")
-        okbutton.clicked.connect(self.ok_press)
-        self.layout.addWidget(okbutton)
+        fit_button = QPushButton("Fit")
+        fit_button.clicked.connect(self.fit)
+        button_layout_02.addWidget(fit_button)
+
+        # Apply
+        apply_button = QPushButton("Apply")
+        apply_button.clicked.connect(self.apply)
+        button_layout_02.addWidget(apply_button)
+
+        self.layout.addLayout(button_layout_01)
+        self.layout.addLayout(button_layout_02)
 
         # create table
         self.table = QtWidgets.QTableWidget(1, 5)
@@ -2530,8 +2553,8 @@ class FitOptionsDialog(QMainWindow):
     def create_menubar(self):
         self.menubar = self.menuBar()
         fileMenu = self.menubar.addMenu('File')
-        fileMenu.addAction('Save Start Parameter', self.save_start_parameter)
-        fileMenu.addAction('Load Start Parameter', self.load_start_parameter)
+        fileMenu.addAction('Save Fit Parameter', self.save_fit_parameter)
+        fileMenu.addAction('Load Fit Parameter', self.load_fit_parameter)
 
     def add_function(self, fct_name, fct_values):
         """
@@ -2560,9 +2583,8 @@ class FitOptionsDialog(QMainWindow):
 
         # add Combobox to select fit function
         cbox = QtWidgets.QComboBox(self)
-        cbox.addItem("Lorentz")
-        cbox.addItem("Gauss")
-        cbox.addItem("Breit-Wigner-Fano")
+        for key in self.fit_functions.n_fit_fct.keys():
+            cbox.addItem(key)
         cbox.setCurrentText(fct_name)
         cbox.currentTextChanged.connect(lambda: self.fct_change(cbox.currentText(), n))
         self.table.setCellWidget(rows - add_rows, 0, cbox)
@@ -2571,7 +2593,8 @@ class FitOptionsDialog(QMainWindow):
         # configurate cells
         self.table.item(rows - 2, 0).setFlags(Qt.NoItemFlags)  # no interaction with these cells
         self.table.item(rows - 1, 0).setFlags(Qt.NoItemFlags)
-        # postion
+
+        # position
         self.table.item(rows - add_rows, 1).setText('Position')
         self.table.item(rows - add_rows, 1).setFlags(Qt.NoItemFlags)
         self.table.item(rows - add_rows, 2).setText(str(fct_values[0][0]))  # starting value
@@ -2586,6 +2609,7 @@ class FitOptionsDialog(QMainWindow):
         self.table.item(rows - add_rows + 1, 3).setText(str(fct_values[1][1]))  # lower bound
         self.table.item(rows - add_rows + 1, 4).setText(str(fct_values[1][2]))  # upper bound
         self.fit_fcts[n].update({'intensity': self.table.item(rows - add_rows + 1, 2)})
+
         # FWHM
         self.table.item(rows - add_rows + 2, 1).setText('FWHM')
         self.table.item(rows - add_rows + 2, 1).setFlags(Qt.NoItemFlags)
@@ -2630,6 +2654,7 @@ class FitOptionsDialog(QMainWindow):
             self.table.insertRow(row_index)
             self.vheaders.insert(row_index, str(n))
             self.table.setVerticalHeaderLabels(self.vheaders)
+
             # set items in new cell
             for c in range(self.table.columnCount()):
                 cell = QTableWidgetItem('')
@@ -2637,9 +2662,11 @@ class FitOptionsDialog(QMainWindow):
             self.table.item(row_index, 1).setText('Additional Parameter')
             self.table.item(row_index, 1).setFlags(Qt.NoItemFlags)
             self.table.item(row_index, 2).setText(str(-10))
+
             # boundaries
             self.table.item(row_index, 3).setText(str(-np.inf))
             self.table.item(row_index, 4).setText(str(np.inf))
+
             # update dictionary
             self.fit_fcts[n]['lower boundaries'].append(self.table.item(row_index, 3))
             self.fit_fcts[n]['upper boundaries'].append(self.table.item(row_index, 4))
@@ -2672,63 +2699,90 @@ class FitOptionsDialog(QMainWindow):
                                                       error_sound=True)
                 # add: replace item with old previous item
 
-    def save_start_parameter(self):
-        SaveFileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Save File')
-        if SaveFileName[0] != '':
-            filename = SaveFileName[0]
-        else:
-            return
+    def save_fit_parameter(self):
+        """Save fit parameter in txt file"""
 
-        param = []
-        for col in range(self.table.columnCount()):
-            colparam = []
-            for row in range(self.table.rowCount()):
-                item = self.table.item(row, col)
-                widget = self.table.cellWidget(row, col)
-                if widget != None and isinstance(widget, QtWidgets.QComboBox):
-                    colparam.append(widget.currentText())
-                elif item != None:
-                    colparam.append(item.text())
-                else:
-                    colparam.append(np.nan)
-            param.append(colparam)
+        # Get fit_parameter in printable form
+        print_table, r_squared = self.print_fitparameter()
 
-        param = np.array(param)
+        # Save fit parameter in file
+        save_data = print_table.get_string()
+        filename = self.spectrum.get_label()
+        #startFileDirName = os.path.dirname(self.parent.mw.pHomeRmn)
+        #filename = '{}/{}_fitparameter.txt'.format(startFileDirName, filename)
+        #filename = ""
+        self.parent.save_to_file('Save fit parameter in file', filename, save_data)
 
-        np.savetxt(filename, param.T, fmt='%s', delimiter=', ')
-
-    def load_start_parameter(self):
-        load_filename = QtWidgets.QFileDialog.getOpenFileName(self, 'Load starting parameter')
+    def load_fit_parameter(self):
+        load_filename = QtWidgets.QFileDialog.getOpenFileName(self, 'Load fit parameter')
         if load_filename[0] != '':
             filename = load_filename[0]
         else:
             return
 
-        tablecontent = np.genfromtxt(filename, dtype='str', delimiter=', ')
+        table_content = np.genfromtxt(filename, dtype='str', delimiter='|', skip_header=3, skip_footer=1,
+                                      usecols=(1, 2, 3), autostrip=True)
 
         # set Background
-        self.table.item(0, 2).setText(str(tablecontent[0][2]))  # starting parameter
-        self.table.item(0, 3).setText(str(tablecontent[0][3]))  # lower bound
-        self.table.item(0, 4).setText(str(tablecontent[0][4]))  # upper bound
+        self.table.item(0, 1).setText(str(table_content[0][2]))  # starting parameter
 
-        # delete background from tablecontent
-        tablecontent = np.delete(tablecontent, 0, axis=0)
+        # delete background from table content
+        table_content = np.delete(table_content, 0, axis=0)
 
         fct_value = []
-        for j in tablecontent:
-            if j[0] != '' and fct_value != []:
-                self.add_function(fct_name, fct_value)
+        row = 0
+        fct_name = None
+        while row < len(table_content):
+            if all(tr == '' for tr in table_content[row]):
+                if fct_value:
+                    self.add_function(fct_name, fct_value)
+                if row == len(table_content)-1:
+                    break
+                fct_name = table_content[row+1][0][:-2]
+                row += 2
                 fct_value = []
-                fct_name = j[0]
-            elif j[0] != '':
-                fct_name = j[0]
             else:
-                pass
-            fct_value.append([j[2], j[3], j[4]])
-        self.add_function(fct_name, fct_value)
+                if table_content[row][0] == "Area under curve":
+                    pass
+                else:
+                    fct_value.append([table_content[row][1], 0, np.inf])
+                row += 1
 
-    def ok_press(self):
-        self.p_start = [float(self.background.text())]  # Background
+    def apply(self):
+        self.clear_plot()
+        p_start, boundaries = self.get_fit_parameter()
+        self.plot_functions(p_start)
+
+    def fit(self):
+        self.reset_n_fit_fct()
+        self.clear_plot()
+        p_start, boundaries = self.get_fit_parameter()
+        try:
+            popt, pcov = curve_fit(self.fit_functions.FctSumme, self.x, self.y, p0=p_start, bounds=boundaries)
+        except RuntimeError as e:
+            self.parent.mw.show_statusbar_message(str(e), 4000)
+            return
+        except ValueError as e:
+            self.parent.mw.show_statusbar_message(str(e), 4000)
+            return
+
+        self.plot_functions(popt)
+        self.set_fit_parameter(popt)
+        print_table, r_squared = self.print_fitparameter(popt=popt, pcov=pcov)
+        print('\n {}'.format(self.spectrum.get_label()))
+        print(r'R^2={:.4f}'.format(r_squared))
+        print(print_table)
+
+    def set_fit_parameter(self, parameter):
+        self.background.setText(str(parameter[0]))
+
+        for i in range(1, len(parameter)):
+            self.table.item(i, 2).setText(str(parameter[i]))
+
+    def get_fit_parameter(self):
+        self.reset_n_fit_fct()
+
+        p_start = [float(self.background.text())]  # Background
         parameter = {'Lorentz': [],
                      'Gauss': [],
                      'Breit-Wigner-Fano': []}
@@ -2743,7 +2797,7 @@ class FitOptionsDialog(QMainWindow):
             bg_up = np.inf
         else:
             bg_up = float(bg_up)
-        self.boundaries = [[bg_low], [bg_up]]
+        boundaries = [[bg_low], [bg_up]]
         lower_boundaries = {'Lorentz': [],
                             'Gauss': [],
                             'Breit-Wigner-Fano': []}
@@ -2769,19 +2823,133 @@ class FitOptionsDialog(QMainWindow):
                     upper_boundaries[name_fct].append(np.inf)
                 else:
                     upper_boundaries[name_fct].append(float(ub.text()))
-            self.n_fit_fct[name_fct] += 1
+            self.fit_functions.n_fit_fct[name_fct] += 1
 
         for p in parameter.values():
-            self.p_start.extend(p)
+            p_start.extend(p)
 
         for lb, ub in zip(lower_boundaries.values(), upper_boundaries.values()):
-            self.boundaries[0].extend(lb)
-            self.boundaries[1].extend(ub)
+            boundaries[0].extend(lb)
+            boundaries[1].extend(ub)
 
-        self.continue_fit = True
-        self.close()
+        return p_start, boundaries
+
+    def plot_functions(self, param):
+        x1 = np.linspace(min(self.x), max(self.x), 1000)
+        self.plotted_functions.append(self.ax.plot(x1, self.fit_functions.FctSumme(x1, *param), '-r')[0])
+
+        aL = self.fit_functions.n_fit_fct['Lorentz']
+        aG = self.fit_functions.n_fit_fct['Gauss']
+        for key in self.fit_functions.n_fit_fct.keys():
+            for i in range(self.fit_functions.n_fit_fct[key]):
+                if key == 'Lorentz':
+                    y_fit = param[0] + self.fit_functions.LorentzFct(x1, param[3 * i + 1], param[3 * i + 2],
+                                                                param[3 * i + 3])
+                elif key == 'Gauss':
+                    y_fit = param[0] + self.fit_functions.GaussianFct(x1, param[3 * (i + aL) + 1], param[3 * (i + aL) + 2],
+                                                                 param[3 * (i + aL) + 3])
+                elif key == 'Breit-Wigner-Fano':
+                    y_fit = param[0] + self.fit_functions.BreitWignerFct(x1, param[4 * i + 3 * (aL + aG) + 1],
+                                                                    param[4 * i + 3 * (aL + aG) + 2],
+                                                                    param[4 * i + 3 * (aL + aG) + 3],
+                                                                    param[4 * i + 3 * (aL + aG) + 4])
+                self.plotted_functions.append(self.ax.plot(x1, y_fit, '--g')[0])
+
+        self.canvas.draw()
+
+    def clear_plot(self):
+        for pf in self.plotted_functions:
+            try:
+                pf.remove()
+            except ValueError as e:
+                print("Line couldn't be removed: {}".format(e))
+                continue
+        self.plotted_functions = []
+        self.canvas.draw()
+
+    def print_fitparameter(self, popt=None, pcov=None):
+        """bring fit parameter in printable form"""
+
+        # Get data from table
+        if popt is None:
+            popt = []
+            for r in range(self.table.rowCount()):
+                popt.append(float(self.table.item(r, 2).text()))
+
+        # Calculate Errors and R square
+        if pcov is not None:
+            perr = np.sqrt(np.diag(pcov))
+            residuals = self.y - self.fit_functions.FctSumme(self.x, *popt)
+            ss_res = np.sum(residuals ** 2)
+            ss_tot = np.sum((self.y - np.mean(self.y)) ** 2)
+            r_squared = 1 - (ss_res / ss_tot)
+        else:
+            r_squared = None
+            perr = [""]*len(popt)
+
+        print_table = prettytable.PrettyTable()
+        print_table.field_names = ["Parameters", "Values", "Errors"]
+        print_table.add_rows([["Background", popt[0], perr[0]],
+                              ["", "", ""]])
+        a = 1
+
+        for key in self.fit_functions.n_fit_fct.keys():  # iterate over Lorentz, Gauss, BWF
+            for j in range(self.fit_functions.n_fit_fct[key]):  # iterate over used fit functions per L, G or BWF
+                print_table.add_rows([['{} {}'.format(key, j + 1), "", ""],
+                                     ['Raman Shift in cm-1', popt[a], perr[a]],
+                                     ['Peak height in cps', popt[a + 1], perr[a + 1]],
+                                     ['FWHM in cm-1', popt[a + 2], perr[a + 2]]])
+                if key == 'Lorentz':
+                    area = np.trapz(self.fit_functions.LorentzFct(self.x, popt[a], popt[a + 1], popt[a + 2]), self.x)
+                    a += 3
+                elif key == 'Gauss':
+                    area = np.trapz(self.fit_functions.GaussianFct(self.x, popt[a], popt[a + 1], popt[a + 2]), self.x)
+                    a += 3
+                elif key == 'Breit-Wigner-Fano':
+                    area = np.trapz(
+                        self.functions.BreitWignerFct(self.x, popt[a], popt[a + 1], popt[a + 2], popt[a + 3]), self.x)
+                    print_table.add_row(['BWF Coupling Coefficient', popt[a + 3], perr[a + 3]])
+                    a += 4
+                else:
+                    print('This is weird!')
+                print_table.add_rows([["Area under curve", area, ""],
+                                     ["", "", ""]])
+
+        # bring data into printable form
+        # print_table = [['Background', popt[0], perr[0]], ['', '', '']]
+        # a = 1
+
+        # for key in self.fit_functions.n_fit_fct.keys():  # iterate over Lorentz, Gauss, BWF
+        #    for j in range(self.fit_functions.n_fit_fct[key]):  # iterate over used fit functions per L, G or BWF
+        #        print_table.append(['{} {}'.format(key, j + 1)])
+        #        print_table.append(['Raman Shift in cm-1', popt[a], perr[a]])
+        #        print_table.append(['Peak height in cps', popt[a + 1], perr[a + 1]])
+        #        print_table.append(['FWHM in cm-1', popt[a + 2], perr[a + 2]])
+        #        if key == 'Lorentz':
+        #            area = np.trapz(self.fit_functions.LorentzFct(self.x, popt[a], popt[a + 1], popt[a + 2]), self.x)
+        #            a += 3
+        #        elif key == 'Gauss':
+        #            area = np.trapz(self.fit_functions.GaussianFct(self.x, popt[a], popt[a + 1], popt[a + 2]), self.x)
+        #            a += 3
+        #        elif key == 'Breit-Wigner-Fano':
+        #            area = np.trapz(
+        #                self.functions.BreitWignerFct(self.x, popt[a], popt[a + 1], popt[a + 2], popt[a + 3]), self.x)
+        #            print_table.append(
+        #                ['BWF Coupling Coefficient', popt[a + 3], perr[a + 3]])
+        #            a += 4
+        #        else:
+        #            print('This is weird!')
+        #        print_table.append(["Area under curve", area])
+        #        print_table.append(['', '', ''])
+
+        #print_table = tabulate(print_table, headers=['Parameters', 'Values', 'Errors'])
+        return print_table, r_squared
+
+    def reset_n_fit_fct(self):
+        self.fit_functions.n_fit_fct = dict.fromkeys(self.fit_functions.n_fit_fct, 0)
 
     def closeEvent(self, event):
+        self.reset_n_fit_fct()
         self.closeSignal.emit()
         event.accept
 
@@ -2850,7 +3018,7 @@ class PlotWindow(QMainWindow):
         self.mw = parent
         self.spectrum = []
         self.vert_line = None
-        self.functions = FitFunctions(self)
+        self.functions = FitFunctions()
         self.blc = BaselineCorrectionMethods()       # class for everything related to Baseline corrections
         self.inserted_text = []  # Storage for text inserted in the plot
         self.drawn_line = []  # Storage for lines and arrows drawn in the plot
@@ -3381,7 +3549,7 @@ class PlotWindow(QMainWindow):
         BWF_parmeter = []
 
         ni = 0
-        for key, val in self.n_fit_fct.items():
+        for key, val in self.functions.n_fit_fct.items():
             for j in range(ni, ni + int(val)):
                 ni += 1
                 layout1.addWidget(QtWidgets.QLabel('{}. {}'.format(j + 1, key)))
@@ -3422,8 +3590,8 @@ class PlotWindow(QMainWindow):
 
         self.Dialog_FitParameter.exec_()
         parameter = [float(background.text())]  # Background
-        for key in self.n_fit_fct.keys():
-            for j in range(self.n_fit_fct[key]):
+        for key in self.functions.n_fit_fct.keys():
+            for j in range(self.functions.n_fit_fct[key]):
                 parameter.append(float(position[j].text()))  # Peak position in cm^-1
                 parameter.append(float(intensity[j].text()))  # Intensity
                 parameter.append(float(FWHM[j].text()))  # FWHM
@@ -3435,7 +3603,7 @@ class PlotWindow(QMainWindow):
         self.SelectDataset()
         if self.selectedDatasetNumber:
             x_min, x_max = self.SelectArea()
-            self.n_fit_fct[q.text()] = 1
+            self.functions.n_fit_fct[q.text()] = 1
         else:
             return
 
@@ -3461,7 +3629,7 @@ class PlotWindow(QMainWindow):
                 popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0=p_start)
             except RuntimeError or ValueError as e:
                 self.mw.show_statusbar_message(str(e), 4000)
-                self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
+                self.functions.n_fit_fct = dict.fromkeys(self.functions.n_fit_fct, 0)
                 return
             x1 = np.linspace(min(x), max(x), 1000)
             self.ax.plot(x1, self.functions.FctSumme(x1, *popt), '-r')
@@ -3474,25 +3642,13 @@ class PlotWindow(QMainWindow):
                 print_param.append([parmeter_name[idx], po])
             print(tabulate(print_param, headers=['Parameters', 'Values']))
 
-        self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
+        self.functions.n_fit_fct = dict.fromkeys(self.functions.n_fit_fct, 0)
 
     def fit_peaks(self):
         self.SelectDataset()
         if self.selectedDatasetNumber:
             x_min, x_max = self.SelectArea()
-            fitdialog = FitOptionsDialog(self)
-            fitdialog.show()
-            loop = QtCore.QEventLoop()
-            fitdialog.closeSignal.connect(loop.quit)
-            loop.exec_()
-            continue_fit = fitdialog.continue_fit
-            if continue_fit:
-                pass
-            else:
-                return
-            p_start = fitdialog.p_start
-            boundaries = fitdialog.boundaries
-            self.n_fit_fct = fitdialog.n_fit_fct
+
         else:
             return
 
@@ -3502,86 +3658,96 @@ class PlotWindow(QMainWindow):
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
-            try:
-                popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0=p_start, bounds=boundaries)
-            except RuntimeError as e:
-                self.mw.show_statusbar_message(str(e), 4000)
-                self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
-                return
-            except ValueError as e:
-                self.mw.show_statusbar_message(str(e), 4000)
-                self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
-                return
+            fit_dialog = FitOptionsDialog(self, x, y, self.spectrum[n])
+            fit_dialog.show()
+            loop = QtCore.QEventLoop()
+            fit_dialog.closeSignal.connect(loop.quit)
+            loop.exec_()
+
+            #p_start = fit_dialog.p_start
+            #boundaries = fit_dialog.boundaries
+            #self.n_fit_fct = fit_dialog.n_fit_fct
+
+            #try:
+            #    popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0=p_start, bounds=boundaries)
+            #except RuntimeError as e:
+            #    self.mw.show_statusbar_message(str(e), 4000)
+            #    self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
+            #    return
+            #except ValueError as e:
+            #    self.mw.show_statusbar_message(str(e), 4000)
+            #    self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
+            #    return
 
             # Plot the Fit Data
-            x1 = np.linspace(min(x), max(x), 1000)
-            self.ax.plot(x1, self.functions.FctSumme(x1, *popt), '-r')
+            #x1 = np.linspace(min(x), max(x), 1000)
+            #self.ax.plot(x1, self.functions.FctSumme(x1, *popt), '-r')
 
-            aL = self.n_fit_fct['Lorentz']
-            aG = self.n_fit_fct['Gauss']
-            for key in self.n_fit_fct.keys():
-                for i in range(self.n_fit_fct[key]):
-                    if key == 'Lorentz':
-                        y_fit = popt[0] + self.functions.LorentzFct(x1, popt[3 * i + 1], popt[3 * i + 2],
-                                                                    popt[3 * i + 3])
-                    elif key == 'Gauss':
-                        y_fit = popt[0] + self.functions.GaussianFct(x1, popt[3 * (i + aL) + 1], popt[3 * (i + aL) + 2],
-                                                                     popt[3 * (i + aL) + 3])
-                    elif key == 'Breit-Wigner-Fano':
-                        y_fit = popt[0] + self.functions.BreitWignerFct(x1, popt[4 * i + 3 * (aL + aG) + 1],
-                                                                        popt[4 * i + 3 * (aL + aG) + 2],
-                                                                        popt[4 * i + 3 * (aL + aG) + 3],
-                                                                        popt[4 * i + 3 * (aL + aG) + 4])
-                    self.ax.plot(x1, y_fit, '--g')
+            #aL = self.n_fit_fct['Lorentz']
+            #aG = self.n_fit_fct['Gauss']
+            #for key in self.n_fit_fct.keys():
+            #    for i in range(self.n_fit_fct[key]):
+            #        if key == 'Lorentz':
+            #            y_fit = popt[0] + self.functions.LorentzFct(x1, popt[3 * i + 1], popt[3 * i + 2],
+            #                                                        popt[3 * i + 3])
+            #        elif key == 'Gauss':
+            #            y_fit = popt[0] + self.functions.GaussianFct(x1, popt[3 * (i + aL) + 1], popt[3 * (i + aL) + 2],
+            #                                                         popt[3 * (i + aL) + 3])
+            #        elif key == 'Breit-Wigner-Fano':
+            #            y_fit = popt[0] + self.functions.BreitWignerFct(x1, popt[4 * i + 3 * (aL + aG) + 1],
+            #                                                            popt[4 * i + 3 * (aL + aG) + 2],
+            #                                                            popt[4 * i + 3 * (aL + aG) + 3],
+            #                                                            popt[4 * i + 3 * (aL + aG) + 4])
+            #        self.ax.plot(x1, y_fit, '--g')
 
-            self.canvas.draw()
+            #self.canvas.draw()
 
             # Calculate Errors and R square
-            perr = np.sqrt(np.diag(pcov))
-            residuals = y - self.functions.FctSumme(x, *popt)
-            ss_res = np.sum(residuals ** 2)
-            ss_tot = np.sum((y - np.mean(y)) ** 2)
-            r_squared = 1 - (ss_res / ss_tot)
+            #perr = np.sqrt(np.diag(pcov))
+            #residuals = y - self.functions.FctSumme(x, *popt)
+            #ss_res = np.sum(residuals ** 2)
+            #ss_tot = np.sum((y - np.mean(y)) ** 2)
+            #r_squared = 1 - (ss_res / ss_tot)
 
             # bring data into printable form
-            print_table = [['Background', popt[0], perr[0]], ['', '', '']]
-            a = 1
+            #print_table = [['Background', popt[0], perr[0]], ['', '', '']]
+            #a = 1
 
-            for key in self.n_fit_fct.keys():  # iterate over Lorentz, Gauss, BWF
-                for j in range(self.n_fit_fct[key]):  # iterate over used fit functions per L, G or BWF
-                    print_table.append(['{} {}'.format(key, j + 1)])
-                    print_table.append(['Raman Shift in cm-1', popt[a], perr[a]])
-                    print_table.append(['Peak height in cps', popt[a + 1], perr[a + 1]])
-                    print_table.append(['FWHM in cm-1', popt[a + 2], perr[a + 2]])
-                    if key == 'Lorentz':
-                        area = np.trapz(self.functions.LorentzFct(x, popt[a], popt[a + 1], popt[a + 2]), x)
-                        a += 3
-                    elif key == 'Gauss':
-                        area = np.trapz(self.functions.GaussianFct(x, popt[a], popt[a + 1], popt[a + 2]), x)
-                        a += 3
-                    elif key == 'Breit-Wigner-Fano':
-                        area = np.trapz(
-                            self.functions.BreitWignerFct(x, popt[a], popt[a + 1], popt[a + 2], popt[a + 3]), x)
-                        print_table.append(
-                            ['BWF Coupling Coefficient', popt[a + 3], perr[a + 3]])
-                        a += 4
-                    else:
-                        print('This is weird!')
-                    print_table.append(["Area under curve", area])
-                    print_table.append(['', '', ''])
-            print('\n {}'.format(self.spectrum[n].get_label()))
-            print(r'R^2={:.4f}'.format(r_squared))
-            save_data = tabulate(print_table, headers=['Parameters', 'Values', 'Errors'])
-            print(save_data)
+            #for key in self.n_fit_fct.keys():  # iterate over Lorentz, Gauss, BWF
+            #    for j in range(self.n_fit_fct[key]):  # iterate over used fit functions per L, G or BWF
+            #        print_table.append(['{} {}'.format(key, j + 1)])
+            #        print_table.append(['Raman Shift in cm-1', popt[a], perr[a]])
+            #        print_table.append(['Peak height in cps', popt[a + 1], perr[a + 1]])
+            #        print_table.append(['FWHM in cm-1', popt[a + 2], perr[a + 2]])
+            #        if key == 'Lorentz':
+            #            area = np.trapz(self.functions.LorentzFct(x, popt[a], popt[a + 1], popt[a + 2]), x)
+            #            a += 3
+            #        elif key == 'Gauss':
+            #            area = np.trapz(self.functions.GaussianFct(x, popt[a], popt[a + 1], popt[a + 2]), x)
+            #            a += 3
+            #        elif key == 'Breit-Wigner-Fano':
+            #            area = np.trapz(
+            #                self.functions.BreitWignerFct(x, popt[a], popt[a + 1], popt[a + 2], popt[a + 3]), x)
+            #            print_table.append(
+            #                ['BWF Coupling Coefficient', popt[a + 3], perr[a + 3]])
+            #            a += 4
+            #        else:
+            #            print('This is weird!')
+            #        print_table.append(["Area under curve", area])
+            #        print_table.append(['', '', ''])
+            #print('\n {}'.format(self.spectrum[n].get_label()))
+            #print(r'R^2={:.4f}'.format(r_squared))
+            #save_data = tabulate(print_table, headers=['Parameters', 'Values', 'Errors'])
+            #print(save_data)
 
             # Save fit parameter in file
-            filename = self.spectrum[n].get_label()
-            startFileDirName = os.path.dirname(self.data[n]["filename"])
-            filename = '{}/{}_fitparameter.txt'.format(startFileDirName, filename)
+            #filename = self.spectrum[n].get_label()
+            #startFileDirName = os.path.dirname(self.data[n]["filename"])
+            #filename = '{}/{}_fitparameter.txt'.format(startFileDirName, filename)
 
-            self.save_to_file('Save fit parameter in file', filename, save_data)
+            #self.save_to_file('Save fit parameter in file', filename, save_data)
 
-        self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
+        #self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
 
     def DefineArea(self):
         self.SelectDataset()
