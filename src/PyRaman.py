@@ -1063,12 +1063,14 @@ class SpreadSheetWindow(QMainWindow):
     def show_header_context_menu(self, position):
         selected_column = self.headers.logicalIndexAt(position)
         header_menu = QMenu()
+        plot_data = header_menu.addMenu("Plot data")
+        plot_data.addAction("Line Plot", self.get_plot_data)
+        plot_data.addAction("Dot Plot", self.get_plot_data)
         delete_column = header_menu.addAction('Delete this column')
         set_xy = header_menu.addMenu('Set as:')
         set_xy.addAction('X')
         set_xy.addAction('Y')
         set_xy.addAction('Yerr')
-        set_xy.addAction('Opacity')
         set_xy.triggered[QAction].connect(lambda QAction: self.set_column_type(QAction, selected_column))
         convert_unit = header_menu.addMenu("convert unit")
         convert_unit.addAction("cm^-1 to nm")
@@ -2922,34 +2924,6 @@ class FitOptionsDialog(QMainWindow):
                 print_table.add_rows([["Area under curve", area, ""],
                                      ["", "", ""]])
 
-        # bring data into printable form
-        # print_table = [['Background', popt[0], perr[0]], ['', '', '']]
-        # a = 1
-
-        # for key in self.fit_functions.n_fit_fct.keys():  # iterate over Lorentz, Gauss, BWF
-        #    for j in range(self.fit_functions.n_fit_fct[key]):  # iterate over used fit functions per L, G or BWF
-        #        print_table.append(['{} {}'.format(key, j + 1)])
-        #        print_table.append(['Raman Shift in cm-1', popt[a], perr[a]])
-        #        print_table.append(['Peak height in cps', popt[a + 1], perr[a + 1]])
-        #        print_table.append(['FWHM in cm-1', popt[a + 2], perr[a + 2]])
-        #        if key == 'Lorentz':
-        #            area = np.trapz(self.fit_functions.LorentzFct(self.x, popt[a], popt[a + 1], popt[a + 2]), self.x)
-        #            a += 3
-        #        elif key == 'Gauss':
-        #            area = np.trapz(self.fit_functions.GaussianFct(self.x, popt[a], popt[a + 1], popt[a + 2]), self.x)
-        #            a += 3
-        #        elif key == 'Breit-Wigner-Fano':
-        #            area = np.trapz(
-        #                self.functions.BreitWignerFct(self.x, popt[a], popt[a + 1], popt[a + 2], popt[a + 3]), self.x)
-        #            print_table.append(
-        #                ['BWF Coupling Coefficient', popt[a + 3], perr[a + 3]])
-        #            a += 4
-        #        else:
-        #            print('This is weird!')
-        #        print_table.append(["Area under curve", area])
-        #        print_table.append(['', '', ''])
-
-        #print_table = tabulate(print_table, headers=['Parameters', 'Values', 'Errors'])
         return print_table, r_squared
 
     def reset_n_fit_fct(self):
@@ -3131,7 +3105,7 @@ class PlotWindow(QMainWindow):
         self.spectrum.pop(i)
 
     def pickEvent(self, event):
-        if event.mouseevent.dblclick == True and event.artist == self.ax.get_legend():
+        if event.mouseevent.dblclick is True and event.artist == self.ax.get_legend():
             Dialog_Legend = QDialog()
             layout = QtWidgets.QGridLayout()
             handles, labels = self.ax.get_legend_handles_labels()

@@ -7,7 +7,7 @@ The source code is written in Python.
 - Gui written in PyQt5
     
 ## Installation 
-- first install python <br>
+- first install python 
 - needed packages
 
 
@@ -46,10 +46,24 @@ right click on the side tree.
 The new window will be opened in the opened folder.
 
 ##  Spreadsheet <img src="pics/Icon_spreadsheet.png" alt="Icon of Spreadsheet" height="15"/>
+<img src="pics/Example_Table.PNG" width="200"/>
+
+The Spreadsheet contains the data in a table, which can either be loaded ("File"
+&rarr; "Load Data") or filled in manually.\
+A new column can be added with "Edit" &rarr; "New Column".
+\
+The header of the table consists of a column title and 5 rows 
+("Name", "Axis", "Unit", "Comments", "F(x)").
+\
+With right-click on the colum title a drop-down menu is opened.
+
+### Plot spreadsheet data
+Select one or several Y-columns, which should be plotted. 
+The data can be plotted over the drop-down menu or the menubar at the top. 
+As X-values the closest column on the left side of the selected column is used.
 
 
 ##  Plotwindow <img src="pics/Icon_plotwindow.png" alt="Icon of Plotwindow" height="15"/>
 
 
 ## Textwindow <img src="pics/Icon_textwindow.png" alt="Icon of Textwindow" height="15"/>
-
