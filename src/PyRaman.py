@@ -705,6 +705,8 @@ class TextWindow(QMainWindow):
         self.textfield = QtWidgets.QPlainTextEdit()
         self.textfield.setPlainText(self.text)
         self.textfield.createStandardContextMenu()
+        self.textfield.setUndoRedoEnabled(True)
+        self.textfield.setShortcutEnabled(True)
         self.setCentralWidget(self.textfield)
         self.textfield.textChanged.connect(self.text_change)
 
@@ -717,8 +719,8 @@ class TextWindow(QMainWindow):
         fileMenu.addAction('Save Text', self.file_save)
         fileMenu.addAction('Load Text', self.load_file)
 
-        ### 2. Menu item: Edit
-        editMenu = self.menubar.addMenu('&Edit')
+        # 2. Menu item: Edit
+        # editMenu = self.menubar.addMenu('&Edit')
 
         self.show()
 

@@ -64,6 +64,38 @@ As X-values the closest column on the left side of the selected column is used.
 
 
 ##  Plotwindow <img src="pics/Icon_plotwindow.png" alt="Icon of Plotwindow" height="15"/>
+<img src="pics/Example_PlotWindow.PNG" width="200"/>
+
+The Plotwindow is the most complex of the three windows.
+
+### The toolbar
+<img src="pics/PlotWindow_toolbar.PNG" width="200"/>
+
+The first five tools help to navigate:
+
+- house: restore original view
+- left arrow: undo view
+- right arrow: redo view
+- the arrow cross:
+  - left-click + mouse movement: move plot
+  - right-click + mouse movement: scaling
+- the magnifier: zoom in
+
+The button with the slide controller as an icon opens a 
+dialog window to adjust the spacing at the left, right, bottom and top of the plot.
+
+The button with the indented arrow opens a dialog with the figure options, like 
+renaming the labels, change colors, repositioning the legend ...
+
+With the diskette a picture (*.png file) of the plot can be saved. 
+
+
+### The sidebar
+
+<img src="pics/PlotWindow_sidebar.PNG" height="80"/>
 
 
 ## Textwindow <img src="pics/Icon_textwindow.png" alt="Icon of Textwindow" height="15"/>
+<img src="pics/Example_TextWindow.PNG" width="200"/>
+
+The Textwindow offers an easy was to take notes and document a project.
