@@ -563,6 +563,10 @@ class MainWindow(QMainWindow):
             windowtypeInt = 2
             plotData, fig = windowcontent
             # change old data format to new format
+            if not plotData:
+                self.show_statusbar_message("Please select the columns you want to plot!", 4000)
+                return
+
             if not isinstance(plotData[0], dict):
                 for idx, pd in enumerate(plotData):
                     plotData[idx] = {"x": pd[0],
@@ -2459,11 +2463,14 @@ class FitOptionsDialog(QMainWindow):
 
     def __init__(self, parent, x, y, spect):
         """
-        Options Dialog for Fitprocess
+        Options Dialog for fit process
 
         Parameters
         ----------
-        parent: PlotWindow
+        parent: PlotWindow object
+        x: x data / Raman shift
+        y: y data / Raman intensity
+        spect: Line2D
         """
         super(FitOptionsDialog, self).__init__(parent=parent)
         self.parent = parent
@@ -2476,12 +2483,13 @@ class FitOptionsDialog(QMainWindow):
         self.ax = self.parent.ax
         self.fig = self.parent.fig
 
-        # plotted function
-        self.plotted_functions = []
-
+        # define variables
+        self.plotted_functions = [] # plotted function
+        self.vheaders = ["0"] # list of vertical headers
         self.fit_fcts = {}
         self.fit_functions = FitFunctions()
 
+        # create actual window
         self.create_dialog()
         self.create_menubar()
 
@@ -2497,12 +2505,12 @@ class FitOptionsDialog(QMainWindow):
             'Lorentz', [[520, 0, np.inf], [100, 0, np.inf], [25, 0, np.inf]]))
         button_layout_01.addWidget(add_button)
 
-        # Button to remove fit funtion
-        remove_button = QPushButton('Remove Funtion')
+        # Button to remove fit function
+        remove_button = QPushButton('Remove Function')
         remove_button.clicked.connect(self.remove_function)
         button_layout_01.addWidget(remove_button)
 
-        # OK Button => accept start values for fit
+        # Fit Button => accept start values for fit
         fit_button = QPushButton("Fit")
         fit_button.clicked.connect(self.fit)
         button_layout_02.addWidget(fit_button)
@@ -2526,9 +2534,8 @@ class FitOptionsDialog(QMainWindow):
                 self.table.setItem(r, c, cell)
 
         # set headers
-        self.hheaders = ['Fit Function', 'Parameter', 'Value', 'Lower Bound', 'Upper Bound']
-        self.table.setHorizontalHeaderLabels(self.hheaders)
-        self.vheaders = ['0']
+        self.table.setHorizontalHeaderLabels(['Fit Function', 'Parameter', 'Value', 'Lower Bound', 'Upper Bound'])
+        self.table.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
         self.table.setVerticalHeaderLabels(self.vheaders)
 
         # background
@@ -2570,7 +2577,7 @@ class FitOptionsDialog(QMainWindow):
             add_rows = 3
 
         self.table.setRowCount(self.table.rowCount() + add_rows)
-        self.vheaders.extend([str(n), str(n), str(n)])
+        self.vheaders.extend([str(n)]*add_rows)
         self.table.setVerticalHeaderLabels(self.vheaders)
 
         rows = self.table.rowCount()
@@ -3231,13 +3238,13 @@ class PlotWindow(QMainWindow):
         # 3.1 Analysis Fit
         analysisFit = analysisMenu.addMenu('&Fit')
 
-        analysisFitSingleFct = analysisFit.addMenu('&Single function')
+        analysisFitSingleFct = analysisFit.addMenu('&Quick Fit')
         analysisFitSingleFct.addAction('Lorentz')
         analysisFitSingleFct.addAction('Gauss')
         analysisFitSingleFct.addAction('Breit-Wigner-Fano')
-        analysisFitSingleFct.triggered[QAction].connect(self.fit_single_peak)
+        analysisFitSingleFct.triggered[QAction].connect(self.quick_fit)
 
-        analysisFit.addAction('Fit several Peaks', self.fit_peaks)
+        analysisFit.addAction("Fit Dialog", self.open_fit_dialog)
 
         analysisRoutine = analysisMenu.addMenu('&Analysis routines')
         analysisRoutine.addAction('D und G Bande', self.fit_D_G)
@@ -3532,74 +3539,7 @@ class PlotWindow(QMainWindow):
 
         self.canvas.draw()
 
-    def get_start_values(self, s_pos=3250, s_height=150, s_FWHM=300):
-        self.Dialog_FitParameter = QDialog()
-        layout_hor = QtWidgets.QHBoxLayout()
-        layout1 = QtWidgets.QVBoxLayout()
-        layout2 = QtWidgets.QVBoxLayout()
-
-        background = QtWidgets.QLineEdit()
-        layout1.addWidget(background)
-        background.setText('0.0')
-        layout2.addWidget(QtWidgets.QLabel('Background'))
-
-        position = []
-        intensity = []
-        FWHM = []
-        BWF_parmeter = []
-
-        ni = 0
-        for key, val in self.functions.n_fit_fct.items():
-            for j in range(ni, ni + int(val)):
-                ni += 1
-                layout1.addWidget(QtWidgets.QLabel('{}. {}'.format(j + 1, key)))
-                layout2.addWidget(QtWidgets.QLabel(''))
-
-                position.append(QtWidgets.QLineEdit())
-                layout1.addWidget(position[j])
-                position[j].setText(str(s_pos))
-                layout2.addWidget(QtWidgets.QLabel(r'Position in cm^-1'))
-
-                intensity.append(QtWidgets.QLineEdit())
-                layout1.addWidget(intensity[j])
-                intensity[j].setText(str(s_height))
-                layout2.addWidget(QtWidgets.QLabel('Intensity'))
-
-                FWHM.append(QtWidgets.QLineEdit())
-                layout1.addWidget(FWHM[j])
-                FWHM[j].setText(str(s_FWHM))
-                layout2.addWidget(QtWidgets.QLabel('FWHM'))
-
-                BWF_parmeter.append(QtWidgets.QLineEdit())
-                BWF_parmeter[j].setText('-10')
-                if key == 'Breit-Wigner-Fano':
-                    layout1.addWidget(BWF_parmeter[j])
-                    layout2.addWidget(QtWidgets.QLabel('Additional parameter'))
-
-        okbutton = QPushButton('Ok', self)
-        okbutton.setToolTip('Start the fit')
-        okbutton.clicked.connect(self.Dialog_FitParameter.close)
-        layout1.addWidget(okbutton)
-        layout2.addWidget(QtWidgets.QLabel(''))
-
-        layout_hor.addLayout(layout1)
-        layout_hor.addLayout(layout2)
-        self.Dialog_FitParameter.setLayout(layout_hor)
-        self.Dialog_FitParameter.setWindowTitle("Fit Parameter")
-        self.Dialog_FitParameter.setWindowModality(Qt.ApplicationModal)
-
-        self.Dialog_FitParameter.exec_()
-        parameter = [float(background.text())]  # Background
-        for key in self.functions.n_fit_fct.keys():
-            for j in range(self.functions.n_fit_fct[key]):
-                parameter.append(float(position[j].text()))  # Peak position in cm^-1
-                parameter.append(float(intensity[j].text()))  # Intensity
-                parameter.append(float(FWHM[j].text()))  # FWHM
-                if key == 'Breit-Wigner-Fano':
-                    parameter.append(float(BWF_parmeter[j].text()))
-        return parameter
-
-    def fit_single_peak(self, q):
+    def quick_fit(self, q):
         self.SelectDataset()
         if self.selectedDatasetNumber:
             x_min, x_max = self.SelectArea()
@@ -3613,17 +3553,14 @@ class PlotWindow(QMainWindow):
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
             idx_peaks, properties = signal.find_peaks(y, height=0.3 * max(y), width=5, distance=50)
-            print(idx_peaks, properties)
             if idx_peaks.size > 0:
                 p = round(x[idx_peaks[0]], 2)
                 h = round(properties['peak_heights'][0], 2)
                 w = round(properties['widths'][0], 2)
             else:
-                # set start parameters arbitrary to silicon peak
-                p = 520
-                h = 100
-                w = 20
-            p_start = self.get_start_values(s_pos=p, s_height=h, s_FWHM=w)
+                self.mw.show_statusbar_message("Couldn't find good start parameters \n"
+                                               "Use Fit Dialog please", 4000)
+            p_start = [0, p, h, w]
 
             try:
                 popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0=p_start)
@@ -3636,7 +3573,7 @@ class PlotWindow(QMainWindow):
             self.canvas.draw()
 
             print('\n {} {}'.format(self.spectrum[j].get_label(), q.text()))
-            parmeter_name = ['Background', r'Raman Shift in cm^-1', 'Intensity', 'FWHM', 'additional Parameter']
+            parmeter_name = ['Background', 'Raman Shift in cm^-1', 'Intensity', 'FWHM', 'additional Parameter']
             print_param = []
             for idx, po in enumerate(popt):
                 print_param.append([parmeter_name[idx], po])
@@ -3644,7 +3581,7 @@ class PlotWindow(QMainWindow):
 
         self.functions.n_fit_fct = dict.fromkeys(self.functions.n_fit_fct, 0)
 
-    def fit_peaks(self):
+    def open_fit_dialog(self):
         self.SelectDataset()
         if self.selectedDatasetNumber:
             x_min, x_max = self.SelectArea()
@@ -3659,95 +3596,11 @@ class PlotWindow(QMainWindow):
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
             fit_dialog = FitOptionsDialog(self, x, y, self.spectrum[n])
+            fit_dialog.setMinimumWidth(600)
             fit_dialog.show()
             loop = QtCore.QEventLoop()
             fit_dialog.closeSignal.connect(loop.quit)
             loop.exec_()
-
-            #p_start = fit_dialog.p_start
-            #boundaries = fit_dialog.boundaries
-            #self.n_fit_fct = fit_dialog.n_fit_fct
-
-            #try:
-            #    popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0=p_start, bounds=boundaries)
-            #except RuntimeError as e:
-            #    self.mw.show_statusbar_message(str(e), 4000)
-            #    self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
-            #    return
-            #except ValueError as e:
-            #    self.mw.show_statusbar_message(str(e), 4000)
-            #    self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
-            #    return
-
-            # Plot the Fit Data
-            #x1 = np.linspace(min(x), max(x), 1000)
-            #self.ax.plot(x1, self.functions.FctSumme(x1, *popt), '-r')
-
-            #aL = self.n_fit_fct['Lorentz']
-            #aG = self.n_fit_fct['Gauss']
-            #for key in self.n_fit_fct.keys():
-            #    for i in range(self.n_fit_fct[key]):
-            #        if key == 'Lorentz':
-            #            y_fit = popt[0] + self.functions.LorentzFct(x1, popt[3 * i + 1], popt[3 * i + 2],
-            #                                                        popt[3 * i + 3])
-            #        elif key == 'Gauss':
-            #            y_fit = popt[0] + self.functions.GaussianFct(x1, popt[3 * (i + aL) + 1], popt[3 * (i + aL) + 2],
-            #                                                         popt[3 * (i + aL) + 3])
-            #        elif key == 'Breit-Wigner-Fano':
-            #            y_fit = popt[0] + self.functions.BreitWignerFct(x1, popt[4 * i + 3 * (aL + aG) + 1],
-            #                                                            popt[4 * i + 3 * (aL + aG) + 2],
-            #                                                            popt[4 * i + 3 * (aL + aG) + 3],
-            #                                                            popt[4 * i + 3 * (aL + aG) + 4])
-            #        self.ax.plot(x1, y_fit, '--g')
-
-            #self.canvas.draw()
-
-            # Calculate Errors and R square
-            #perr = np.sqrt(np.diag(pcov))
-            #residuals = y - self.functions.FctSumme(x, *popt)
-            #ss_res = np.sum(residuals ** 2)
-            #ss_tot = np.sum((y - np.mean(y)) ** 2)
-            #r_squared = 1 - (ss_res / ss_tot)
-
-            # bring data into printable form
-            #print_table = [['Background', popt[0], perr[0]], ['', '', '']]
-            #a = 1
-
-            #for key in self.n_fit_fct.keys():  # iterate over Lorentz, Gauss, BWF
-            #    for j in range(self.n_fit_fct[key]):  # iterate over used fit functions per L, G or BWF
-            #        print_table.append(['{} {}'.format(key, j + 1)])
-            #        print_table.append(['Raman Shift in cm-1', popt[a], perr[a]])
-            #        print_table.append(['Peak height in cps', popt[a + 1], perr[a + 1]])
-            #        print_table.append(['FWHM in cm-1', popt[a + 2], perr[a + 2]])
-            #        if key == 'Lorentz':
-            #            area = np.trapz(self.functions.LorentzFct(x, popt[a], popt[a + 1], popt[a + 2]), x)
-            #            a += 3
-            #        elif key == 'Gauss':
-            #            area = np.trapz(self.functions.GaussianFct(x, popt[a], popt[a + 1], popt[a + 2]), x)
-            #            a += 3
-            #        elif key == 'Breit-Wigner-Fano':
-            #            area = np.trapz(
-            #                self.functions.BreitWignerFct(x, popt[a], popt[a + 1], popt[a + 2], popt[a + 3]), x)
-            #            print_table.append(
-            #                ['BWF Coupling Coefficient', popt[a + 3], perr[a + 3]])
-            #            a += 4
-            #        else:
-            #            print('This is weird!')
-            #        print_table.append(["Area under curve", area])
-            #        print_table.append(['', '', ''])
-            #print('\n {}'.format(self.spectrum[n].get_label()))
-            #print(r'R^2={:.4f}'.format(r_squared))
-            #save_data = tabulate(print_table, headers=['Parameters', 'Values', 'Errors'])
-            #print(save_data)
-
-            # Save fit parameter in file
-            #filename = self.spectrum[n].get_label()
-            #startFileDirName = os.path.dirname(self.data[n]["filename"])
-            #filename = '{}/{}_fitparameter.txt'.format(startFileDirName, filename)
-
-            #self.save_to_file('Save fit parameter in file', filename, save_data)
-
-        #self.n_fit_fct = dict.fromkeys(self.n_fit_fct, 0)
 
     def DefineArea(self):
         self.SelectDataset()
