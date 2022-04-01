@@ -9,16 +9,17 @@ import numpy as np
 import operator
 import os
 import pickle
+import prettytable
 import rampy as rp
 import re
 import scipy
 import sympy as sp
 import sys
-import prettytable
+import time
 from packaging import version
 
 from collections import ChainMap
-from matplotlib import *
+from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -1533,37 +1534,77 @@ class SpreadSheetWindow(QMainWindow):
             event.ignore()
 
 
-#####################################################################################################################################################
+########################################################################################################################
 ### 4. Plot
-#####################################################################################################################################################
-class LineBuilder:
+########################################################################################################################
+class LineBuilder(matplotlib.lines.Line2D):
     """
     Plotting a vertical line in plot, e.g. to define area for fit
     """
 
-    def __init__(self, line):
-        self.line = line
-        self.xs = line.get_xdata()[0]
-        self.line.set_visible(True)
-        self.canvas = self.line.figure.canvas
-        self.cid_key = self.canvas.mpl_connect('key_press_event', self)
-        self.cid_button = self.canvas.mpl_connect('button_press_event', self)
-        self.canvas.start_event_loop(timeout=10000)
+    def __init__(self, x, y, canvas, linewidth=1, linestyle="-", color='r', loop=False, parent=None):
+        super(LineBuilder, self).__init__(x, y, linewidth=linewidth, linestyle=linestyle, color=color)
+        self.canvas = canvas
+        self.canvas.figure.gca().add_artist(self)
+        self.set_picker(5)
+        self.set_pickradius(5)
+        self.loop = loop
+        self.move_line = False
+        self.parent = parent
+
+        # set event connections
+        self.cid_pick = self.canvas.mpl_connect("pick_event", self)
+        self.cid_move = self.canvas.mpl_connect("motion_notify_event", self.on_move)
+        self.cid_release = self.canvas.mpl_connect("button_release_event", self.on_release)
+        self.cid_press = self.canvas.mpl_connect("button_press_event", self)
+        self.cid_key = self.canvas.mpl_connect("key_press_event", self.on_key)
+        self.canvas.setFocusPolicy(QtCore.Qt.ClickFocus)
+        self.canvas.setFocus()
+
+        self.canvas.draw()
+
+        if self.loop:
+            self.canvas.start_event_loop(10000)
 
     def __call__(self, event):
-        if event.inaxes != self.line.axes:
+        if event.name == "pick_event":
+            if event.artist == self:
+                self.move_line = True
+        elif event.name == "button_press_event":
+            if event.button == 3:
+                self.remove_line()
+
+    def on_key(self, event):
+        if event.key == "enter":
+            self.remove_line()
+
+    def on_move(self, event):
+        if not self.move_line:
             return
-        elif event.name == 'button_press_event':
-            if event.button == 1:
-                self.xs = event.xdata
-                self.line.set_xdata([self.xs, self.xs])
-                self.canvas.draw()
-            elif event.button == 3 or event.key == QtCore.Qt.Key_Return:
-                self.canvas.mpl_disconnect(self.cid_button)
-                self.canvas.mpl_disconnect(self.cid_key)
-                self.canvas.stop_event_loop(self)
-        elif event.name == 'key_press_event':
-            print(event.key)
+        xs = event.xdata
+        if xs is None:
+            return
+
+        self.set_xdata(xs)
+        self.canvas.draw()
+
+    def on_release(self, event):
+        self.move_line = False
+
+    def remove_line(self):
+        self.canvas.mpl_disconnect(self.cid_pick)
+        self.canvas.mpl_disconnect(self.cid_move)
+        self.canvas.mpl_disconnect(self.cid_release)
+        self.canvas.mpl_disconnect(self.cid_press)
+        self.canvas.mpl_disconnect(self.cid_key)
+        self.remove()
+        self.canvas.draw()
+        if self.loop:
+            self.canvas.stop_event_loop()
+
+        if self.parent:
+            self.parent.remove_vertical_line()
+
 
 
 class MoveSpectra:
@@ -2974,7 +3015,7 @@ class MyCustomToolbar(NavigationToolbar2QT):
             icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Layer_content.png")
         else:
             name = name.replace('.png', '_large.png')
-            pm = QtGui.QPixmap(str(cbook._get_data_path('images', name)))
+            pm = QtGui.QPixmap(str(matplotlib.cbook._get_data_path('images', name)))
             _setDevicePixelRatio(pm, _devicePixelRatioF(self))
             if color is not None:
                 mask = pm.createMaskFromColor(QtGui.QColor('black'),
@@ -3000,7 +3041,7 @@ class PlotWindow(QMainWindow):
         self.data = plot_data
         self.mw = parent
         self.spectrum = []
-        self.vert_line = None
+        self.vertical_line = None
         self.functions = FitFunctions()
         self.blc = BaselineCorrectionMethods()       # class for everything related to Baseline corrections
         self.inserted_text = []  # Storage for text inserted in the plot
@@ -3258,10 +3299,12 @@ class PlotWindow(QMainWindow):
         self.addToolBar(QtCore.Qt.LeftToolBarArea, toolbar)
 
         # Vertical line for comparison of peak positions
-        VertLineAct = QAction(QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Tool_Line.png"), 'Vertical Line', self)
-        VertLineAct.setStatusTip('Vertical line for comparison of peak position')
-        VertLineAct.triggered.connect(self.vertical_line)
-        toolbar.addAction(VertLineAct)
+        self.VertLineAct = QAction(QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Tool_Line.png"),
+                              'Vertical Line', self)
+        self.VertLineAct.setStatusTip('Vertical line for comparison of peak position')
+        self.VertLineAct.triggered.connect(self.create_vertical_line)
+        self.VertLineAct.setCheckable(True)
+        toolbar.addAction(self.VertLineAct)
 
         # Tool to scale intensity of selected spectrum
         ScaleAct = QAction(QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Tool_Scale.png"), 'Scale', self)
@@ -3428,7 +3471,7 @@ class PlotWindow(QMainWindow):
         """
         self.SelectDataset()
         for n in self.selectedDatasetNumber:
-            norm_factor = numpy.amax(self.data[n]["y"])
+            norm_factor = np.amax(self.data[n]["y"])
             if select_peak:
                 dpp = DataPointPicker(self.spectrum[n], np.where(self.data[n]["y"] == norm_factor))
                 idx = dpp.idx
@@ -3602,18 +3645,17 @@ class PlotWindow(QMainWindow):
         y_min, y_max = self.ax.get_ylim()
         x_min, x_max = self.ax.get_xlim()
         x_range = x_max-x_min
-        line1, = self.ax.plot([x_min+0.01*x_range, x_min+0.01*x_range], [y_min, y_max], 'r-', lw=1)
-        line2, = self.ax.plot([x_max-0.01*x_range, x_max-0.01*x_range], [y_min, y_max], 'r-', lw=1)
+        self.mw.show_statusbar_message('Left click shifts limits, Right click to finish', 4000)
+
+        line_1 = LineBuilder([x_min+0.01*x_range, x_min+0.01*x_range], [y_min, y_max], self.canvas)
+        line_2 = LineBuilder([x_max-0.01*x_range, x_max-0.01*x_range], [y_min, y_max], self.canvas, loop=True)
+
+        x_min = line_1.get_xdata()  # lower limit
+        x_max = line_2.get_xdata()  # upper limit
+        line_1.remove_line()
+        line_2.remove_line()
         self.canvas.draw()
-        self.mw.show_statusbar_message('Left click shifts limits, Right click  them', 4000)
-        linebuilder1 = LineBuilder(line1)
-        x_min = linebuilder1.xs  # lower limit
-        linebuilder2 = LineBuilder(line2)
-        x_max = linebuilder2.xs  # upper limit
-        line1.remove()
-        line2.remove()
-        self.canvas.draw()
-        #self.ax.autoscale(True)
+        self.ax.autoscale(True)
         return x_min, x_max
 
     def detemine_area(self):
@@ -3882,8 +3924,8 @@ class PlotWindow(QMainWindow):
             perr = np.sqrt(np.diag(pcov))
 
             residuals = working_y - self.functions.FctSumme(working_x, *popt)
-            ss_res = numpy.sum(residuals ** 2)
-            ss_tot = numpy.sum((working_y - numpy.mean(working_y)) ** 2)
+            ss_res = np.sum(residuals ** 2)
+            ss_tot = np.sum((working_y - np.mean(working_y)) ** 2)
             r_squared = 1 - (ss_res / ss_tot)
 
             # Calculate Peak-Areas and there Errors
@@ -4208,8 +4250,8 @@ class PlotWindow(QMainWindow):
             perr = np.sqrt(np.diag(pcov))
 
             residuals = y - self.functions.FctSumme(x, *popt)
-            ss_res = numpy.sum(residuals ** 2)
-            ss_tot = numpy.sum((y - numpy.mean(y)) ** 2)
+            ss_res = np.sum(residuals ** 2)
+            ss_tot = np.sum((y - np.mean(y)) ** 2)
             r_squared = 1 - (ss_res / ss_tot)
 
             # store fitparameter in table
@@ -4249,20 +4291,26 @@ class PlotWindow(QMainWindow):
         self.n_fit_fct['Lorentz'] = 0
 
     ### Functions of toolbar ###
-    def vertical_line(self):
-        if self.vert_line is not None:
-            return
+    def create_vertical_line(self):
+        if self.vertical_line is not None:
+            try:
+                self.vertical_line.remove_line()
+                self.ax.autoscale(True)
+            except:
+                pass
+
+            self.vertical_line = None
         else:
             self.ax.autoscale(False)
             y_min, y_max = self.ax.get_ylim()
             x_min, x_max = self.ax.get_xlim()
-            self.vert_line, = self.ax.plot([(x_min+x_max)/2, (x_min+x_max)/2], [y_min, y_max], 'r-', lw=1)
-            self.canvas.draw()
-            LineBuilder(self.vert_line)
-            self.vert_line.remove()
-            self.canvas.draw()
+            self.vertical_line = LineBuilder([(x_min + x_max) / 2, (x_min + x_max) / 2], [y_min, y_max], self.canvas,
+                                             parent=self)
             self.ax.autoscale(True)
-            self.vert_line = None
+
+    def remove_vertical_line(self):
+        self.VertLineAct.setChecked(False)
+        self.vertical_line = None
 
     def scale_spectrum(self):
         self.SelectDataset(True)
