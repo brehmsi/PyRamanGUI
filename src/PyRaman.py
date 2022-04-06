@@ -769,9 +769,9 @@ class TextWindow(QMainWindow):
             event.ignore()
 
 
-#####################################################################################################################################################
+########################################################################################################################
 ### 3. Spreadsheet
-#####################################################################################################################################################
+########################################################################################################################
 
 class FormulaInterpreter:
     """
@@ -845,10 +845,10 @@ class FormulaInterpreter:
             return True
 
     def remove_matched_parentheses(self, formula):
-        if re.search(r'(?<!Col)\(', formula):
-            match_end_par = re.search(r'(?<!Col\(\d)\)', formula)
+        if re.search(r"(?<!Col)\(", formula):
+            match_end_par = re.search(r"(?<!Col\(\d)\)", formula)
             end_par = match_end_par.start()  # index of first ')'
-            start_par = [m.start() for m in re.finditer(r'(?<!Col)\(', formula[:end_par])][-1] # index of last '('
+            start_par = [m.start() for m in re.finditer(r"(?<!Col)\(", formula[:end_par])][-1] # index of last '('
             return self.remove_matched_parentheses(formula[:start_par] + formula[end_par + 1:])
         else:
             return formula
@@ -968,7 +968,6 @@ class SpreadSheetWindow(QMainWindow):
 
     def create_table_items(self):
         """ fill the table items with data """
-        # self.data_table.setItemDelegate(SpreadSheetDelegate(self))
         for c in range(self.cols):
             for r in range(len(self.data[c]["data"])):
                 cell = QTableWidgetItem(str(self.data[c]["data"][r]))
@@ -1047,13 +1046,18 @@ class SpreadSheetWindow(QMainWindow):
         edit_geometry.moveTop(header_position.y())
         self.headerline.setGeometry(edit_geometry)
         visual_column = self.data_table.visualColumn(logical_column)
-        self.headerline.editingFinished.connect(lambda: self.header_editing_finished(logical_column, visual_column))
+        handler = self.headerline.editingFinished.connect(lambda: self.header_editing_finished(logical_column,
+                                                                                               visual_column, handler))
 
         self.headerline.setText(self.data[visual_column]['shortname'])
         self.headerline.setHidden(False)  # Make it visible
         self.headerline.setFocus()
 
-    def header_editing_finished(self, log_col, vis_col):
+    def header_editing_finished(self, log_col, vis_col, handler):
+        try:
+            self.headerline.editingFinished.disconnect(handler)
+        except Exception:
+            return
         self.headerline.setHidden(True)
         newHeader = str(self.headerline.text())
         self.data[vis_col]["shortname"] = newHeader
@@ -1601,7 +1605,6 @@ class LineBuilder(matplotlib.lines.Line2D):
 
         if self.parent:
             self.parent.remove_vertical_line()
-
 
 
 class MoveSpectra:
