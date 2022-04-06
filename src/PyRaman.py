@@ -1,5 +1,5 @@
-#Autor: Simon Brehm
-import beepy
+# author: Simon Brehm
+# import beepy
 import io
 import math
 import matplotlib
@@ -15,11 +15,8 @@ import re
 import scipy
 import sympy as sp
 import sys
-import time
 from packaging import version
 
-from collections import ChainMap
-from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -32,9 +29,9 @@ else:
 from matplotlib.backends.qt_compat import _devicePixelRatioF
 from PyQt5 import QtGui, QtWidgets, QtCore
 from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import Qt, pyqtSlot, QObject
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QTableWidget, QMessageBox, QPushButton, QCheckBox,
-                             QTreeWidgetItem, QTableWidgetItem, QItemDelegate, QLineEdit, QPushButton, QWidget, QMenu,
+from PyQt5.QtCore import Qt, pyqtSlot
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QTableWidget, QMessageBox, QCheckBox,
+                             QTreeWidgetItem, QTableWidgetItem, QPushButton, QWidget, QMenu,
                              QAction, QDialog, QFileDialog, QAbstractItemView)
 from matplotlib.backends.qt_editor import _formlayout as formlayout
 from scipy import sparse
@@ -49,7 +46,7 @@ import myfigureoptions  # see file 'myfigureoptions.py'
 import Database_Measurements  # see file Database_Measurements
 
 
-# This file essentially consists of three parts:
+# This file essentially consists of four parts:
 # 1. Main Window
 # 2. Text Window
 # 3. Spreadsheet
@@ -251,8 +248,8 @@ class MainWindow(QMainWindow):
 
     def show_statusbar_message(self, message, time, error_sound=False):
         self.statusBar.showMessage(message, time)
-        if error_sound:
-            beepy.beep(sound=3)
+        #if error_sound:
+        #    beepy.beep(sound=3)
 
     def keyPressEvent(self, event):
         """
