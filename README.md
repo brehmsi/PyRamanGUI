@@ -1,18 +1,20 @@
-![GitHub Logo](/images/PyRAMAN_v1.png)
+![GitHub Logo](src/Icons/PyRAMAN_logo.png)
 
-# PyRaman - A general purpose RAMAN evaluation tool 
-  - Author:
-    - Simon Brehm (Email: simbre17@googlemail.com) 
-  - Coding language Python 3.0 
+# PyRaman - A general purpose Raman evaluation tool 
+  - Author: Simon Brehm (Email: simbre17@googlemail.com) 
+  - Coding language: Python 
 
 # Description
-Provide a general purpose tool for RAMAN spectra evaluation
+Provides a general purpose tool for Raman spectra evaluation
   - structure similar to Origin 
   - use of spreadsheets and plotting windows
   - projects can be saved and loaded
   - general-purpose background fitting procedure 
   - RAMAN spectra database 
   - increased reproducibility of fitting processes 
+  
+A Tutorial how to use PyRaman can be found here [Tutorial](doc/Tutorial.md)
+
 # Installation 
 The code needs the following packages 
   - matplotlib (version 3.3.0)
