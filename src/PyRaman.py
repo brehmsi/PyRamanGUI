@@ -575,7 +575,7 @@ class MainWindow(QMainWindow):
                                      "xaxis": None,
                                      "yaxis": None,
                                      "filename": pd[3],
-                                     "spreadsheet title": pd[6]
+                                     "spreadsheet title": pd[6] if len (pd) > 6 else None
                                      }
 
             if fig is not None:

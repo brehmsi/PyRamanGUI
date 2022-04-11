@@ -3,15 +3,8 @@
 # PyRaman - A general purpose RAMAN evaluation tool 
   - Author:
     - Simon Brehm (Email: simbre17@googlemail.com) 
-  - Help:
-    - Luca Proschwitz
-    - Paul Feiler 
-    - Jakob Kraus  
-  - Supervisors:
-    - Cameliu Himcinschi
-    - Jens Kortus
   - Coding language Python 3.0 
-  - License: 
+
 # Description
 Provide a general purpose tool for RAMAN spectra evaluation
   - structure similar to Origin 
@@ -22,8 +15,17 @@ Provide a general purpose tool for RAMAN spectra evaluation
   - increased reproducibility of fitting processes 
 # Installation 
 The code needs the following packages 
+  - matplotlib (version 3.3.0)
   - pandas 
   - sympy
   - pyqt5 ( pip3 install PyQt5==5.12.2) 
-  - tabulate  
+  - prettytable  
+  - tabulate
+  - operator
+  - pickle
+  - rampy
+  - packaging
 
+# License
+This project is licensed under the Apache License 2.0   
+See [LICENSE](LICENSE) for details.
