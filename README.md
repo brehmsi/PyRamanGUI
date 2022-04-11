@@ -1,7 +1,7 @@
 ![GitHub Logo](src/Icons/PyRAMAN_logo.png)
 
 # PyRaman - A general purpose Raman evaluation tool 
-  - Author: Simon Brehm (Email: simbre17@googlemail.com) 
+  - Author: Simon Brehm (Email: simon.brehm@physik.tu-freiberg.de) 
   - Coding language: Python 
 
 # Description
