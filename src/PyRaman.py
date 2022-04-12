@@ -1599,11 +1599,10 @@ class LineBuilder(matplotlib.lines.Line2D):
         c.mpl_disconnect(self.cid_release)
         c.mpl_disconnect(self.cid_press)
         c.mpl_disconnect(self.cid_key)
-        try:
-            self.remove()
-        except ValueError as e:
-            print(e)
+
+        self.remove()
         c.draw()
+
         if self.loop:
             c.stop_event_loop()
 
@@ -3651,17 +3650,12 @@ class PlotWindow(QMainWindow):
         x_range = x_max-x_min
         self.mw.show_statusbar_message('Left click shifts limits, Right click to finish', 4000)
 
-        #line_1 = LineBuilder([x_min+0.01*x_range, x_min+0.01*x_range], [y_min, y_max], self.canvas)
-        line_1 = LineBuilder(x_min + 0.01 * x_range, [y_min, y_max], self.canvas)
-        line_2 = LineBuilder([x_max-0.01*x_range, x_max-0.01*x_range], [y_min, y_max], self.canvas, loop=True)
+        line_1 = LineBuilder([x_min+0.01*x_range], [y_min, y_max], self.canvas)
+        line_2 = LineBuilder([x_max-0.01*x_range], [y_min, y_max], self.canvas, loop=True)
 
         x_min = line_1.get_xdata()  # lower limit
         x_max = line_2.get_xdata()  # upper limit
 
-        print(x_min, x_max)
-
-        line_1.remove_line()
-        line_2.remove_line()
         self.canvas.draw()
         self.ax.autoscale(True)
         return x_min, x_max
