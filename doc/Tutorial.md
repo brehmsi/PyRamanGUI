@@ -92,7 +92,25 @@ With the diskette a picture (*.png file) of the plot can be saved.
 
 ### The sidebar
 
-<img src="pics/PlotWindow_sidebar.PNG" height="80"/>
+<img src="pics/PlotWindow_sidebar.PNG" height="80"/> 
+
+The first symbol (mouse cursor) plots a movable vertical line in the spectrum, 
+which e.g. can be used to compare peak positions. The vertical line disappears,
+if the symbol on the sidebar is clicked again or the right mouse button is pressed.
+
+With the second and third symbol (upwards arrows) the shown spectra can be scaled 
+or shifted regarding the y-axis.
+
+The fourth symbol (narrow arrow) allows drawing lines and arrows in the spectrum.
+They can be edited later over an option dialog, which opens with a right mouse click.
+
+The last and fifth symbol (big T) creates a text field in the spectrum. The text
+can be change by double click and the style can be adjusted by a right mouse click
+on the inserted text.
+
+### Baseline Correction
+
+
 
 
 ## Textwindow <img src="pics/Icon_textwindow.png" alt="Icon of Textwindow" height="15"/>
