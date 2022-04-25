@@ -21,12 +21,14 @@ from matplotlib.figure import Figure
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 import matplotlib.backends.qt_editor.figureoptions as figureoptions
-if version.parse(matplotlib.__version__) <= version.parse('3.3.3'):
-    from matplotlib.backends.qt_compat import _setDevicePixelRatioF as _setDevicePixelRatio
+if version.parse(matplotlib.__version__) < version.parse('3.3.0'):
+    print("This version of matplotlib ({}) will most likely not support all functions of PyRaman."
+          "Best version is 3.3.0".format(matplotlib.__version__))
+elif version.parse(matplotlib.__version__) > version.parse('3.4.0'):
+    print("This version of matplotlib ({}) will most likely not support all functions of PyRaman. "
+          "Best version is 3.3.0".format(matplotlib.__version__))
 else:
-    from matplotlib.backends.qt_compat import _setDevicePixelRatio as _setDevicePixelRatio
-    print("This version of matplotlib will most likely not support all functions of PyRaman. Best version is 3.3.0")
-from matplotlib.backends.qt_compat import _devicePixelRatioF
+    pass
 from PyQt5 import QtGui, QtWidgets, QtCore
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, pyqtSlot
@@ -515,7 +517,7 @@ class MainWindow(QMainWindow):
                 print(e)
 
     def rearange(self, q):
-        # rearange open windows
+        # rearrange open windows
         if q.text() == "Cascade":
             self.tabWidget.currentWidget().cascadeSubWindows()
 
@@ -684,9 +686,9 @@ class MainWindow(QMainWindow):
             event.ignore()
 
 
-#####################################################################################################################################################
-### 2. Text - Window
-#####################################################################################################################################################
+########################################################################################################################
+# 2. Text - Window
+########################################################################################################################
 
 class TextWindow(QMainWindow):
     closeWindowSignal = QtCore.pyqtSignal(str, str)
@@ -1080,6 +1082,7 @@ class SpreadSheetWindow(QMainWindow):
         convert_unit.addAction("cm^-1 to nm")
         convert_unit.addAction("nm to cm^-1")
         convert_unit.triggered[QAction].connect(lambda QAction: self.convert_column_unit(QAction, selected_column))
+        header_menu.addAction("Flip column", lambda: self.flip_column(selected_column))
         mov_col = header_menu.addMenu("Move column")
         mov_col.addAction('Move left')
         mov_col.addAction('Move right')
@@ -1122,6 +1125,16 @@ class SpreadSheetWindow(QMainWindow):
 
         self.header_table.item(2, selected_column).setText(unit_text)
         self.header_table.item(4, selected_column).setText(formula.format(wl0=wl0, selected_column=selected_column))
+
+    def flip_column(self, selected_column):
+        """
+        flip the selected column
+        @param selected_column: logical index of selected column
+        @return:
+        """
+        selected_column = self.header_table.visualColumn(selected_column)
+        self.data[selected_column]["data"] = np.flip(self.data[selected_column]["data"])
+        self.create_table_items()
 
     def set_column_type(self, qaction, log_col):
         """
@@ -3013,20 +3026,11 @@ class MyCustomToolbar(NavigationToolbar2QT):
         # keep the default behaviour
         super(MyCustomToolbar, self).save_figure(*args)
 
-    def _icon(self, name, color=None):
+    def _icon(self, name, *args):
         if name == 'Layer.png':
-            icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Layer_content.png")
+            return QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Layer_content.png")
         else:
-            name = name.replace('.png', '_large.png')
-            pm = QtGui.QPixmap(str(matplotlib.cbook._get_data_path('images', name)))
-            _setDevicePixelRatio(pm, _devicePixelRatioF(self))
-            if color is not None:
-                mask = pm.createMaskFromColor(QtGui.QColor('black'),
-                                              QtCore.Qt.MaskOutColor)
-                pm.fill(color)
-                pm.setMask(mask)
-            icon = QIcon(pm)
-        return icon
+            return super(MyCustomToolbar, self)._icon(name, *args)
 
 
 class PlotWindow(QMainWindow):
@@ -3574,14 +3578,15 @@ class PlotWindow(QMainWindow):
             ys = self.spectrum[j].get_ydata()
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
-            idx_peaks, properties = signal.find_peaks(y, height=0.3 * max(y), width=5, distance=50)
+            idx_peaks, properties = signal.find_peaks(y, height=0.1 * max(y))
             if idx_peaks.size > 0:
                 p = round(x[idx_peaks[0]], 2)
                 h = round(properties['peak_heights'][0], 2)
-                w = round(properties['widths'][0], 2)
+                w = signal.peak_widths(y, idx_peaks)[0][0]
             else:
                 self.mw.show_statusbar_message("Couldn't find good start parameters \n"
                                                "Use Fit Dialog please", 4000)
+                return
             p_start = [0, p, h, w]
 
             try:
@@ -4150,7 +4155,7 @@ class PlotWindow(QMainWindow):
     def norm_to_water(self):
         """
         performs baseline correction on data with Doubly Reweighted Penalized Least Squares and lambda=9000000
-        and than normalizes the spectra to the water peak
+        and then normalizes the spectra to the water peak
         """
         self.SelectDataset()
         for n in self.selectedDatasetNumber:

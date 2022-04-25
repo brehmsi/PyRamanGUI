@@ -7,8 +7,7 @@ Provides a general purpose tool for Raman spectra evaluation
   - structure similar to Origin 
   - use of spreadsheets and plotting windows
   - projects can be saved and loaded
-  - general-purpose background fitting procedure 
-  - Raman spectra database 
+  - general-purpose background fitting procedure
   - increased reproducibility of fitting processes 
   
 A tutorial on how to use PyRaman can be found here [Tutorial](doc/README.md)
@@ -18,7 +17,7 @@ The code needs the following packages
   - matplotlib (version 3.3.0)
   - pandas 
   - sympy
-  - pyqt5 (pip3 install PyQt5==5.12.2) 
+  - pyqt5
   - prettytable  
   - tabulate
   - operator
