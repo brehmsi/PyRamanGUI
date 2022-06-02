@@ -1,7 +1,6 @@
 # author: Simon Brehm
-# import beepy
-# Test
 import io
+import json
 import math
 import matplotlib
 import matplotlib.colors as mcolors
@@ -17,19 +16,10 @@ import scipy
 import sympy as sp
 import sys
 from packaging import version
-
 from matplotlib.figure import Figure
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 import matplotlib.backends.qt_editor.figureoptions as figureoptions
-if version.parse(matplotlib.__version__) < version.parse('3.3.0'):
-    print("This version of matplotlib ({}) will most likely not support all functions of PyRaman."
-          "Best version is 3.3.0".format(matplotlib.__version__))
-elif version.parse(matplotlib.__version__) > version.parse('3.4.0'):
-    print("This version of matplotlib ({}) will most likely not support all functions of PyRaman. "
-          "Best version is 3.3.0".format(matplotlib.__version__))
-else:
-    pass
 from PyQt5 import QtGui, QtWidgets, QtCore
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, pyqtSlot
@@ -47,7 +37,17 @@ from tabulate import tabulate
 # Import files
 import myfigureoptions  # see file 'myfigureoptions.py'
 import Database_Measurements  # see file Database_Measurements
+from BrokenAxes import brokenaxes
 
+
+#if version.parse(matplotlib.__version__) < version.parse('3.3.0'):
+#    print("This version of matplotlib ({}) will most likely not support all functions of PyRaman."
+#          "Best version is 3.3.0".format(matplotlib.__version__))
+#elif version.parse(matplotlib.__version__) > version.parse('3.4.0'):
+#    print("This version of matplotlib ({}) will most likely not support all functions of PyRaman. "
+#          "Best version is 3.3.0".format(matplotlib.__version__))
+#else:
+#    pass
 
 # This file essentially consists of four parts:
 # 1. Main Window
@@ -149,7 +149,7 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
 
     def dropEvent(self, event):
         """
-        Paramters
+        Parameters
         ---------
         event : QDropEvent
         """
@@ -251,8 +251,6 @@ class MainWindow(QMainWindow):
 
     def show_statusbar_message(self, message, time, error_sound=False):
         self.statusBar.showMessage(message, time)
-        #if error_sound:
-        #    beepy.beep(sound=3)
 
     def keyPressEvent(self, event):
         """
@@ -286,9 +284,12 @@ class MainWindow(QMainWindow):
             self.close()
             return
 
-        # open file and save content in variable 'v' with pickle
+        # open file and save content in variable 'v' with pickle or json
         with open(self.pHomeRmn, 'rb') as file:
-            v = pickle.load(file)
+            try:
+                v = pickle.load(file)
+            except pickle.UnpicklingError:
+                v = json.load(file)
 
         self.treeWidget.clear()
         self.tabWidget.clear()
@@ -317,43 +318,216 @@ class MainWindow(QMainWindow):
             else:
                 return
 
+        save_dict_json = {}
         save_dict = {}
         for key, val in self.folder.items():
             save_dict[key] = {}
+            save_dict_json[key] = {}
             for j in range(val[0].childCount()):
                 win_name = val[0].child(j).text(0)
                 win_type = self.window_types[val[0].child(j).type()]
                 window = self.window[win_type][win_name]
+
                 if win_type == 'Spreadsheet':
-                    save_dict[key][win_name] = [win_type, window.data]
+                    window_content = window.data
+                    window_content_json = window.data.copy()
+                    for i in range(len(window_content)):
+                        window_content_json[i]["data"] = list(window_content_json[i]["data"])
                 elif win_type == 'Plotwindow':
-                    save_dict[key][win_name] = [win_type, [window.data, window.fig]]
+                    window_content_json = self.get_save_data_plotwindow(window)
+                    window_content = [window.data, window.fig]
                 elif win_type == 'Textwindow':
-                    save_dict[key][win_name] = [win_type, window.text]
+                    window_content_json = window.text
+                    window_content = window.text
+                save_dict[key][win_name] = [win_type, window_content]
+                save_dict_json[key][win_name] = [win_type, window_content_json]
 
+        # save with json
+        with open(os.path.splitext(self.pHomeRmn)[0] + ".jrmn", 'w', encoding='utf-8') as f:
+            json.dump(save_dict_json, f, ensure_ascii=False)
+
+        # save with pickle
         # Test if file can be saved
-        saveControllParam = 0
-        file = open(os.path.splitext(self.pHomeRmn)[0] + '_test' +
-                    os.path.splitext(self.pHomeRmn)[1], 'wb')
-        try:
-            pickle.dump(save_dict, file)
-        except TypeError as e:
-            self.show_statusbar_message('TypeError \n Someting went wrong. The file is not saved \n' + str(e), 4000)
-            print(str(e))
-            saveControllParam = 1
-        file.close()
+        #saveControllParam = 0
+        #file = open(os.path.splitext(self.pHomeRmn)[0] + '_test' + os.path.splitext(self.pHomeRmn)[1], 'wb')
 
-        if saveControllParam == 0:
-            file = open(self.pHomeRmn, 'wb')
-            try:
-                pickle.dump(save_dict, file)
-            except TypeError as e:
-                self.show_statusbar_message('TypeError \n Someting went wrong. The file is not saved \n' + str(e), 4000)
-            file.close()
-            os.remove(os.path.splitext(self.pHomeRmn)[0] + '_test' +
-                      os.path.splitext(self.pHomeRmn)[1])
+        #try:
+        #    pickle.dump(save_dict, file)
+        #except TypeError as e:
+        #    self.show_statusbar_message('TypeError \n Someting went wrong. The file is not saved \n' + str(e), 4000)
+        #    print(str(e))
+        #    saveControllParam = 1
+        #file.close()
+
+        #if saveControllParam == 0:
+        #    file = open(self.pHomeRmn, 'wb')
+        #    try:
+        #        pickle.dump(save_dict, file)
+        #    except TypeError as e:
+        #        self.show_statusbar_message('TypeError \n Someting went wrong. The file is not saved \n' + str(e), 4000)
+        #    file.close()
+        #    os.remove(os.path.splitext(self.pHomeRmn)[0] + '_test' +
+        #              os.path.splitext(self.pHomeRmn)[1])
+
+    def get_save_data_plotwindow(self, window):
+        """Get all data and parameter from plot window and store it in dictionary, which will be saved with json"""
+
+        # get data from plotwindow
+        data_keys = ["plot type", "label", "xaxis", "yaxis", "filename", "spreadsheet title"]
+        # change all numpy arrays to lists, since "Object of type ndarray is not JSON serializable" (TypeError)
+        window_data = []
+        for i in range(len(window.data)):
+            window_data.append({})
+            window_data[i]["x"] = list(window.data[i]["x"])
+            window_data[i]["y"] = list(window.data[i]["y"])
+            window_data[i]["yerr"] = None
+            if isinstance(window.data[i]["yerr"], int):
+                window.data[i]["yerr"] = None
+            if window.data[i]["yerr"] is not None:
+                window_data[i]["yerr"] = list(window.data[i]["yerr"])
+            for dk in data_keys:
+                window_data[i][dk] = window.data[i][dk]
+
+        # get all arrows and texts in plot window
+        annotations = {"arrows": [], "text": []}
+        for dl in window.drawn_line:
+            annotations["arrows"].append({"posA": list(dl.posA),
+                                          "posB": list(dl.posB),
+                                          "style": dl.arrow_style,
+                                          "head width": dl.head_width,
+                                          "head length": dl.head_length,
+                                          "line width": dl.line_width,
+                                          "line style": dl.line_style,
+                                          "color": dl.color})
+
+        for t in window.inserted_text:
+            annotations["text"].append({"text": t.text,
+                                        "position": t.position,
+                                        "font size": t.font_size,
+                                        "color": t.color})
+
+        # get all figure settings
+        fig = window.fig
+        axes = fig.get_axes()
+
+        # check if axis is broken
+        axis_break = False
+        if len(axes) == 1:
+            ax, = axes
+            ax1 = ax
+            axl = ax
         else:
-            saveControllParam = 0
+            ax = axes[0]  # main axis
+            ax1 = axes[1]  # axis of first segment
+            axl = axes[-1]  # axis of last segment
+            axis_break = True
+
+        # get general figure settings
+        xticks = ax1.get_xticks()
+        yticks = ax1.get_yticks()
+
+        if xticks.size > 1:
+            xtickspace = xticks[1] - xticks[0]
+        else:
+            xtickspace = None
+        if yticks.size > 1:
+            ytickspace = yticks[1] - yticks[0]
+        else:
+            ytickspace = None
+
+        if 'labelsize' in ax1.xaxis._major_tick_kw:
+            _ticksize = int(ax1.xaxis._major_tick_kw['labelsize'])
+        else:
+            _ticksize = 15
+
+        axis_options = {
+            'axis break': axis_break,
+            'x scale': ax1.get_xscale(),
+            'x lower limit': ax1.get_xlim()[0],
+            'x upper limit': ax1.get_xlim()[1],
+            'x tick step size': xtickspace,
+            'y scale': ax1.get_yscale(),
+            'y lower limit': ax1.get_ylim()[0],
+            'y upper limit': ax1.get_ylim()[1],
+            'y tick step size': ytickspace
+        }
+
+        if axis_break:
+            axis_options["x lower limit 2"] = axl.get_xlim()[0]
+            axis_options["x upper limit 2"] = axl.get_xlim()[1]
+
+        general = {
+            'title': ax.get_title(),
+            'title font size': int(ax.title.get_fontsize()),
+            'label font size': int(ax.xaxis.label.get_fontsize()),
+            'tick size': _ticksize,
+            'grid': ax.xaxis._major_tick_kw['gridOn'],
+            'x label': ax.get_xlabel(),
+            'x label pad': ax.xaxis.labelpad,
+            'y label': ax.get_ylabel(),
+            'y label pad': ax.yaxis.labelpad
+        }
+
+        if ax.legend_ is not None:
+            old_legend = ax.get_legend()
+            _visible = old_legend._visible
+            _draggable = old_legend._draggable is not None
+            _ncol = old_legend._ncol
+            _fontsize = int(old_legend._fontsize)
+            _frameon = old_legend.get_frame_on()
+            _shadow = old_legend.shadow
+            _fancybox = type(old_legend.legendPatch.get_boxstyle()) == matplotlib.patches.BoxStyle.Round
+            _framealpha = old_legend.get_frame().get_alpha()
+            _picker = 5
+        else:
+            _visible = True
+            _draggable = False
+            _ncol = 1
+            _fontsize = 15
+            _frameon = True
+            _shadow = True
+            _fancybox = True
+            _framealpha = 0.5
+            _picker = 5
+
+        legend = {
+            'visible': _visible,
+            'draggable': _draggable,
+            'columns': _ncol,
+            'font size': _fontsize,
+            'frame': _frameon,
+            'shadow': _shadow,
+            'fancy box': _fancybox,
+            'alpha': _framealpha,
+            'picker': _picker
+        }
+
+        figure_settings = {"general": general, "axis options": axis_options, "legend": legend}
+
+        # get all style elements of curves
+        for i, wd in enumerate(window.data):
+            if isinstance(window.data[i]["line"], dict):
+                wd["line options"] = window.data[i]["line"]
+            else:
+                line = window.data[i]["line"]
+                alpha = line.get_alpha()
+                color = mcolors.to_hex(mcolors.to_rgba(line.get_color(), alpha), keep_alpha=True)
+                ec = mcolors.to_hex(mcolors.to_rgba(line.get_markeredgecolor(), alpha), keep_alpha=True)
+                fc = mcolors.to_hex(mcolors.to_rgba(line.get_markerfacecolor(), alpha), keep_alpha=True)
+                curvedata = {
+                    'line style': line.get_linestyle(),
+                    'draw style': line.get_drawstyle(),
+                    'line width': line.get_linewidth(),
+                    'color': color,
+                    'marker style': line.get_marker(),
+                    'marker size': line.get_markersize(),
+                    'marker face color': fc,
+                    'marker edge color': ec}
+                window_data[i]["line options"] = curvedata
+
+        save_data = [window_data, {"figure settings": figure_settings, "annotations": annotations}]
+
+        return save_data
 
     def execute_database_measurements(self):
         title = 'Database'
@@ -418,7 +592,6 @@ class MainWindow(QMainWindow):
                         return
                     folder_name = self.tabWidget.tabText(self.tabWidget.currentIndex())
                     self.new_window(folder_name, data[0], data[1], window_name+"_Copy")
-
         else:
             if event.button() == QtCore.Qt.RightButton:
                 TreeItemMenu = QMenu()
@@ -525,6 +698,121 @@ class MainWindow(QMainWindow):
         if q.text() == "Tiled":
             self.tabWidget.currentWidget().tileSubWindows()
 
+    def create_figure(self, settings_dictionary, data):
+        fig = Figure(figsize=(15, 9))
+        ax = fig.add_subplot(111)
+
+        figure_settings = settings_dictionary["figure settings"]
+
+        # Set general figure settings
+        general = figure_settings["general"]
+
+        ax.set_title(general["title"])
+        ax.title.set_fontsize(general["title font size"])
+
+        ax.set_xlabel(general["x label"])
+        ax.xaxis.labelpad = general["x label pad"]
+        ax.set_ylabel(general["y label"])
+        ax.yaxis.labelpad = general["y label pad"]
+        ax.xaxis.label.set_size(general["label font size"])
+        ax.yaxis.label.set_size(general["label font size"])
+
+        axis_option = figure_settings["axis options"]
+
+        if ax.get_xscale() != axis_option["x scale"]:
+            ax.set_xscale(axis_option["x scale"])
+        if ax.get_yscale() != axis_option["y scale"]:
+            ax.set_yscale(axis_option["y scale"])
+
+        if axis_option["x tick step size"] is not None:
+            x_tick = axis_option["x tick step size"]
+            xtick_space_start = math.ceil(axis_option["x lower limit"] / x_tick) * x_tick
+            ax.xaxis.set_ticks(np.arange(xtick_space_start, axis_option["x upper limit"], x_tick))
+            ax.xaxis.set_ticks(np.arange(xtick_space_start, axis_option["x upper limit"], x_tick))
+        ax.set_xlim(axis_option["x lower limit"], axis_option["x upper limit"])
+        ax.xaxis.set_tick_params(labelsize=general["tick size"])
+
+        if axis_option["y tick step size"] is not None:
+            y_tick = axis_option["y tick step size"]
+            ytick_space_start = math.ceil(axis_option["y lower limit"] / y_tick) * y_tick
+            ax.yaxis.set_ticks(np.arange(ytick_space_start, axis_option["y upper limit"], y_tick))
+        ax.set_ylim(axis_option["y lower limit"], axis_option["y upper limit"])
+        ax.yaxis.set_tick_params(labelsize=general["tick size"])
+
+        ax.grid(general["grid"])
+
+        # plot data in figure
+        for d in data:
+            if d["yerr"] is not None:  # errorbars
+                (spect, capline, barlinecol) = ax.errorbar(d["x"], d["y"], yerr=d["yerr"], fmt=d["plot type"],
+                                                           picker=True, pickradius=5, capsize=3,
+                                                           label='_Hidden errorbar {}'.format(d["label"]))
+                spect.set_label(d["label"])
+            else:
+                try:
+                    spect, = ax.plot(d["x"], d["y"], d["plot type"], label=d["label"], picker=True, pickradius=5)
+                except ValueError as e:
+                    print(e)
+                    print(d["label"])
+                    if d["plot type"] is None:
+                        d["plot type"] = "-"
+                        spect, = ax.plot(d["x"], d["y"], d["plot type"], label=d["label"], picker=True, pickradius=5)
+            if "line options" in d.keys():
+                line_options = d["line options"]
+                spect.set_linestyle(line_options['line style'])
+                spect.set_drawstyle(line_options['draw style'])
+                spect.set_linewidth(line_options['line width'])
+                rgba = mcolors.to_rgba(line_options['color'])
+                spect.set_alpha(None)
+                spect.set_color(rgba)
+                if line_options['marker style'] != 'none':
+                    spect.set_marker(line_options['marker style'])
+                    spect.set_markersize(line_options['marker size'])
+                    spect.set_markerfacecolor(line_options['marker face color'])
+                    spect.set_markeredgecolor(line_options['marker edge color'])
+            else:
+                print("no line options in dict")
+            d["line"] = spect
+
+        if axis_option["axis break"]:
+            brokenaxes(xlims=((axis_option["x lower limit"], axis_option["x upper limit"]),
+                                      (axis_option["x lower limit 2"], axis_option["x upper limit 2"])), fig=fig)
+            handles, labels = fig.axes[2].get_legend_handles_labels()
+        else:
+            handles, labels = ax.get_legend_handles_labels()
+
+        # Set legend
+        legend = figure_settings["legend"]
+
+        new_legend = ax.legend(handles, labels,
+                               ncol=legend["columns"],
+                               fontsize=float(legend["font size"]),
+                               frameon=legend["frame"],
+                               shadow=legend["shadow"],
+                               framealpha=legend["alpha"],
+                               fancybox=legend["fancy box"])
+
+        new_legend.set_visible(legend["visible"])
+        new_legend.set_picker(legend["picker"])
+        new_legend.set_draggable(legend["draggable"])
+
+        # insert text and arrows
+        for a in settings_dictionary["annotations"]["arrows"]:
+            arrow = mpatches.FancyArrowPatch(a["posA"], a["posB"], mutation_scale=10, picker=50)
+            arrow.set_linewidth(a["line width"])
+            arrow.set_linestyle(a["line style"])
+            arrow.set_color(a["color"])
+            if a["style"] != '-':
+                arrow.set_arrowstyle(a["style"], head_length=a["head length"], head_width=a["head width"])
+            else:
+                arrow.set_arrowstyle(a["style"])
+            arrow.set_figure(fig)
+            ax.add_patch(arrow)
+
+        for t in settings_dictionary["annotations"]["text"]:
+            ax.annotate(t["text"], t["position"], picker=True, fontsize=t["font size"], color=t["color"])
+        return fig
+
     def new_window(self, foldername, windowtype, windowcontent, title):
         if foldername is None:
             foldername = self.tabWidget.tabText(self.tabWidget.currentIndex())
@@ -549,10 +837,13 @@ class MainWindow(QMainWindow):
                 if isinstance(windowcontent, dict):
                     ssd = []
                     for key, val in windowcontent.items():
-                        ssd.append({"data": val[0], "shortname": val[1], "type": val[2], "filename": val[3],
-                                    "longname": None, "unit": None, "comments": None, "formula": None})
+                        ssd.append(
+                            dict(data=np.array(val[0]), shortname=val[1], type=val[2], filename=val[3], longname=None,
+                                 unit=None, comments=None, formula=None))
                 else:
                     ssd = windowcontent
+                    for i in range(len(ssd)):
+                        ssd[i]["data"] = np.array(ssd[i]["data"])
 
             windowtypeInt = 1
             self.window[windowtype][title] = SpreadSheetWindow(ssd, parent=self)
@@ -563,28 +854,33 @@ class MainWindow(QMainWindow):
         elif windowtype == 'Plotwindow':
             windowtypeInt = 2
             plotData, fig = windowcontent
-            # change old data format to new format
+
+            if isinstance(fig, dict):
+                fig = self.create_figure(fig, plotData)
+
             if not plotData:
                 self.show_statusbar_message("Please select the columns you want to plot!", 4000)
                 return
 
+            # change old data format to new format
             if not isinstance(plotData[0], dict):
                 for idx, pd in enumerate(plotData):
-                    plotData[idx] = {"x": pd[0],
-                                     "y": pd[1],
-                                     "yerr": pd[5],
-                                     "plot type": pd[4],
-                                     "label": pd[2],
-                                     "xaxis": None,
-                                     "yaxis": None,
-                                     "filename": pd[3],
-                                     "spreadsheet title": pd[6] if len (pd) > 6 else None
-                                     }
+                    plotData[idx] = {
+                        "x": pd[0],
+                        "y": pd[1],
+                        "yerr": pd[5],
+                        "plot type": pd[4],
+                        "label": pd[2],
+                        "xaxis": None,
+                        "yaxis": None,
+                        "filename": pd[3],
+                        "spreadsheet title": pd[6] if len(pd) > 6 else None
+                    }
 
             if fig is not None:
                 # necessary to avoid weird error:
                 # (ValueError: figure size must be positive finite not [ 4.58 -0.09])
-                fig.set_size_inches([10, 10])
+                fig.set_size_inches(10, 10)
             self.window[windowtype][title] = PlotWindow(plotData, fig, self)
             self.update_spreadsheet_menubar()
             icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Icon_plotwindow.png")
@@ -631,7 +927,7 @@ class MainWindow(QMainWindow):
     def add_Plot(self, pw_name, plotData):
         """ add spectrum to existing plotwindow """
         for j in plotData:
-            j[4] = self.window['Plotwindow'][pw_name].spectrum[0].get_linestyle()
+            j[4] = self.window['Plotwindow'][pw_name].data[0]["line"].get_linestyle()
         self.window['Plotwindow'][pw_name].add_plot(plotData)
 
     def close_window(self, windowtype, title):
@@ -1425,7 +1721,7 @@ class SpreadSheetWindow(QMainWindow):
 
     def get_plot_data(self, plot_all=False):
         """ get data from selected columns and prepares data for plot """
-        self.plot_data = [] # [X-data, Y-data, label, filename, plottype, yerr, spreadsheet-title]
+        self.plot_data = []
         plot_content = {"x": None,
                         "y": None,
                         "yerr": None,
@@ -1445,12 +1741,10 @@ class SpreadSheetWindow(QMainWindow):
 
         # Decides if line or dot plot
         action = self.sender()
-        if action.text() == 'Line Plot':
+        if action.text() == 'Line Plot' or action.text() == 'Plot all':
             plot_type = '-'
         elif action.text() == 'Dot Plot':
             plot_type = 'o'
-        elif action.text() == 'Plot all':
-            plot_type = '-'
         else:
             plot_type = None
 
@@ -1526,7 +1820,6 @@ class SpreadSheetWindow(QMainWindow):
 
                 pd["spreadsheet title"] = self.windowTitle()
             else:
-                print(pd)
                 self.mw.show_statusbar_message('X and Y have different lengths', 4000)
                 return
         # emit signal to MainWindow to create new Plotwindow or add lines to existing plotwindow
@@ -1699,6 +1992,28 @@ class LineDrawer:
         posA, *_, posB = self.arrow.get_path()._vertices
         self.posA = list(posA)
         self.posB = list(posB)
+
+        # get arrow style, head length, head width
+        arrowstyle = self.arrow.get_arrowstyle()  # get arrow_style of arrow, returns object
+        self.head_length = arrowstyle.head_length
+        self.head_width = arrowstyle.head_width
+        arrowstyle_start = str(arrowstyle).split(' ', 1)[0]  # get object name without address x0....
+        list_of_styles = mpatches.ArrowStyle.get_styles()  # get all possible arrow styles, returns dictionary
+        self.arrow_style = "-"
+        for key, val in list_of_styles.items():  # compare arrow style with arrowstyle list to
+            if str(mpatches.ArrowStyle(key)).split(' ', 1)[0] == arrowstyle_start:
+                # in order to get arrow style name (e.g. '->')
+                self.arrow_style = key
+
+        # get color
+        self.color = mcolors.to_hex(mcolors.to_rgba(self.arrow.get_edgecolor(), self.arrow.get_alpha()), keep_alpha=True)
+
+        # get line width
+        self.line_width = self.arrow.get_linewidth()
+
+        # get line style
+        self.line_style = self.arrow.get_linestyle()
+
         self.pickedPoint = None
         self.arrow.set_picker(5)
 
@@ -1752,32 +2067,23 @@ class LineDrawer:
             return
 
     def options(self):
-        color = mcolors.to_hex(mcolors.to_rgba(self.arrow.get_edgecolor(),  # get color of arrow
-                                               self.arrow.get_alpha()), keep_alpha=True)
-        arrowstyle = self.arrow.get_arrowstyle()  # get arrow_style of arrow, returns object
-        arrowstyle_start = str(arrowstyle).split(' ', 1)[0]  # get object name without adress x0....
-        list_of_styles = mpatches.ArrowStyle.get_styles()  # get all possible arrowstyles, returns dictionnary
-        current_style = 0
-        for key, val in list_of_styles.items():  # compare arrowstyle with arrowstyle list to
-            if str(mpatches.ArrowStyle(key)).split(' ', 1)[0] == arrowstyle_start:
-                # in order to get arrowstyle name (e.g. '->')
-                current_style = key
-
+        """Options dialog"""
         lineOptions = [
-            ('Width', self.arrow.get_linewidth()),
-            ('Line style', [self.arrow.get_linestyle(),
+            ('Width', self.line_width),
+            ('Line style', [self.line_style,
                             ('-', 'solid'),
                             ('--', 'dashed'),
                             ('-.', 'dashDot'),
                             (':', 'dotted'),
                             ('None', 'None')]),
-            ('Color', color),
+            ('Color', self.color),
             ('Remove Line', False)
         ]
+
         arrowOptions = [
-            ('Arrow Style', [current_style, '-', '<-', '->', '<->', '-|>']),
-            ('Head Length', arrowstyle.head_length),
-            ('Head Wdith', arrowstyle.head_width),
+            ('Arrow Style', [self.arrow_style, '-', '<-', '->', '<->', '-|>', '<|-|>']),
+            ('Head Length', self.head_length),
+            ('Head Wdith', self.head_width),
         ]
 
         positionOptions = [
@@ -1798,17 +2104,17 @@ class LineDrawer:
         arrowOptions = selectedOptions[1]
         positionOptions = selectedOptions[2]
 
-        (width, linestyle, color, remove_line) = lineOptions
-        (arrowstyle, headlength, headwidth) = arrowOptions
+        (self.line_width, self.line_style, self.color, remove_line) = lineOptions
+        (self.arrow_style, self.head_length, self.head_width) = arrowOptions
         (xStart, yStart, xEnd, yEnd) = positionOptions
 
-        self.arrow.set_linewidth(width)
-        self.arrow.set_linestyle(linestyle)
-        self.arrow.set_color(color)
-        if arrowstyle != '-':
-            self.arrow.set_arrowstyle(arrowstyle, head_length=headlength, head_width=headwidth)
+        self.arrow.set_linewidth(self.line_width)
+        self.arrow.set_linestyle(self.line_style)
+        self.arrow.set_color(self.color)
+        if self.arrow_style != '-':
+            self.arrow.set_arrowstyle(self.arrow_style, head_length=self.head_length, head_width=self.head_width)
         else:
-            self.arrow.set_arrowstyle(arrowstyle)
+            self.arrow.set_arrowstyle(self.arrow_style)
 
         self.posA[0] = xStart
         self.posA[1] = yStart
@@ -1823,13 +2129,23 @@ class LineDrawer:
 
 
 class InsertText:
-    def __init__(self, text, main_window):
-        self.text_annotation = text
+    def __init__(self, text_annotation, main_window):
+        self.text_annotation = text_annotation
         self.mw = main_window
         self.fig = self.text_annotation.figure
         if self.fig is None or self.text_annotation is None:
             return
         self.fig.canvas.mpl_connect('pick_event', self.on_pick)
+
+        # get text
+        self.text = self.text_annotation.get_text()
+        # get position in plot coordinates
+        self.position = self.text_annotation.xyann
+        # get font size
+        self.font_size = self.text_annotation.get_fontsize()
+        # get color of text
+        self.color = mcolors.to_hex(mcolors.to_rgba(self.text_annotation.get_color(),
+                                                    self.text_annotation.get_alpha()), keep_alpha=True)
 
     def on_pick(self, event):
         if event.artist == self.text_annotation and event.mouseevent.button == 1 and event.mouseevent.dblclick is True:
@@ -1858,13 +2174,14 @@ class InsertText:
         self.textbox.setFocus()
 
     def finish_edit(self):
-        self.text_annotation.set_text(self.textbox.text())
+        self.text = self.textbox.text()
+        self.text_annotation.set_text(self.text)
         self.textbox.setHidden(True)
         self.fig.canvas.draw()
 
     def on_motion(self, event):
-        pos = (event.xdata, event.ydata)
-        self.text_annotation.set_position(pos)
+        self.position = (event.xdata, event.ydata)
+        self.text_annotation.set_position(self.position)
         self.fig.canvas.draw()
 
     def on_release(self, event):
@@ -1872,11 +2189,11 @@ class InsertText:
         self.fig.canvas.mpl_disconnect(self.cid3)
 
     def text_options(self):
-        color = mcolors.to_hex(mcolors.to_rgba(self.text_annotation.get_color(),
-                                               self.text_annotation.get_alpha()), keep_alpha=True)
+        """Option dialog"""
         text_options_list = [
-            ('Fontsize', self.text_annotation.get_fontsize()),
-            ('Color', color),
+            ('Text', self.text),
+            ('Font size', self.font_size),
+            ('Color', self.color),
             ('Remove Text', False)
         ]
 
@@ -1885,10 +2202,11 @@ class InsertText:
             self.apply_callback(text_option_menu)
 
     def apply_callback(self, options):
-        (fontsize, color, remove_text) = options
+        (self.text, self.font_size, self.color, remove_text) = options
 
-        self.text_annotation.set_fontsize(fontsize)
-        self.text_annotation.set_color(color)
+        self.text_annotation.set_text(self.text)
+        self.text_annotation.set_fontsize(self.font_size)
+        self.text_annotation.set_color(self.color)
         if remove_text is True:
             self.text_annotation.remove()
         self.fig.canvas.draw()
@@ -2361,7 +2679,8 @@ class BaselineCorrectionsDialog(QMainWindow):
         else:
             yb, zb = return_value
         self.base_line, = self.ax.plot(self.x, zb, 'c--', label='baseline ({})'.format(self.spectrum.get_label()))
-        self.blcSpektrum, = self.ax.plot(self.x, yb, 'c-', label='baseline-corrected ({})'.format(self.spectrum.get_label()))
+        self.blcSpektrum, = self.ax.plot(self.x, yb, 'c-',
+                                         label='baseline-corrected ({})'.format(self.spectrum.get_label()))
         self.fig.canvas.draw()
 
     def method_change(self, button=None):
@@ -2418,9 +2737,11 @@ class BaselineCorrectionsDialog(QMainWindow):
             yb, zb = return_value
 
         # Plot
-        self.pw.spectrum.append(self.ax.plot(self.x, yb, 'c-', label='{} (baseline-corrected)'.format(name))[0])
-        self.ax.plot(self.x, zb, 'c--', label='baseline ({})'.format(name))
-
+        label_spct = '{} (baseline-corrected)'.format(name)
+        spct_corr, = self.ax.plot(self.x, yb, 'c-', label=label_spct)[0]
+        self.pw.create_data(self.x, yb, line=spct_corr, label=label_spct, style="-")
+        baseline = self.ax.plot(self.x, zb, 'c--', label='baseline ({})'.format(name))
+        self.pw.create_data(self.x, zb, line=baseline, label='baseline ({})'.format(name), style="-")
         self.close()
 
         # Save baseline corrected data
@@ -2997,6 +3318,7 @@ class FitOptionsDialog(QMainWindow):
 
 class MyCustomToolbar(NavigationToolbar2QT):
     signal_remove_line = QtCore.pyqtSignal(object)
+    signal_axis_break = QtCore.pyqtSignal(list, list)
     toolitems = [t for t in NavigationToolbar2QT.toolitems]
     # Add new toolitem at last position
 
@@ -3048,7 +3370,6 @@ class PlotWindow(QMainWindow):
         self.fig = fig
         self.data = plot_data
         self.mw = parent
-        self.spectrum = []
         self.vertical_line = None
         self.functions = FitFunctions()
         self.blc = BaselineCorrectionMethods()       # class for everything related to Baseline corrections
@@ -3088,11 +3409,11 @@ class PlotWindow(QMainWindow):
                     (spect, capline, barlinecol) = self.ax.errorbar(d["x"], d["y"], yerr=d["yerr"], fmt=d["plot type"],
                                                                     picker=True, pickradius=5, capsize=3,
                                                                     label='_Hidden errorbar {}'.format(d["label"]))
-                    self.spectrum.append(spect)
+                    d["line"] = spect
                     spect.set_label(d["label"])
                 else:
-                    self.spectrum.append(self.ax.plot(d["x"], d["y"], d["plot type"], label=d["label"],
-                                                      picker=True, pickradius=5)[0])
+                    d["line"], = self.ax.plot(d["x"], d["y"], d["plot type"], label=d["label"],
+                                              picker=True, pickradius=5)
             self.ax.legend(fontsize=legendfontsize)
             if self.data[0]["xaxis"] is None:
                 self.data[0]["xaxis"] = r'Raman shift / cm$^{-1}$'
@@ -3105,12 +3426,10 @@ class PlotWindow(QMainWindow):
             self.ax.xaxis.set_tick_params(labelsize=tickfontsize)
             self.ax.yaxis.set_tick_params(labelsize=tickfontsize)
         else:  # loaded Plot
-            # self.fig._remove_ax = lambda: None
             self.ax = self.fig.axes[0]
             self.canvas = FigureCanvasQTAgg(self.fig)
             layout.addWidget(self.canvas)
-            for j in self.ax.lines:
-                self.spectrum.append(j)
+
             it = []
             for j in self.ax.get_children():
                 if type(j) == mpatches.FancyArrowPatch:  # all drawn lines and arrows
@@ -3123,37 +3442,56 @@ class PlotWindow(QMainWindow):
             self.ax.get_legend()
         toolbar = MyCustomToolbar(self.canvas)
         toolbar.signal_remove_line.connect(self.remove_line)
+        toolbar.signal_axis_break.connect(self.axis_break)
         self.addToolBar(toolbar)
         self.ax.get_legend().set_picker(5)
 
     def add_plot(self, new_data):
-        ls = self.spectrum[0].get_linestyle()
-        ma = self.spectrum[0].get_marker()
+        ls = self.data[0]["line"].get_linestyle()
+        ma = self.data[0]["line"].get_marker()
+
         for d in new_data:
             self.data.append(d)
             if d["yerr"] is not None:
                 (spect, capline, barlinecol) = self.ax.errorbar(d["x"], d["y"], yerr=d["yerr"], picker=True,
                                                                 pickradius=5, capsize=3,
                                                                 label='_Hidden errorbar {}'.format(d["label"]))
-                self.spectrum.append(spect)
+                d["line"] = spect
                 spect.set_label(d["label"])
             else:
-                spect = self.ax.plot(d["x"], d["y"], label=d["label"], picker=True, pickradius=5)[0]
-                self.spectrum.append(spect)
+                spect, = self.ax.plot(d["x"], d["y"], label=d["label"], picker=True, pickradius=5)
+                d["line"] = spect
             spect.set_linestyle(ls)
             spect.set_marker(ma)
+            if ls is not None:
+                d["plot type"] = ls
+            else:
+                d["plot type"] = ma
         handles, labels = self.ax.get_legend_handles_labels()
         self.update_legend(handles, labels)
         self.canvas.draw()
 
     def remove_line(self, line):
         """
-        remove data from self.spectrum and self.data after line was removed
-        in figureoptions
+        remove data from self.data after line was removed in figure options
         """
-        i = self.spectrum.index(line)
-        self.data.pop(i)
-        self.spectrum.pop(i)
+        idx = 0
+        for d in self.data:
+            if d["line"] == line:
+                break
+            idx += 1
+        try:
+            self.data.pop(idx)
+        except IndexError:
+            pass
+
+    def axis_break(self, old_lines, new_lines):
+        """in case of axis breaks, new line objects (Line2D) are created, this function replaces old line objects in
+        self.data with new one"""
+        for d in self.data:
+            for ol, nl in zip(old_lines, new_lines[0]):
+                if ol == d["line"]:
+                    d["line"] = nl
 
     def pickEvent(self, event):
         if event.mouseevent.dblclick is True and event.artist == self.ax.get_legend():
@@ -3187,7 +3525,7 @@ class PlotWindow(QMainWindow):
 
             self.update_legend(new_handles, new_labels)
             self.canvas.draw()
-        elif event.artist in self.spectrum and event.mouseevent.button == 3:
+        elif event.artist in [d["line"] for d in self.data] and event.mouseevent.button == 3:
             line_dialog = QMenu()
             line_dialog.addAction("Go to Spreadsheet", lambda: self.go_to_spreadsheet(event.artist))
             point = self.mapToGlobal(
@@ -3295,6 +3633,9 @@ class PlotWindow(QMainWindow):
         # 3.6 Get Area below curve
         analysisMenu.addAction('Get Area below Curve', self.detemine_area)
 
+        # 4. menu: spectra data base
+        databaseMenu = menubar.addMenu('&Spectral data base')
+
         self.show()
 
     def create_statusbar(self):
@@ -3340,11 +3681,12 @@ class PlotWindow(QMainWindow):
 
         self.show()
 
-    def create_data(self, x, y, yerr=None, type=None, label="_newline", filename=None, sstitle=None):
+    def create_data(self, x, y, yerr=None, line=None, style="-", label="_newline", filename=None, sstitle=None):
         data_dict = {"x": x,
                      "y": y,
                      "yerr": yerr,
-                     "plot type": type,
+                     "line": line,
+                     "plot type": style,
                      "label": label,
                      "xaxis": None,
                      "yaxis": None,
@@ -3355,7 +3697,7 @@ class PlotWindow(QMainWindow):
 
     #### Functions and other stuff ####
     def go_to_spreadsheet(self, line):
-        line_index = self.spectrum.index(line)
+        line_index =[d["line"] for d in self.data].index(line)
         if self.data[line_index]["spreadsheet title"]:
             spreadsheet_name = self.data[line_index]["spreadsheet title"]
             item = self.mw.treeWidget.findItems(spreadsheet_name, Qt.MatchFixedString | Qt.MatchRecursive)
@@ -3365,7 +3707,10 @@ class PlotWindow(QMainWindow):
                     break
                 else:
                     continue
-            self.mw.activate_window(spreadsheet_item)
+            try:
+                self.mw.activate_window(spreadsheet_item)
+            except UnboundLocalError:
+                return
             spreadsheet = self.mw.window['Spreadsheet'][spreadsheet_name]
             header_name = self.data[line_index]["label"]
             for j in range(spreadsheet.data_table.columnCount()):
@@ -3382,8 +3727,8 @@ class PlotWindow(QMainWindow):
     def SelectDataset(self, select_only_one=False):
         data_sets_name = []
         self.selectedData = []
-        for j in self.spectrum:
-            data_sets_name.append(j.get_label())
+        for d in self.data:
+            data_sets_name.append(d["line"].get_label())
         if len(data_sets_name) == 0:
             self.selectedDatasetNumber = []
         elif len(data_sets_name) == 1:
@@ -3429,11 +3774,11 @@ class PlotWindow(QMainWindow):
     def del_datapoint(self):
         self.SelectDataset()
         for j in self.selectedDatasetNumber:
-            pickDP = DataPointPicker(self.spectrum[j], 0)
+            pickDP = DataPointPicker(self.data[j]["line"], 0)
             idx = pickDP.idx
             self.data[j]["x"] = np.delete(self.data[j]["x"], idx)
             self.data[j]["y"] = np.delete(self.data[j]["y"], idx)
-            self.spectrum[j].set_data(self.data[j]["y"], self.data[j]["y"])
+            self.data[j]["line"].set_data(self.data[j]["y"], self.data[j]["y"])
             self.setFocus()
 
     def del_broken_pixel(self, action):
@@ -3452,7 +3797,7 @@ class PlotWindow(QMainWindow):
                     QMessageBox.about(self, "Title",
                                       "Please select this data point manually (around {} in the data set {})".format(
                                           self.data[j]["x"][data_idx], self.data[j]["y"]))
-                    pickDP = DataPointPicker(self.spectrum[j], data_idx)
+                    pickDP = DataPointPicker(self.data[j]["line"], data_idx)
                     data_idx = pickDP.idx
                 else:
                     data_idx += data_min_idx - border
@@ -3462,7 +3807,7 @@ class PlotWindow(QMainWindow):
                 self.data[j]["y"] = np.delete(self.data[j]["y"], data_idx)
                 data_idx += data_idx_diff[action.text()]
 
-            self.spectrum[j].set_data(self.data[j]["x"], self.data[j]["y"])
+            self.data[j]["line"].set_data(self.data[j]["x"], self.data[j]["y"])
             self.setFocus()
             self.canvas.draw()
 
@@ -3481,12 +3826,12 @@ class PlotWindow(QMainWindow):
         for n in self.selectedDatasetNumber:
             norm_factor = np.amax(self.data[n]["y"])
             if select_peak:
-                dpp = DataPointPicker(self.spectrum[n], np.where(self.data[n]["y"] == norm_factor))
+                dpp = DataPointPicker(self.data[n]["line"], np.where(self.data[n]["y"] == norm_factor))
                 idx = dpp.idx
                 norm_factor = self.data[n]["y"][idx]
 
             self.data[n]["y"] = self.data[n]["y"] / norm_factor
-            self.spectrum[n].set_data(self.data[n]["x"], self.data[n]["y"])
+            self.data[n]["line"].set_data(self.data[n]["x"], self.data[n]["y"])
             self.canvas.draw()
             # Save normalized data
             if self.data[n]["filename"] is not None:
@@ -3509,8 +3854,8 @@ class PlotWindow(QMainWindow):
         hlayout = QtWidgets.QHBoxLayout()
 
         cbox_spectrum1 = QtWidgets.QComboBox(self.dialog_add_sub)
-        for s in self.spectrum:
-            cbox_spectrum1.addItem(s.get_label())
+        for d in self.data:
+            cbox_spectrum1.addItem(d["line"].get_label())
         hlayout.addWidget(cbox_spectrum1)
 
         cbox_operation = QtWidgets.QComboBox(self.dialog_add_sub)
@@ -3519,8 +3864,8 @@ class PlotWindow(QMainWindow):
         hlayout.addWidget(cbox_operation)
 
         cbox_spectrum2 = QtWidgets.QComboBox(self.dialog_add_sub)
-        for s in self.spectrum:
-            cbox_spectrum2.addItem(s.get_label())
+        for d in self.data:
+            cbox_spectrum2.addItem(d["line"].get_label())
         hlayout.addWidget(cbox_spectrum2)
 
         vlayout.addLayout(hlayout)
@@ -3540,8 +3885,8 @@ class PlotWindow(QMainWindow):
         i2 = cbox_spectrum2.currentIndex()
         op = cbox_operation.currentText()
 
-        x1 = self.spectrum[i1].get_xdata()
-        x2 = self.spectrum[i2].get_xdata()
+        x1 = self.data[i1]["x"]
+        x2 = self.data[i2]["x"]
 
         # check that x data is the same
         if (x1 == x2).all():
@@ -3550,19 +3895,21 @@ class PlotWindow(QMainWindow):
             self.mw.show_statusbar_message('Not the same x data', 4000)
             return
 
-        y1 = self.spectrum[i1].get_ydata()
-        y2 = self.spectrum[i2].get_ydata()
+        y1 = self.data[i1]["y"]
+        y2 = self.data[i2]["y"]
 
         if op == '+':
             y = y1 + y2
+            line_label = "accumulated spectrum"
         elif op == '-':
             y = y1 - y2
+            line_label = "subtracted spectrum"
         else:
             return
-        line_label = "Subtracted Spectrum"
-        self.data.append(self.create_data(x1, y, label=line_label))
-        line, = self.ax.plot(x1, y, label=line_label)
-        self.spectrum.append(line)
+
+        line_style = self.data[i1]["line"].get_linestyle()
+        line, = self.ax.plot(x1, y, label=line_label, linestyle=line_style)
+        self.data.append(self.create_data(x1, y, label=line_label, style=line_style, line=line))
 
         self.canvas.draw()
 
@@ -3575,8 +3922,8 @@ class PlotWindow(QMainWindow):
             return
 
         for j in self.selectedDatasetNumber:
-            xs = self.spectrum[j].get_xdata()
-            ys = self.spectrum[j].get_ydata()
+            xs = self.data[j]["line"].get_xdata()
+            ys = self.data[j]["line"].get_ydata()
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
             idx_peaks, properties = signal.find_peaks(y, height=0.1 * max(y))
@@ -3597,10 +3944,13 @@ class PlotWindow(QMainWindow):
                 self.functions.n_fit_fct = dict.fromkeys(self.functions.n_fit_fct, 0)
                 return
             x1 = np.linspace(min(x), max(x), 1000)
-            self.ax.plot(x1, self.functions.FctSumme(x1, *popt), '-r')
+            y1 = self.functions.FctSumme(x1, *popt)
+            line, = self.ax.plot(x1, y1, '-r')
+            label = line.get_label()
+            self.data.append(self.create_data(x1, y1, label=label, style='-r', line=line))
             self.canvas.draw()
 
-            print('\n {} {}'.format(self.spectrum[j].get_label(), q.text()))
+            print('\n {} {}'.format(self.data[j]["line"].get_label(), q.text()))
             parmeter_name = ['Background', 'Raman Shift in cm^-1', 'Intensity', 'FWHM', 'additional Parameter']
             print_param = []
             for idx, po in enumerate(popt):
@@ -3618,12 +3968,12 @@ class PlotWindow(QMainWindow):
             return
 
         for n in self.selectedDatasetNumber:
-            xs = self.spectrum[n].get_xdata()
-            ys = self.spectrum[n].get_ydata()
+            xs = self.data[n]["line"].get_xdata()
+            ys = self.data[n]["line"].get_ydata()
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
-            fit_dialog = FitOptionsDialog(self, x, y, self.spectrum[n])
+            fit_dialog = FitOptionsDialog(self, x, y, self.data[n]["line"])
             fit_dialog.setMinimumWidth(600)
             fit_dialog.show()
             loop = QtCore.QEventLoop()
@@ -3634,20 +3984,15 @@ class PlotWindow(QMainWindow):
         self.SelectDataset()
         x_min, x_max = self.SelectArea()
         for n in self.selectedDatasetNumber:
-            spct = self.spectrum[n]
+            spct = self.data[n]["line"]
             xs = spct.get_xdata()
             ys = spct.get_ydata()
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
-            data_dict = {"x": x,
-                         "y": y,
-                         "label": '{}_cut'.format(spct.get_label()),
-                         "filename": self.selectedData[0]["filename"]}
-
-            self.data.append(data_dict)
-            self.spectrum.append(self.ax.plot(x, y, label='{}_cut'.format(spct.get_label()), picker=True,
-                                              pickradius=5)[0])
+            label = "{}_cut".format(spct.get_label())
+            line, = self.ax.plot(x, y, label=label, picker=True, pickradius=5)[0]
+            self.data.append(self.create_data(x, y, label=label, line=line, filename=self.selectedData[0]["filename"]))
 
     def SelectArea(self):
         self.ax.autoscale(False)
@@ -3693,7 +4038,7 @@ class PlotWindow(QMainWindow):
         x_min, x_max = self.SelectArea()
         baseline_methods = BaselineCorrectionMethods()
         for n in self.selectedDatasetNumber:
-            spct = self.spectrum[n]
+            spct = self.data[n]["line"]
             xs = spct.get_xdata()
             ys = spct.get_ydata()
 
@@ -3715,20 +4060,21 @@ class PlotWindow(QMainWindow):
         self.SelectDataset()
         method = action.text()
         for n in self.selectedDatasetNumber:
-            spct = self.spectrum[n]
-            x = spct.get_xdata()
-            y = spct.get_ydata()
+            spct = self.data[n]["line"]
+            x = np.array(spct.get_xdata())
+            y = np.array(spct.get_ydata())
             if method == "Savitsky-Golay":
                 y_smooth = rp.smooth(x, y, method="savgol", window_length=15, polyorder=3)
             elif method == "Whittaker":
-                y_smooth = rp.smooth(x, y, method="whittaker",Lambda=10**0.5)
+                y_smooth = rp.smooth(x, y, method="whittaker", Lambda=10**0.5)
             spct.set_ydata(y_smooth)
+            self.data[n]["y"] = y_smooth
             self.canvas.draw()
 
     def linear_regression(self):
         self.SelectDataset()
         for n in self.selectedDatasetNumber:
-            spct = self.spectrum[n]
+            spct = self.data[n]["line"]
             xs = spct.get_xdata()
             ys = spct.get_ydata()
 
@@ -3748,7 +4094,10 @@ class PlotWindow(QMainWindow):
 
             # Plot determined linear function
             x1 = np.linspace(min(x), max(x), 1000)
-            self.ax.plot(x1, self.functions.LinearFct(x1, *popt), '-r')
+            y1 = self.functions.LinearFct(x1, *popt)
+            line, = self.ax.plot(x1, y1, '-r')
+            label = line.get_label()
+            self.data.append(self.create_data(x, y, label=label, line=line, style='-'))
             self.canvas.draw()
 
             # Print results
@@ -3772,8 +4121,8 @@ class PlotWindow(QMainWindow):
         x_min_2 = 1900
         x_max_2 = 2300
         for n in self.selectedDatasetNumber:
-            x = self.spectrum[n].get_xdata()
-            y = self.spectrum[n].get_ydata()
+            x = self.data[n]["x"]
+            y = self.data[n]["y"]
 
             x1 = x[np.where((x > x_min_1) & (x < x_max_1))]
             y1 = y[np.where((x > x_min_1) & (x < x_max_1))]
@@ -3877,17 +4226,18 @@ class PlotWindow(QMainWindow):
 
         # iterate through all selected data sets
         for n in self.selectedDatasetNumber:
-            x = self.spectrum[n].get_xdata()
-            y = self.spectrum[n].get_ydata()
+            x = self.data[n]["x"]
+            y = self.data[n]["y"]
 
             # Limit data to fit range
             working_x = x[np.where((x > x_min) & (x < x_max))]
             working_y = y[np.where((x > x_min) & (x < x_max))]
 
             yb, zb = self.blc.ALS(working_x, working_y, p, lam)
-            baseline, = self.ax.plot(working_x, zb, 'c--', label='baseline ({})'.format(self.spectrum[n].get_label()))
+            baseline, = self.ax.plot(working_x, zb, 'c--',
+                                     label='baseline ({})'.format(self.data[n]["line"].get_label()))
             blcSpektrum, = self.ax.plot(working_x, yb, 'c-',
-                                             label='baseline-corrected ({})'.format(self.spectrum[n].get_label()))
+                                        label='baseline-corrected ({})'.format(self.data[n]["line"].get_label()))
             self.canvas.draw()
 
             # limit data to fitarea
@@ -4123,10 +4473,10 @@ class PlotWindow(QMainWindow):
             save_data = r'R^2=%.6f \n' % r_squared + 'Lorentz 1 = D-Bande, BWF (Breit-Wigner-Fano) 1 = G-Bande \n' + tabulate(
                 print_table, headers=['Parameters', 'Values', 'Errors'])
             print('\n')
-            print(self.spectrum[n].get_label())
+            print(self.data[n]["line"].get_label())
             print(save_data)
 
-            (fileBaseName, fileExtension) = os.path.splitext(self.spectrum[n].get_label())
+            (fileBaseName, fileExtension) = os.path.splitext(self.data[n]["line"].get_label())
             startFileDirName = os.path.dirname(self.selectedData[0][3])
             with open(startFileDirName + "/ID-IG.txt", "a") as file_cluster:
                 file_cluster.write('\n' + str(fileBaseName) + '   %.4f' % ratio + '   %.4f' % ratio_err)
@@ -4171,7 +4521,7 @@ class PlotWindow(QMainWindow):
             norm_factor = np.max(yb[np.argwhere((xs>3000) & (xs<3700))])
             yb = yb / norm_factor
             self.data[n]["y"] = yb
-            self.spectrum[n].set_data(xs, yb)
+            self.data[n]["line"].set_data(xs, yb)
             self.canvas.draw()
             # Save normalized data
             if self.data[n]["filename"] is not None:
@@ -4217,7 +4567,7 @@ class PlotWindow(QMainWindow):
             peak_areas = []
 
             # get data
-            spct = self.spectrum[n]
+            spct = self.data[n]["line"]
             xs = spct.get_xdata()
             ys = spct.get_ydata()
 
@@ -4275,7 +4625,7 @@ class PlotWindow(QMainWindow):
 
             # print fitparameter
             print('\n')
-            print(self.spectrum[n].get_label(), "R^2={}".format(r_squared))
+            print(self.data[n]["line"].get_label(), "R^2={}".format(r_squared))
             print(fit_parameter_table)
 
             # save the fit parameter
@@ -4285,7 +4635,7 @@ class PlotWindow(QMainWindow):
             self.save_to_file('Save fit parameter in file', file_name_parameter, fit_parameter_table)
 
             # get peak heights of persulfate and CarosAcid peaks
-            name = self.spectrum[n].get_label()
+            name = self.data[n]["line"].get_label()
             idx_PS = [peak_positions.index(p) for p in pos_PS]
             idx_Caros = [peak_positions.index(p) for p in pos_Caros]
             for j in idx_PS:
@@ -4303,18 +4653,15 @@ class PlotWindow(QMainWindow):
         if self.vertical_line is not None:
             try:
                 self.vertical_line.remove_line()
-                self.ax.autoscale(True)
             except:
                 pass
 
             self.vertical_line = None
         else:
-            self.ax.autoscale(False)
             y_min, y_max = self.ax.get_ylim()
             x_min, x_max = self.ax.get_xlim()
             self.vertical_line = LineBuilder([(x_min + x_max) / 2, (x_min + x_max) / 2], [y_min, y_max], self.canvas,
                                              parent=self)
-            self.ax.autoscale(True)
 
     def remove_vertical_line(self):
         self.VertLineAct.setChecked(False)
@@ -4324,22 +4671,22 @@ class PlotWindow(QMainWindow):
         self.SelectDataset(True)
         for n in self.selectedDatasetNumber:
             try:
-                ms = MoveSpectra(self.spectrum[n], scaling=True)
+                ms = MoveSpectra(self.data[n]["line"], scaling=True)
             except RuntimeError as e:
                 print(e)
                 continue
-            self.spectrum[n] = ms.line
+            self.data[n]["line"] = ms.line
             self.data[n]["y"] = ms.y
 
     def shift_spectrum(self):
         self.SelectDataset(True)
         for n in self.selectedDatasetNumber:
             try:
-                ms = MoveSpectra(self.spectrum[n])
+                ms = MoveSpectra(self.data[n]["line"])
             except RuntimeError as e:
                 print(e)
                 continue
-            self.spectrum[n] = ms.line
+            self.data[n]["line"] = ms.line
             self.data[n]["y"] = ms.y
 
     def draw_line(self):

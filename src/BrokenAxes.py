@@ -105,7 +105,7 @@ class BrokenAxes:
         gs = gridspec.GridSpec(*args, **kwargs)
         self.big_ax = self.fig.gca() 
 
-        old_lines = self.fig.axes[0].get_lines()
+        self.old_lines = self.fig.axes[0].get_lines()
 
         xlabel = self.big_ax.get_xlabel()
         ylabel = self.big_ax.get_ylabel()
@@ -182,19 +182,27 @@ class BrokenAxes:
             self.draw_diags()
         if despine:
             self.set_spines()
-
+        self.new_lines = []
         for ax in self.axs:
-            for line in old_lines:
-                ax.plot(line.get_xdata(), line.get_ydata(), lw=line.get_lw(), ls=line.get_ls(),
-                        c=line.get_c(), label=line.get_label())
+            self.new_lines.append([])
+            for line in self.old_lines:
+                new_line, = ax.plot(line.get_xdata(), line.get_ydata(), lw=line.get_lw(), ls=line.get_ls(),
+                                    c=line.get_c(), label=line.get_label())
+                new_line.set_marker(line.get_marker())
+                new_line.set_markersize(line.get_markersize())
+                new_line.set_markerfacecolor(line.get_markerfacecolor())
+                new_line.set_markeredgecolor(line.get_markeredgecolor())
+                self.new_lines[-1].append(new_line)
 
-        self.big_ax.legend(self.axs[0].get_legend_handles_labels(),
-                                ncol=leg_ncol,
-                                fontsize=float(leg_fontsize),
-                                frameon=leg_frameon,
-                                shadow=leg_shadow,
-                                framealpha=leg_framealpha,
-                                fancybox=leg_fancybox)
+        self.big_ax.legend(
+            self.axs[0].get_legend_handles_labels(),
+            ncol=leg_ncol,
+            fontsize=float(leg_fontsize),
+            frameon=leg_frameon,
+            shadow=leg_shadow,
+            framealpha=leg_framealpha,
+            fancybox=leg_fancybox
+        )
 
         # set order of axes
         len_axs = len(self.axs)

@@ -18,8 +18,7 @@ from BrokenAxes import brokenaxes
 import matplotlib
 from matplotlib import cm, colors as mcolors, markers, image as mimage
 import matplotlib.backends.qt_editor._formlayout as formlayout
-from matplotlib.backends import qt_compat
-from PyQt5 import QtGui, QtWidgets
+from PyQt5 import QtGui
 
 
 def get_icon(name):
@@ -66,11 +65,11 @@ def figure_edit(axes, parent=None):
     xticks = ax1.get_xticks()
     yticks = ax1.get_yticks()
 
-    if xticks != []:
+    if xticks.size > 0:
         xtickspace = xticks[1] - xticks[0]
     else:
         xtickspace = None
-    if yticks != []:
+    if yticks.size > 0:
         ytickspace = yticks[1] - yticks[0]
     else:
         ytickspace = None
@@ -370,8 +369,7 @@ def figure_edit(axes, parent=None):
             raise ValueError("Unexpected field")
 
         # Set / General
-        (title, titlesize, labelsize, ticksize, grid,
-         xlabel, xlabelpad, ylabel, ylabelpad) = general
+        (title, titlesize, labelsize, ticksize, grid, xlabel, xlabelpad, ylabel, ylabelpad) = general
 
         ax.set_title(title)
         ax.title.set_fontsize(titlesize)
@@ -409,8 +407,7 @@ def figure_edit(axes, parent=None):
             ax.yaxis.set_tick_params(labelsize=ticksize)
             ax.grid(grid)
         else:
-            (xscale, xtickspace, *xlim,
-             yscale, ylim_left, ylim_right, ytickspace) = axis_options
+            (xscale, xtickspace, *xlim, yscale, ylim_left, ylim_right, ytickspace) = axis_options
 
             xlim_left = []
             xlim_right = []
@@ -460,10 +457,12 @@ def figure_edit(axes, parent=None):
                                        ylims=((ylim_left, ybreak_start), (ybreak_end, ylim_right)),
                                        hspace=.05, fig=figure)
                     figure_edit.axis_is_broken = True
+                    parent.signal_axis_break.emit(baxes.old_lines, baxes.new_lines)
             elif xbreak is True:
                 if xbreak_start < xbreak_end:
                     baxes = brokenaxes(xlims=((xlim_left, xbreak_start), (xbreak_end, xlim_right)), fig=figure)
                     figure_edit.axis_is_broken = True
+                    parent.signal_axis_break.emit(baxes.old_lines, baxes.new_lines)
                 else:
                     print("The first limit has to be smaller than the second one.")
             elif ybreak is True:
@@ -471,6 +470,7 @@ def figure_edit(axes, parent=None):
                     baxes = brokenaxes(ylims=((ylim_left, ybreak_start), (ybreak_end, ylim_right)),
                                        hspace=.05, fig=figure)
                     figure_edit.axis_is_broken = True
+                    parent.signal_axis_break.emit(baxes.old_lines, baxes.new_lines)
 
         # Set / Legend
         (leg_visible, leg_draggable, leg_ncol, leg_fontsize, leg_frameon, leg_shadow,
@@ -567,8 +567,6 @@ def figure_edit(axes, parent=None):
         figure.canvas.draw()
 
     data = formlayout.fedit(datalist, title="Figure options", parent=parent, apply=apply_callback)
-                            # icon=get_icon('qt4_editor_options.svg'),
-
 
     if data is not None:
         apply_callback(data)
