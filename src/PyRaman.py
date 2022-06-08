@@ -38,6 +38,7 @@ from tabulate import tabulate
 import myfigureoptions  # see file 'myfigureoptions.py'
 import Database_Measurements  # see file Database_Measurements
 from BrokenAxes import brokenaxes
+import database_spectra
 
 
 #if version.parse(matplotlib.__version__) < version.parse('3.3.0'):
@@ -3380,6 +3381,7 @@ class PlotWindow(QMainWindow):
             'Gauss': 0,
             'Breit-Wigner-Fano': 0
         }
+        self.peak_positions = {} # dict to store Line2D object marking peak positions
 
         self.plot()
         self.create_statusbar()
@@ -3634,7 +3636,7 @@ class PlotWindow(QMainWindow):
         analysisMenu.addAction('Get Area below Curve', self.detemine_area)
 
         # 4. menu: spectra data base
-        databaseMenu = menubar.addMenu('&Spectral data base')
+        databaseMenu = menubar.addAction('&Data base peak positions', self.open_peakdatabase)
 
         self.show()
 
@@ -3976,6 +3978,7 @@ class PlotWindow(QMainWindow):
             fit_dialog = FitOptionsDialog(self, x, y, self.data[n]["line"])
             fit_dialog.setMinimumWidth(600)
             fit_dialog.show()
+
             loop = QtCore.QEventLoop()
             fit_dialog.closeSignal.connect(loop.quit)
             loop.exec_()
@@ -4551,17 +4554,17 @@ class PlotWindow(QMainWindow):
         pos_Caros = [767, 884, 1057]
         fwhm_Caros = [15, 15, 10]
         # other peaks
-        peak_positions = [900, 982, 1030, 1045, 1190, 1256, 1291]
+        peak_pos = [900, 982, 1030, 1045, 1190, 1256, 1291]
         peak_fwhm = [25, 30, 15, 15, 55, 55, 35]
-        peak_positions.extend(pos_PS+pos_Caros)
+        peak_pos.extend(pos_PS+pos_Caros)
         peak_fwhm.extend(fwhm_PS+fwhm_Caros)
 
         # sort list according to peak positions
-        peak_positions = sorted(peak_positions)
-        peak_fwhm = [f for _, f in sorted(zip(peak_positions, peak_fwhm))]
+        peak_pos = sorted(peak_pos)
+        peak_fwhm = [f for _, f in sorted(zip(peak_pos, peak_fwhm))]
 
         # number of fit functions
-        self.n_fit_fct['Lorentz'] = len(peak_positions)
+        self.n_fit_fct['Lorentz'] = len(peak_pos)
 
         for n in self.selectedDatasetNumber:
             peak_areas = []
@@ -4579,7 +4582,7 @@ class PlotWindow(QMainWindow):
             p_start = [0]
             p_bounds_low = [-0.001]
             p_bounds_up = [np.inf]
-            for (start_pos, start_width) in zip(peak_positions, peak_fwhm):
+            for (start_pos, start_width) in zip(peak_pos, peak_fwhm):
                 start_height = max(y[np.where((x > (start_pos-3)) & (x < (start_pos+3)))])*0.9
                 if start_height < 0:
                     start_height = 0
@@ -4636,19 +4639,63 @@ class PlotWindow(QMainWindow):
 
             # get peak heights of persulfate and CarosAcid peaks
             name = self.data[n]["line"].get_label()
-            idx_PS = [peak_positions.index(p) for p in pos_PS]
-            idx_Caros = [peak_positions.index(p) for p in pos_Caros]
+            idx_PS = [peak_pos.index(p) for p in pos_PS]
+            idx_Caros = [peak_pos.index(p) for p in pos_Caros]
             for j in idx_PS:
-                with open("{}/PS_intensity_PS{}cm-1.txt".format(directory_name, peak_positions[j]), "a") as f:
+                with open("{}/PS_intensity_PS{}cm-1.txt".format(directory_name, peak_pos[j]), "a") as f:
                     f.write('\n{} {:.4f}  {:.4f}'.format(name, popt[3*j+2], perr[3*j+2]))
 
             for j in idx_Caros:
-                with open("{}/PS_intensity_Caros{}cm-1.txt".format(directory_name, peak_positions[j]), "a") as f:
+                with open("{}/PS_intensity_Caros{}cm-1.txt".format(directory_name, peak_pos[j]), "a") as f:
                     f.write('\n{} {:.4f}  {:.4f}'.format(name, popt[3 * j + 2], perr[3 * j + 2]))
 
         self.n_fit_fct['Lorentz'] = 0
 
-    ### Functions of toolbar ###
+    def open_peakdatabase(self):
+        peak_database_dialog = database_spectra.DatabasePeakPosition()
+        peak_database_dialog.setMinimumWidth(600)
+        peak_database_dialog.show()
+        # wait until QMainWindow is closes
+        loop = QtCore.QEventLoop()
+        peak_database_dialog.closeSignal.connect(loop.quit)
+        peak_database_dialog.plot_peak_position_signal.connect(self.draw_peak_positions)
+        peak_database_dialog.remove_peak_position_signal.connect(self.remove_peak_positions)
+        loop.exec_()
+
+        # remove vertical lines (Line2D) in plot
+        for pp in self.peak_positions.values():
+            for v_line in pp:
+                v_line.remove()
+                del v_line
+        self.peak_positions = {}
+        self.canvas.draw()
+
+    def draw_peak_positions(self, peak_positions, id, n_materials):
+        colors = list(mcolors.BASE_COLORS)
+        pp_list = []
+        for pp in peak_positions:
+            v_line = self.ax.axvline(x=pp, color=colors[n_materials])
+            pp_list.append(v_line)
+        self.peak_positions[id] = pp_list
+        self.canvas.draw()
+
+    def remove_peak_positions(self, id):
+        if id in self.peak_positions.keys():
+            for v_line in self.peak_positions[id]:
+                v_line.remove()
+                del v_line
+            del self.peak_positions[id]
+        elif id == -1:
+            for pp in self.peak_positions.values():
+                for v_line in pp:
+                    v_line.remove()
+                    del v_line
+            self.peak_positions = {}
+        else:
+            return
+        self.canvas.draw()
+
+    # Functions of toolbar
     def create_vertical_line(self):
         if self.vertical_line is not None:
             try:
