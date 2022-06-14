@@ -390,6 +390,11 @@ class MainWindow(QMainWindow):
             for dk in data_keys:
                 window_data[i][dk] = window.data[i][dk]
 
+        # necessary for some y data, can be removed later
+        for wd in window_data:
+            if isinstance(wd["y"][0], np.ndarray):
+                wd["y"] = [y[0] for y in wd["y"]]
+
         # get all arrows and texts in plot window
         annotations = {"arrows": [], "text": []}
         for dl in window.drawn_line:
@@ -527,6 +532,18 @@ class MainWindow(QMainWindow):
                         'marker face color': fc,
                         'marker edge color': ec}
                     window_data[i]["line options"] = curvedata
+
+        # get styles for errorbars
+        for container in ax1.containers:
+            if type(container) == matplotlib.container.ErrorbarContainer:
+                plotline, caplines, barlinecols = container
+                idx = [window.data.index(wd) for wd in window.data if plotline == wd["line"]]
+
+                error_color = mcolors.to_hex(
+                    mcolors.to_rgba(caplines[0].get_markerfacecolor(), barlinecols[0].get_alpha()), keep_alpha=True)
+                window_data[idx[0]]["line options"]["error bar cap size"] = caplines[0].get_markersize()
+                window_data[idx[0]]["line options"]["error bar line width"] = caplines[0].get_markeredgewidth()
+                window_data[idx[0]]["line options"]["error bar color"] = error_color
 
         figure_settings = {"general": general, "axis options": axis_options, "legend": legend}
         save_data = [window_data, {"figure settings": figure_settings, "annotations": annotations}]
@@ -753,10 +770,23 @@ class MainWindow(QMainWindow):
         # plot data in figure
         for d in data:
             if d["yerr"] is not None:  # errorbars
-                (spect, capline, barlinecol) = ax.errorbar(d["x"], d["y"], yerr=d["yerr"], fmt=d["plot type"],
-                                                           picker=True, pickradius=5, capsize=3,
-                                                           label='_Hidden errorbar {}'.format(d["label"]))
+                if d["plot type"] is None:
+                    d["plot type"] = "o"
+                (spect, caplines, barlinecol) = ax.errorbar(d["x"], d["y"], yerr=d["yerr"], fmt=d["plot type"],
+                                                            picker=True, pickradius=5, capsize=3,
+                                                            label="_Hidden errorbar {}".format(d["label"]))
                 spect.set_label(d["label"])
+                print(d["line options"].keys())
+                if "error bar line width" in d["line options"].keys():
+                    dlo = d["line options"]
+                    for capline in caplines:
+                        capline.set_markersize(dlo["error bar cap size"])
+                        capline.set_markeredgewidth(dlo["error bar line width"])
+                        capline.set_markerfacecolor(dlo["error bar color"])
+                        capline.set_markeredgecolor(dlo["error bar color"])
+                    barlinecol[0].set_linewidth(dlo["error bar line width"])
+                    barlinecol[0].set_color(dlo["error bar color"])
+
             else:
                 try:
                     spect, = ax.plot(d["x"], d["y"], d["plot type"], label=d["label"], picker=True, pickradius=5)
@@ -768,24 +798,24 @@ class MainWindow(QMainWindow):
                         spect, = ax.plot(d["x"], d["y"], d["plot type"], label=d["label"], picker=True, pickradius=5)
             if "line options" in d.keys():
                 line_options = d["line options"]
-                spect.set_linestyle(line_options['line style'])
-                spect.set_drawstyle(line_options['draw style'])
-                spect.set_linewidth(line_options['line width'])
-                rgba = mcolors.to_rgba(line_options['color'])
+                spect.set_linestyle(line_options["line style"])
+                spect.set_drawstyle(line_options["draw style"])
+                spect.set_linewidth(line_options["line width"])
+                rgba = mcolors.to_rgba(line_options["color"])
                 spect.set_alpha(None)
                 spect.set_color(rgba)
-                if line_options['marker style'] != 'none':
-                    spect.set_marker(line_options['marker style'])
-                    spect.set_markersize(line_options['marker size'])
-                    spect.set_markerfacecolor(line_options['marker face color'])
-                    spect.set_markeredgecolor(line_options['marker edge color'])
+                if line_options["marker style"] != "none":
+                    spect.set_marker(line_options["marker style"])
+                    spect.set_markersize(line_options["marker size"])
+                    spect.set_markerfacecolor(line_options["marker face color"])
+                    spect.set_markeredgecolor(line_options["marker edge color"])
             else:
                 print("no line options in dict")
             d["line"] = spect
 
         if axis_option["axis break"]:
             brokenaxes(xlims=((axis_option["x lower limit"], axis_option["x upper limit"]),
-                                      (axis_option["x lower limit 2"], axis_option["x upper limit 2"])), fig=fig)
+                              (axis_option["x lower limit 2"], axis_option["x upper limit 2"])), fig=fig)
             handles, labels = fig.axes[2].get_legend_handles_labels()
         else:
             handles, labels = ax.get_legend_handles_labels()

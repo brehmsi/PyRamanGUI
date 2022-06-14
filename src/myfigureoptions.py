@@ -126,7 +126,7 @@ def figure_edit(axes, parent=None):
                (None, "<b>Axes settings</b>"),
                ('Label Size', int(ax.xaxis.label.get_fontsize())),
                ('Tick Size', _ticksize),
-               #('Show grid', ax.xaxis._gridOnMajor),
+               # ('Show grid', ax.xaxis._gridOnMajor),
                ('Show grid', ax.xaxis._major_tick_kw['gridOn']),
                sep,
                (None, "<b>X-Axis</b>"),
