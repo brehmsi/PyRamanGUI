@@ -375,6 +375,7 @@ class MainWindow(QMainWindow):
 
         # get data from plotwindow
         data_keys = ["plot type", "label", "xaxis", "yaxis", "filename", "spreadsheet title"]
+
         # change all numpy arrays to lists, since "Object of type ndarray is not JSON serializable" (TypeError)
         window_data = []
         for i in range(len(window.data)):
@@ -503,29 +504,31 @@ class MainWindow(QMainWindow):
             'picker': _picker
         }
 
-        figure_settings = {"general": general, "axis options": axis_options, "legend": legend}
-
         # get all style elements of curves
         for i, wd in enumerate(window.data):
-            if isinstance(window.data[i]["line"], dict):
-                wd["line options"] = window.data[i]["line"]
-            else:
-                line = window.data[i]["line"]
-                alpha = line.get_alpha()
-                color = mcolors.to_hex(mcolors.to_rgba(line.get_color(), alpha), keep_alpha=True)
-                ec = mcolors.to_hex(mcolors.to_rgba(line.get_markeredgecolor(), alpha), keep_alpha=True)
-                fc = mcolors.to_hex(mcolors.to_rgba(line.get_markerfacecolor(), alpha), keep_alpha=True)
-                curvedata = {
-                    'line style': line.get_linestyle(),
-                    'draw style': line.get_drawstyle(),
-                    'line width': line.get_linewidth(),
-                    'color': color,
-                    'marker style': line.get_marker(),
-                    'marker size': line.get_markersize(),
-                    'marker face color': fc,
-                    'marker edge color': ec}
-                window_data[i]["line options"] = curvedata
+            if "line" in window.data[i].keys():
+                if isinstance(window.data[i]["line"], dict):
+                    wd["line options"] = window.data[i]["line"]
+                else:
+                    line = window.data[i]["line"]
+                    window.data[i]["label"] = line.get_label()
+                    window_data[i]["label"] = line.get_label()
+                    alpha = line.get_alpha()
+                    color = mcolors.to_hex(mcolors.to_rgba(line.get_color(), alpha), keep_alpha=True)
+                    ec = mcolors.to_hex(mcolors.to_rgba(line.get_markeredgecolor(), alpha), keep_alpha=True)
+                    fc = mcolors.to_hex(mcolors.to_rgba(line.get_markerfacecolor(), alpha), keep_alpha=True)
+                    curvedata = {
+                        'line style': line.get_linestyle(),
+                        'draw style': line.get_drawstyle(),
+                        'line width': line.get_linewidth(),
+                        'color': color,
+                        'marker style': line.get_marker(),
+                        'marker size': line.get_markersize(),
+                        'marker face color': fc,
+                        'marker edge color': ec}
+                    window_data[i]["line options"] = curvedata
 
+        figure_settings = {"general": general, "axis options": axis_options, "legend": legend}
         save_data = [window_data, {"figure settings": figure_settings, "annotations": annotations}]
 
         return save_data
@@ -581,9 +584,14 @@ class MainWindow(QMainWindow):
                     if window_type == 'Spreadsheet':
                         data = [window_type, window.data.copy()]
                     elif window_type == 'Plotwindow':
-                        # no deepcopy of figure possible => pickle
+                        # no deepcopy of figure possible => create new figure with pickle
                         buf = io.BytesIO()
-                        pickle.dump(window.fig, buf)
+                        try:
+                            pickle.dump(window.fig, buf)
+                        except TypeError as e:
+                            print(e)
+                            print("Try to set the legend not-draggable")
+                            return
                         buf.seek(0)
                         fig_copy = pickle.load(buf)
                         data = [window_type, [window.data.copy(), fig_copy]]
@@ -1280,7 +1288,6 @@ class SpreadSheetWindow(QMainWindow):
                 try:
                     item_text = self.data[c][key]
                 except KeyError:
-                    print(self.data[c]["shortname"], key, ": ERROOOORRR")
                     item_text = None
                     self.data[c][key] = None
                 header_item = QTableWidgetItem(item_text)
@@ -3320,12 +3327,10 @@ class FitOptionsDialog(QMainWindow):
 class MyCustomToolbar(NavigationToolbar2QT):
     signal_remove_line = QtCore.pyqtSignal(object)
     signal_axis_break = QtCore.pyqtSignal(list, list)
+
     toolitems = [t for t in NavigationToolbar2QT.toolitems]
     # Add new toolitem at last position
-
-    toolitems.append(
-        ('Layers', "manage layers and layer contents",
-         'Layer', "layer_content"))
+    toolitems.append(("Layers", "manage layers and layer contents", "Layer", "layer_content"))
 
     def __init__(self, plotCanvas):
         NavigationToolbar2QT.__init__(self, plotCanvas, parent=None)
@@ -3433,6 +3438,7 @@ class PlotWindow(QMainWindow):
             layout.addWidget(self.canvas)
 
             it = []
+
             for j in self.ax.get_children():
                 if type(j) == mpatches.FancyArrowPatch:  # all drawn lines and arrows
                     self.drawn_line.append(LineDrawer(j))
