@@ -14,7 +14,7 @@ A tutorial on how to use PyRaman can be found here [Tutorial](doc/README.md)
 
 # Installation 
 The code needs the following packages 
-  - matplotlib (version 3.3.0)
+  - matplotlib 
   - pandas 
   - sympy
   - pyqt5

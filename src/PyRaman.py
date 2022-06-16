@@ -3614,12 +3614,12 @@ class PlotWindow(QMainWindow):
         # 2. menu item: Edit
         editMenu = menubar.addMenu('&Edit')
 
-        editDelete = editMenu.addMenu('Delete broken pixel - LabRam')
-        editDelete.addAction("532nm")
-        editDelete.addAction("633nm")
-        editDelete.triggered[QAction].connect(self.del_broken_pixel)
+        #editDelete = editMenu.addMenu('Delete broken pixel - LabRam')
+        #editDelete.addAction("532nm")
+        #editDelete.addAction("633nm")
+        #editDelete.triggered[QAction].connect(self.del_broken_pixel)
 
-        editDeletePixel = editMenu.addAction('Delete single datapoint', self.del_datapoint)
+        editDeletePixel = editMenu.addAction('Delete datapoint', self.del_datapoint)
         editDeletePixel.setStatusTip(
             'Delete selected data point with Enter, Move with arrow keys, Press c to leave Delete-Mode')
 
@@ -3637,21 +3637,14 @@ class PlotWindow(QMainWindow):
         analysisMenu = menubar.addMenu('&Analysis')
 
         # 3.1 Analysis Fit
-        analysisFit = analysisMenu.addMenu('&Fit')
+        analysis_fit = analysisMenu.addMenu('&Fit')
+        analysis_fit.addAction("Fit Dialog", self.open_fit_dialog)
 
-        analysisFitSingleFct = analysisFit.addMenu('&Quick Fit')
+        analysisFitSingleFct = analysis_fit.addMenu('&Quick Fit')
         analysisFitSingleFct.addAction('Lorentz')
         analysisFitSingleFct.addAction('Gauss')
         analysisFitSingleFct.addAction('Breit-Wigner-Fano')
         analysisFitSingleFct.triggered[QAction].connect(self.quick_fit)
-
-        analysisFit.addAction("Fit Dialog", self.open_fit_dialog)
-
-        analysisRoutine = analysisMenu.addMenu('&Analysis routines')
-        analysisRoutine.addAction('D und G Bande', self.fit_D_G)
-        analysisRoutine.addAction('Fit Sulfur oxyanion spectrum', self.fit_sulfuroxyanion)
-        analysisRoutine.addAction('Get m/I(G) (Hydrogen content)', self.hydrogen_estimation)
-        analysisRoutine.addAction('Norm to water peak', self.norm_to_water)
 
         # 3.2 Linear regression
         analysisMenu.addAction('Linear regression', self.linear_regression)
@@ -3661,9 +3654,16 @@ class PlotWindow(QMainWindow):
 
         # 3.3 Smoothing
         analysisSmoothing = analysisMenu.addMenu('&Smoothing')
-        analysisSmoothing.addAction('Savitsky-Golay')
+        analysisSmoothing.addAction('Savitzky-Golay')
         analysisSmoothing.addAction('Whittaker')
         analysisSmoothing.triggered[QAction].connect(self.smoothing)
+
+        # 3.4 analysis routines
+        analysisRoutine = analysisMenu.addMenu('&Analysis routines')
+        analysisRoutine.addAction('D und G Bande', self.fit_D_G)
+        analysisRoutine.addAction('Fit Sulfur oxyanion spectrum', self.fit_sulfuroxyanion)
+        analysisRoutine.addAction('Get m/I(G) (Hydrogen content)', self.hydrogen_estimation)
+        analysisRoutine.addAction('Norm to water peak', self.norm_to_water)
 
         # 3.5 Analysis find peaks
         analysisMenu.addAction('Find Peak', self.find_peaks)
@@ -3672,7 +3672,7 @@ class PlotWindow(QMainWindow):
         analysisMenu.addAction('Get Area below Curve', self.detemine_area)
 
         # 4. menu: spectra data base
-        databaseMenu = menubar.addAction('&Data base peak positions', self.open_peakdatabase)
+        menubar.addAction('&Data base peak positions', self.open_peakdatabase)
 
         self.show()
 
@@ -4102,7 +4102,7 @@ class PlotWindow(QMainWindow):
             spct = self.data[n]["line"]
             x = np.array(spct.get_xdata())
             y = np.array(spct.get_ydata())
-            if method == "Savitsky-Golay":
+            if method == "Savitzky-Golay":
                 y_smooth = rp.smooth(x, y, method="savgol", window_length=15, polyorder=3)
             elif method == "Whittaker":
                 y_smooth = rp.smooth(x, y, method="whittaker", Lambda=10**0.5)

@@ -20,12 +20,12 @@ left, and a workspace containing the open windows.
 
 The windows are organized in folders, so the workspace only
 shows the windows of the selected folder. You can switch between 
-folders by double clicking at another folder at the side tree or by 
+folders by double-clicking at another folder at the side tree or by 
 changing the tab of the workspace.
 There are three different kinds of windows,
-[Spreadsheet <img src="pics/Icon_spreadsheet.png" alt="Icon of Spreadsheet" height="15"/>](#Spreadsheet),
+[Spreadsheet <img src="pics/Icon_spreadsheet.png" alt="Icon of Spreadsheet" height="15"/>](##Spreadsheet),
 [Plotwindow <img src="pics/Icon_plotwindow.png" alt="Icon of Plotwindow" height="15"/>](#Plotwindow),
-[Textwindow <img src="pics/Icon_textwindow.png" alt="Icon of Textwindow" height="15"/>](#Textwindow).
+[Textwindow <img src="pics/Icon_textwindow.png" alt="Icon of Textwindow" height="15"/>](#Text Window).
 They are explained in more detail in the following sections.
 
 ### Menu Bar of the Main Window
@@ -41,7 +41,7 @@ A project can also be saved with the shortcut "CTRL+S".
 #### Open a new Window or Folder in the Project
 There are two ways to open a new folder or window. 
 The first one is to use the menu bar item "File" &rarr; "New" and the second one is to 
-right click on the side tree. 
+right-click on the side tree. 
 The new window then opens in the opened folder.
 
 ##  Spreadsheet <img src="pics/Icon_spreadsheet.png" alt="Icon of Spreadsheet" height="15"/>
@@ -54,7 +54,7 @@ A new column can be added with "Edit" &rarr; "New Column".
 The header of the table consists of a column title and 5 rows 
 ("Name", "Axis", "Unit", "Comments", "F(x)").
 \
-By right clicking on the colum title, a drop-down menu is opened.
+By right-clicking on the column title, a drop-down menu is opened.
 
 ### Plot Spreadsheet Data
 Select one or several y columns which you mean to plot. 
@@ -98,17 +98,43 @@ which can be used, e.g., to compare peak positions. The vertical line disappears
 if the symbol on the sidebar is clicked again or the right mouse button is pressed.
 
 With the second and third symbol (upwards arrows), the shown spectra can be scaled 
-or shifted with respect to the y axis.
+or shifted with respect to the y-axis.
 
 The fourth symbol (narrow arrow) allows for drawing lines and arrows in the spectrum.
 These lines and arrows can be edited later via an option dialogue, which opens with a right mouse click.
 
 The fifth symbol (upper-case T) creates a text field in the spectrum. The text
-can be changed by double clicking and the style can be adjusted by a right mouse click
+can be changed by double-clicking and the style can be adjusted by a right mouse click
 on the inserted text.
 
-### Baseline Correction
+### Menu bar
+The menu bar consists of three drop-down menus (File, Edit, Analysis) and a fourth menu item (Data base peak position)
 
+- **File** 
+  - **save to file**: save the plotted data in file
+- **Edit**
+  - **delete data point**
+  - **define data area**
+  - **normalize spectrum**
+  - **add up or subtract two spectra**
+- **Analysis**
+  - **fit**
+  - **baseline correction**
+  - **smoothing**
+  -
+
+#### Baseline Correction
+- rubber band
+- polynomial
+- spline
+- asymmetric least square
+- adaptive iteratively reweighted penalized least squares
+- asymmetrically reweighted penalized least squares
+-doubly reweighted penalized least squares.
+
+#### Smoothing
+- Savitzky-Golay
+- Whittaker
 
 
 
