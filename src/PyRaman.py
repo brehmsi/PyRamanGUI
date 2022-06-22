@@ -32,6 +32,7 @@ from scipy import signal
 from scipy.optimize import curve_fit
 from scipy.sparse.linalg import spsolve
 from sympy.utilities.lambdify import lambdify
+from sklearn import decomposition
 from tabulate import tabulate
 
 # Import files
@@ -195,7 +196,7 @@ class MainWindow(QMainWindow):
         self.pHomeRmn = None  # path of Raman File associated to the open project
         self.db_measurements = None
         self.mainWidget = QtWidgets.QSplitter(self)
-        self.treeWidget = RamanTreeWidget(self)  # Qtreewidget, to controll open windows
+        self.treeWidget = RamanTreeWidget(self)  # Qtreewidget, to control open windows
         self.tabWidget = QtWidgets.QTabWidget()
         self.statusBar = QtWidgets.QStatusBar()
 
@@ -776,7 +777,6 @@ class MainWindow(QMainWindow):
                                                             picker=True, pickradius=5, capsize=3,
                                                             label="_Hidden errorbar {}".format(d["label"]))
                 spect.set_label(d["label"])
-                print(d["line options"].keys())
                 if "error bar line width" in d["line options"].keys():
                     dlo = d["line options"]
                     for capline in caplines:
@@ -1108,7 +1108,7 @@ class TextWindow(QMainWindow):
 
 
 ########################################################################################################################
-### 3. Spreadsheet
+# 3. Spreadsheet
 ########################################################################################################################
 
 class FormulaInterpreter:
@@ -1241,7 +1241,7 @@ class Header(QTableWidget):
 
 class SpreadSheetWindow(QMainWindow):
     """
-    creating QMainWindow containing the spreadsheet
+    creates QMainWindow containing the spreadsheet
     """
     new_pw_signal = QtCore.pyqtSignal()
     add_pw_signal = QtCore.pyqtSignal(str)
@@ -1347,6 +1347,11 @@ class SpreadSheetWindow(QMainWindow):
         for j in self.mw.window['Plotwindow'].keys():
             plotAdd.addAction(j, self.get_plot_data)
         plotMenu.addAction('Plot all', lambda: self.get_plot_data(plot_all=True))
+
+        # 4. menu item: Analysis
+        analysis_menu = self.menubar.addMenu("&Analysis")
+        analysis_menu.addAction("Principal component analysis", self.pca_nmf)
+        analysis_menu.addAction("Non-negative matrix factorization", self.pca_nmf)
 
         self.show()
 
@@ -1470,6 +1475,46 @@ class SpreadSheetWindow(QMainWindow):
         selected_column = self.header_table.visualColumn(selected_column)
         self.data[selected_column]["data"] = np.flip(self.data[selected_column]["data"])
         self.create_table_items()
+
+    def pca_nmf(self):
+        """principal component analysis with all selected y values"""
+        selected_columns = sorted(set(self.headers.visualIndex(idx.column()) for idx in
+                                      self.header_table.selectedIndexes()))
+        y_all = []
+        # get all data
+        for n in selected_columns:
+            if self.data[n]["type"] != 'Y':
+                self.mw.show_statusbar_message('Please only select Y-columns!', 4000)
+                return
+
+            ys = self.data[n]["data"]
+            y_all.append(ys)
+
+        # check if all have same length
+        y_it = iter(y_all)
+        len_y = len(next(y_it))
+        if not all(len(l) == len_y for l in y_it):
+            self.mw.show_statusbar_message("Data has to have same length!", 4000)
+            return
+
+        # stack all y data
+        all_samples = np.stack(y_all, axis=0)
+
+        action_text = self.sender().text()
+        if action_text == "Principal component analysis":
+            # do the PCA analysis
+            pca = decomposition.PCA(n_components=2)
+            y_transformed = pca.fit_transform(all_samples.T).T
+            analysis_name = "PCA"
+        elif action_text == "Non-negative matrix factorization":
+            # do the NMF analysis
+            nmf = decomposition.NMF(n_components=2)
+            y_transformed = nmf.fit_transform(all_samples.T).T
+            analysis_name = "NMF"
+
+        # insert data in table
+        for idx, y_i in enumerate(y_transformed):
+            self.new_col(data_content=y_i, short_name="{} {}".format(analysis_name, idx+1))
 
     def set_column_type(self, qaction, log_col):
         """
@@ -1740,16 +1785,24 @@ class SpreadSheetWindow(QMainWindow):
                         newcell = QTableWidgetItem(str(self.data[col]["data"][r]))
                         self.data_table.setItem(r, col, newcell)
 
-    def new_col(self):
+    def new_col(self, data_content=None, short_name=None):
         # adds a new column at end of table
+        if data_content is None:
+            data_content = np.zeros(self.rows)
+        elif len(data_content) != self.rows:
+            self.mw.show_statusbar_message("data has different length than table rows")
+            return
+
+        if short_name is None:
+            short_name = str(chr(ord('A') + self.cols - 1))
         self.cols = self.cols + 1
         self.data_table.setColumnCount(self.cols)
         self.header_table.setColumnCount(self.cols)
-        self.data.append(self.create_data(np.zeros(self.rows), shortname=str(chr(ord('A') + self.cols - 1))))
+        self.data.append(self.create_data(data_content=data_content, shortname=short_name))
         headers = [d["shortname"] + '(' + d["type"] + ')' for d in self.data]
         self.header_table.setHorizontalHeaderLabels(headers)
         for i in range(self.rows):
-            cell = QTableWidgetItem('')
+            cell = QTableWidgetItem(str(data_content[i]))
             self.data_table.setItem(i, self.cols - 1, cell)
 
         # Color header cells in yellow
@@ -3656,7 +3709,7 @@ class PlotWindow(QMainWindow):
         # 3.2 Linear regression
         analysisMenu.addAction('Linear regression', self.linear_regression)
 
-        # 3.3 Analysis base line correction
+        # 3.3 Analysis baseline correction
         analysisMenu.addAction('Baseline Corrections', self.baseline)
 
         # 3.3 Smoothing
@@ -3665,10 +3718,10 @@ class PlotWindow(QMainWindow):
         analysisSmoothing.addAction('Whittaker')
         analysisSmoothing.triggered[QAction].connect(self.smoothing)
 
-        # 3.5 Analysis find peaks
+        # 3.4 Analysis find peaks
         analysisMenu.addAction('Find Peak', self.find_peaks)
 
-        # 3.6 Get Area below curve
+        # 3.5 Get Area below curve
         analysisMenu.addAction('Get Area below Curve', self.detemine_area)
 
         # 4. menu: spectra data base
