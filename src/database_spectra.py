@@ -1,5 +1,3 @@
-# Autor: Simon Brehm
-
 import os
 import sqlite3
 from PyQt5 import QtGui, QtCore, QtWidgets
@@ -15,7 +13,7 @@ class DatabasePeakPosition(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.path_of_database = os.path.join(os.path.dirname(__file__), 'database_peakpositions.db')
-        self.n_materials = 0 # number of plotted materials
+        self.n_materials = 0    # number of plotted materials
 
         self.setWindowTitle('Data base peak positions')
         self.entries()
@@ -30,7 +28,8 @@ class DatabasePeakPosition(QtWidgets.QMainWindow):
         else:
             conn = sqlite3.connect(self.path_of_database)
             c = conn.cursor()
-            c.execute('''CREATE TABLE stocks (ID int, material text, peak_positions text, reference text, doi text)''')
+            c.execute('''CREATE TABLE stocks (ID int, material text, comments text, peak_positions text, reference text, 
+            doi text)''')
         c.execute('SELECT * FROM stocks')
         allentries = c.fetchall()  # get all entries stored in databank
         self.headerList = list(map(lambda x: x[0], c.description))  # get header stored in databank as description
@@ -125,8 +124,8 @@ class DatabasePeakPosition(QtWidgets.QMainWindow):
         item.setText(0, str(self.entryList.topLevelItemCount()-1))
         conn = sqlite3.connect(self.path_of_database)
         c = conn.cursor()
-        query = "INSERT INTO stocks (ID, material, peak_positions, reference, doi) VALUES (?, ?, ?, ?, ?)"
-        columnValues = (item.text(0), item.text(1), item.text(2), item.text(3), item.text(4))
+        query = "INSERT INTO stocks (ID, material, comments, peak_positions, reference, doi) VALUES (?, ?, ?, ?, ?, ?)"
+        columnValues = (item.text(0), item.text(1), item.text(2), item.text(3), item.text(4), item.text(5))
         c.execute(query, columnValues)
         conn.commit()
         conn.close()
@@ -158,15 +157,15 @@ class DatabasePeakPosition(QtWidgets.QMainWindow):
     def update_entry(self, item, col):
         conn = sqlite3.connect(self.path_of_database)
         c = conn.cursor()
-        query = 'UPDATE stocks SET material=?, peak_positions=?, reference=?, doi=?  where ID=?'
-        content = (item.text(1), item.text(2), item.text(3), item.text(4), item.text(0))
+        query = 'UPDATE stocks SET material=?, comments=?, peak_positions=?, reference=?, doi=?  where ID=?'
+        content = (item.text(1), item.text(2), item.text(3), item.text(4), item.text(5), item.text(0))
         c.execute(query, content)
         conn.commit()
         conn.close()
 
     def plot_peak_position(self, item, column):
-        if item.text(2) != "":
-            peak_pos = item.text(2).split(",")
+        if item.text(3) != "":
+            peak_pos = item.text(3).split(",")
             peak_pos = [float(pp) for pp in peak_pos]
             id = int(item.text(0))
         else:

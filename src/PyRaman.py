@@ -15,7 +15,6 @@ import re
 import scipy
 import sympy as sp
 import sys
-from packaging import version
 from matplotlib.figure import Figure
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -41,24 +40,11 @@ import Database_Measurements  # see file Database_Measurements
 from BrokenAxes import brokenaxes
 import database_spectra
 
-
-#if version.parse(matplotlib.__version__) < version.parse('3.3.0'):
-#    print("This version of matplotlib ({}) will most likely not support all functions of PyRaman."
-#          "Best version is 3.3.0".format(matplotlib.__version__))
-#elif version.parse(matplotlib.__version__) > version.parse('3.4.0'):
-#    print("This version of matplotlib ({}) will most likely not support all functions of PyRaman. "
-#          "Best version is 3.3.0".format(matplotlib.__version__))
-#else:
-#    pass
-
 # This file essentially consists of four parts:
 # 1. Main Window
 # 2. Text Window
 # 3. Spreadsheet
 # 4. Plot
-
-#test
-
 
 ########################################################################################################################
 # 1. Main window
@@ -305,7 +291,7 @@ class MainWindow(QMainWindow):
 
     def save(self, q):
         """
-        function to save complete project in rmn-File with pickle
+        function to save complete project in json-File
 
         Parameters:
         -----------
@@ -349,29 +335,6 @@ class MainWindow(QMainWindow):
         # save with json
         with open(os.path.splitext(self.pHomeRmn)[0] + ".jrmn", 'w', encoding='utf-8') as f:
             json.dump(save_dict_json, f, ensure_ascii=False)
-
-        # save with pickle
-        # Test if file can be saved
-        #saveControllParam = 0
-        #file = open(os.path.splitext(self.pHomeRmn)[0] + '_test' + os.path.splitext(self.pHomeRmn)[1], 'wb')
-
-        #try:
-        #    pickle.dump(save_dict, file)
-        #except TypeError as e:
-        #    self.show_statusbar_message('TypeError \n Someting went wrong. The file is not saved \n' + str(e), 4000)
-        #    print(str(e))
-        #    saveControllParam = 1
-        #file.close()
-
-        #if saveControllParam == 0:
-        #    file = open(self.pHomeRmn, 'wb')
-        #    try:
-        #        pickle.dump(save_dict, file)
-        #    except TypeError as e:
-        #        self.show_statusbar_message('TypeError \n Someting went wrong. The file is not saved \n' + str(e), 4000)
-        #    file.close()
-        #    os.remove(os.path.splitext(self.pHomeRmn)[0] + '_test' +
-        #              os.path.splitext(self.pHomeRmn)[1])
 
     def get_save_data_plotwindow(self, window):
         """Get all data and parameter from plot window and store it in dictionary, which will be saved with json"""
