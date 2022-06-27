@@ -3644,6 +3644,8 @@ class PlotWindow(QMainWindow):
         editSelectArea = editMenu.addAction('Define data area', self.DefineArea)
         editSelectArea.setStatusTip('Move area limit with left mouse click, set it fix with right mouse click')
 
+        edit_shift = editMenu.addAction("Shift spectrum to zero line", self.shift_spectrum_to_zero)
+
         editNorm = editMenu.addMenu('Normalize spectrum regarding ...')
         editNorm.setStatusTip('Normalizes highest peak to 1')
         editNorm.addAction('... highest peak', self.normalize)
@@ -4089,6 +4091,18 @@ class PlotWindow(QMainWindow):
             idx_peaks, properties = signal.find_peaks(y, height=0.3 * y_max, width=5, distance=50)
 
             print(x[idx_peaks])
+
+    def shift_spectrum_to_zero(self):
+        self.SelectDataset()
+        for n in self.selectedDatasetNumber:
+            spct = self.data[n]["line"]
+            xs = spct.get_xdata()
+            ys = spct.get_ydata()
+            min_y = min(ys)
+            y_shifted = ys-min_y
+            spct.set_ydata(y_shifted)
+            self.data[n]["y"] = y_shifted
+            self.canvas.draw()
 
     def baseline(self):
         self.SelectDataset()

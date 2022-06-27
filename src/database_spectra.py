@@ -16,6 +16,7 @@ class DatabasePeakPosition(QtWidgets.QMainWindow):
         self.n_materials = 0    # number of plotted materials
 
         self.setWindowTitle('Data base peak positions')
+        self.resize(QtCore.QSize(900, 450))
         self.entries()
         self.create_menubar()
         self.create_searchbar()
