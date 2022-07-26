@@ -65,11 +65,11 @@ def figure_edit(axes, parent=None):
     xticks = ax1.get_xticks()
     yticks = ax1.get_yticks()
 
-    if xticks.size > 0:
+    if xticks.size > 1:
         xtickspace = xticks[1] - xticks[0]
     else:
         xtickspace = None
-    if yticks.size > 0:
+    if yticks.size > 1:
         ytickspace = yticks[1] - yticks[0]
     else:
         ytickspace = None
