@@ -26,7 +26,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QTableWidget, QMessageBo
                              QTreeWidgetItem, QTableWidgetItem, QPushButton, QWidget, QMenu,
                              QAction, QDialog, QFileDialog, QAbstractItemView)
 from matplotlib.backends.qt_editor import _formlayout as formlayout
-from scipy import sparse, signal, special
+from scipy import sparse, signal, special, stats
 from scipy.optimize import curve_fit
 from scipy.sparse.linalg import spsolve
 from sympy.utilities.lambdify import lambdify
@@ -3319,7 +3319,7 @@ class FitOptionsDialog(QMainWindow):
         if store_line is True:
             label = "{} (fit)".format(self.spectrum.get_label())
             line.set_label(label)
-            self.parent.data.append(self.parent.create_data(self.x, y_fit, line=line, label=label, style="-"))
+            self.parent.data.append(self.parent.create_data(x1, y_fit, line=line, label=label, style="-"))
         n_param = 1
         for key in self.fit_functions.n_fit_fct.keys():
             for i in range(self.fit_functions.n_fit_fct[key]):
@@ -3333,7 +3333,7 @@ class FitOptionsDialog(QMainWindow):
                 if store_line is True:
                     label = "{} {}".format(key, i)
                     line.set_label(label)
-                    self.parent.data.append(self.parent.create_data(self.x, y_fit, line=line, label=label, style="-"))
+                    self.parent.data.append(self.parent.create_data(x1, y_fit, line=line, label=label, style="-"))
 
         self.canvas.draw()
 
@@ -3647,16 +3647,16 @@ class PlotWindow(QMainWindow):
         # 2. menu item: Edit
         editMenu = menubar.addMenu('&Edit')
 
-        editDelete = editMenu.addMenu('Delete broken pixel - LabRam')
-        editDelete.addAction("532nm")
-        editDelete.addAction("633nm")
-        editDelete.triggered[QAction].connect(self.del_broken_pixel)
+        #editDelete = editMenu.addMenu('Delete broken pixel - LabRam')
+        #editDelete.addAction("532nm")
+        #editDelete.addAction("633nm")
+        #editDelete.triggered[QAction].connect(self.del_broken_pixel)
 
         editDeletePixel = editMenu.addAction('Delete single datapoint', self.del_datapoint)
         editDeletePixel.setStatusTip(
             'Delete selected data point with Enter, Move with arrow keys, Press c to leave Delete-Mode')
 
-        edit_delete_spikes = editMenu.addAction("Delete cosmic spikes", self.delete_cosmic_spikes)
+        edit_remove_spikes = editMenu.addAction("Remove cosmic spikes", self.remove_cosmic_spikes)
 
         editSelectArea = editMenu.addAction('Define data area', self.DefineArea)
         editSelectArea.setStatusTip('Move area limit with left mouse click, set it fix with right mouse click')
@@ -3853,7 +3853,7 @@ class PlotWindow(QMainWindow):
             idx = pickDP.idx
             self.data[j]["x"] = np.delete(self.data[j]["x"], idx)
             self.data[j]["y"] = np.delete(self.data[j]["y"], idx)
-            self.data[j]["line"].set_data(self.data[j]["y"], self.data[j]["y"])
+            self.data[j]["line"].set_data(self.data[j]["x"], self.data[j]["y"])
             self.setFocus()
 
     def del_broken_pixel(self, action):
@@ -3893,9 +3893,36 @@ class PlotWindow(QMainWindow):
             save_data = np.transpose(save_data)
             self.save_to_file('Save data without deleted data points in file', startFileName, save_data)
 
-    def delete_cosmic_spikes(self):
+    def remove_cosmic_spikes(self):
+        """
+        Remove cosmic spikes from Raman spectra
+        Whitaker, Darren A., and Kevin Hayes. "A simple algorithm for despiking Raman spectra."
+        Chemometrics and Intelligent Laboratory Systems 179 (2018): 82-84.
+        @return: spectrum without spikes
+        """
         self.SelectDataset()
-        print("Jo, muss ich noch einrichten")
+        for n in self.selectedDatasetNumber:
+            y = self.data[n]["y"]
+            y_diff = np.diff(y)
+            z = (y_diff - np.median(y_diff)) / scipy.stats.median_abs_deviation(y_diff)
+            z = np.append(z, 0)
+
+            threshold = 8
+            z = (abs(z) > threshold) * 1
+            spikes = np.where(z == 1)
+            ma = 5
+
+            if spikes[0].size > 1:
+                print("{} contains cosmic spikes".format(self.data[n]["label"]))
+
+            for i in spikes[0]:
+                w = np.arange(start=max([1, i - ma]), stop=min([len(y), i + ma]), step=1)
+                w = w[np.where(z[w] == 0)]
+                y[i] = np.mean(np.array(y)[w])
+
+            self.data[n]["line"].set_ydata(y)
+            self.data[n]["y"] = y
+        self.canvas.draw()
 
     def normalize(self, select_peak=False):
         """
