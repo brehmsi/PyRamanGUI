@@ -32,6 +32,8 @@ from scipy.sparse.linalg import spsolve
 from sympy.utilities.lambdify import lambdify
 from sklearn import decomposition
 from tabulate import tabulate
+from pybaselines import whittaker
+import pybaselines
 
 # Import files
 import myfigureoptions  # see file 'myfigureoptions.py'
@@ -2409,26 +2411,53 @@ class BaselineCorrectionMethods:
     """Class containing all implemented methods of base line correction"""
     def __init__(self):
         # all implemented baseline correction methods
-        self.methods = {'Rubberband':
-                            {'function': self.rubberband, 'parameter': {}},
-                        'Polynomial':
-                            {'function': self.polynomial, 'parameter': {'order': 1, 'roi': [[150, 160], [3800, 4000]]}},
-                        'Univariate Spline':
-                            {'function': self.unispline, 'parameter': {'s': 1e0, 'roi': [[150, 160], [3800, 4000]]}},
-                        'GCV Spline':
-                            {'function': self.gcvspline, 'parameter': {'s': 0.1, 'roi': [[150, 160], [3800, 4000]]}},
-                        'Asymmetric Least Square':
-                            {'function': self.ALS, 'parameter': {'p': 0.001, 'lambda': 10000000}},
-                        'Adaptive Iteratively Reweighted Penalized Least Squares':
-                            {'function': self.airPLS, 'parameter': {'lambda': 10000000}},
-                        'Asymmetrically Reweighted Penalized Least Squares':
-                            {'function': self.arPLS, 'parameter': {'lambda': 10000000}},
-                        'Doubly Reweighted Penalized Least Squares':
-                            {'function': self.drPLS, 'parameter': {'lambda': 1000000}}
-                        }
-        # contains current method, for baseline dialog
-        # start method is ASL
-        self.current_method = 'Asymmetric Least Square'
+        self.method_groups = {
+            "Whittaker":
+                [
+                    "Asymmetric Least Square",
+                    "Improved Asymmetric Least Square",
+                    "Adaptive Iteratively Reweighted Penalized Least Squares",
+                    "Asymmetrically Reweighted Penalized Least Squares",
+                    "Doubly Reweighted Penalized Least Squares",
+                    "Derivative Peak-Screening Asymmetric Least Square"
+                ],
+            "Spline":
+                ["Univariate Spline", "GCV Spline"],
+            "Polynomial":
+                ["Polynomial", "Polynomial (without regions)"],
+            "Miscellaneous":
+                ["Rubberband", "Rolling Ball"]
+        }
+        self.methods = {
+            "Rubberband":
+                {"function": self.rubberband, "parameter": {}},
+            "Rolling Ball":
+                {"function": self.rolling_ball, "parameter": {"half window": 5}},
+            "Polynomial":
+                {"function": self.polynomial, "parameter": {"order": 3, "roi": [[150, 160], [3800, 4000]]}},
+            "Polynomial (without regions)":
+                {"function": self.polynomial_02, "parameter": {"order": 3}},
+            "Univariate Spline":
+                {"function": self.unispline, "parameter": {"s": 1e0, "roi": [[150, 160], [3800, 4000]]}},
+            "GCV Spline":
+                {"function": self.gcvspline, "parameter": {"s": 0.1, "roi": [[150, 160], [3800, 4000]]}},
+            "Asymmetric Least Square":
+                {"function": self.ALS, "parameter": {"p": 0.001, "lambda": 10000000}},
+            "Improved Asymmetric Least Square":
+                {"function": self.imALS, "parameter": {"p": 0.001, "lambda": 100000}},
+            "Adaptive Iteratively Reweighted Penalized Least Squares":
+                {"function": self.airPLS, "parameter": {"lambda": 10000000}},
+            "Asymmetrically Reweighted Penalized Least Squares":
+                {"function": self.arPLS, "parameter": {"lambda": 10000000}},
+            "Doubly Reweighted Penalized Least Squares":
+                {"function": self.drPLS, "parameter": {"lambda": 1000000, "eta": 0.5}},
+            "Derivative Peak-Screening Asymmetric Least Square":
+                {"function": self.derpsALS, "parameter": {"lambda": 1000000, "p": 0.01}}
+        }
+
+        # contains current method, for baseline dialog; start method is ASL
+        self.current_method = "Asymmetric Least Square"
+        self.current_group = "Whittaker"
 
     def rubberband(self, x, y):
         """
@@ -2448,11 +2477,21 @@ class BaselineCorrectionMethods:
         # y - background-corrected Intensity-values, z - background
         return y, z
 
+    def rolling_ball(self, x, y, half_window):
+        baseline, _ = pybaselines.morphological.rolling_ball(y, half_window=int(half_window))
+        y_corr = y - baseline
+        return y_corr, baseline
+
     def polynomial(self, x, y, p_order, roi):
-        y, z = rp.baseline(x, y, np.array(roi), 'poly', polynomial_order=p_order)
+        y, z = rp.baseline(x, y, np.array(roi), "poly", polynomial_order=p_order)
         y = y.flatten()
         z = z.flatten()
         return y, z
+
+    def polynomial_02(self, x, y, p_order):
+        baseline, _ = pybaselines.polynomial.poly(y, x_data=x, poly_order=int(p_order))
+        y_corr = y - baseline
+        return y_corr, baseline
 
     def unispline(self, x, y, s, roi):
         """
@@ -2464,7 +2503,7 @@ class BaselineCorrectionMethods:
         @return: baseline corrected y data and baseline z
         """
         try:
-            y, z = rp.baseline(x, y, np.array(roi), 'unispline', s=s)
+            y, z = rp.baseline(x, y, np.array(roi), "unispline", s=s)
         except ValueError as e:
             print(e)
             return None
@@ -2497,85 +2536,60 @@ class BaselineCorrectionMethods:
         Leiden University Medical Centre Report , 1(1):5, 2005. from Eilers and Boelens
         also look at: https://stackoverflow.com/questions/29156532/python-baseline-correction-library
         """
-        niter = 10
-        # p = 0.001   			#asymmetry 0.001 <= p <= 0.1 is a good choice
-        # recommended from Eilers and Boelens for Raman: 0.001    recommended from Simon: 0.0001
-        # lam = 10000000			#smoothness 10^2 <= lambda <= 10^9
-        # recommended from Eilers and Boelens for Raman: 10^7      recommended from Simon: 10^7
-        L = len(x)
-        D = sparse.csc_matrix(np.diff(np.eye(L), 2))
-        w = np.ones(L)
-        for i in range(niter):
-            W = sparse.spdiags(w, 0, L, L)
-            Z = W + lam * D.dot(D.transpose())
-            z = spsolve(Z, w * y)
-            w = p * (y > z) + (1 - p) * (y < z)
-        y = y - z
-        return y, z  # y - background-corrected Intensity-values, baseline - baseline
+        baseline, _ = whittaker.asls(y, lam=lam, p=p)
+        y_corr = y - baseline
+        return y_corr, baseline
 
-    def airPLS(self, x, y, lam, ratio=0.001):
+    def airPLS(self, x, y, lam):
         """
         adaptive  iteratively  reweighted  penalized  least  squares
         based on: Zhi-Min  Zhang,  Shan  Chen,  and  Yi-Zeng Liang.
         Baseline correction using adaptive iteratively reweighted penalized least squares.
         Analyst, 135(5):1138–1146, 2010.
-        code from https://github.com/charlesll/rampy/blob/master/rampy/baseline.py
         """
+        baseline, params = whittaker.airpls(y, lam=lam)
+        y_corr = y - baseline
+        return y_corr, baseline
 
-        N = len(y)
-        D = sparse.csc_matrix(np.diff(np.eye(N), 2))
-        w = np.ones(N)
-        iter = 0
-        while True:
-            iter += 1
-            W = sparse.spdiags(w, 0, N, N)
-            Z = W + lam * D.dot(D.transpose())
-            z = sparse.linalg.spsolve(Z, w * y)
-            d = y - z
-            # make d- and get w^t with m and s
-            dn = d[d < 0]
-            wt = 0 * (y >= z) + np.exp(iter * (y - z) / np.linalg.norm(dn)) * (y < z)
-            # check exit condition and backup
-            if np.linalg.norm(dn) < ratio * np.linalg.norm(y):
-                break
-            w = wt
-        y = y - z
-        return y, z
+    def arPLS(self, x, y, lam):
+        """
+        (automatic) Baseline correction using asymmetrically reweighted penalized least squares smoothing.
+        Baek et al. 2015, Analyst 140: 250-257;
+        """
+        baseline, params = whittaker.arpls(y, lam=lam)
+        y_corr = y - baseline
+        return y_corr, baseline
 
-    def arPLS(self, x, y, lam, ratio=0.001):
-        """(automatic) Baseline correction using asymmetrically reweighted penalized least squares smoothing.
-        Baek et al. 2015, Analyst 140: 250-257;"""
-
-        N = len(y)
-        D = sparse.csc_matrix(np.diff(np.eye(N), 2))
-        w = np.ones(N)
-
-        while True:
-            W = sparse.spdiags(w, 0, N, N)
-            Z = W + lam * D.dot(D.transpose())
-            z = sparse.linalg.spsolve(Z, w * y)
-            d = y - z
-            # make d- and get w^t with m and s
-            dn = d[d < 0]
-            m = np.mean(dn)
-            s = np.std(dn)
-            wt = 1.0 / (1 + np.exp(2 * (d - (2 * s - m)) / s))
-            # check exit condition and backup
-            if np.linalg.norm(w - wt) / np.linalg.norm(w) < ratio:
-                break
-            w = wt
-        y = y - z
-        return y, z
-
-    def drPLS(self, x, y, lam, ratio=0.0001):
+    def drPLS(self, x, y, lam, eta):
         """(automatic) Baseline correction method based on doubly reweighted penalized least squares.
         Xu et al., Applied Optics 58(14):3913-3920."""
-        # roi is not needed for this baseline, but still is a requirement when calling the function.
-        roi = np.array([[0, 100], [200, 220], [280, 290], [420, 430], [480, 500]])
-        y, z = rp.baseline(x, y, roi, 'drPLS', ratio=ratio, lam=lam)
-        y = y.flatten()
-        z = z.flatten()
-        return y, z
+        baseline, params = whittaker.drpls(y, lam=lam, eta=eta)
+        y_corr = y - baseline
+        return y_corr, baseline
+
+    def imALS(self, x, y, p, lam):
+        """
+        He, Shixuan, et al. "Baseline correction for Raman spectra using an improved asymmetric least squares method."
+        Analytical Methods 6.12 (2014): 4402-4407.
+        """
+        baseline, params = whittaker.iasls(y, lam=lam, p=p)
+        y_corr = y - baseline
+        return y_corr, baseline
+
+    def derpsALS(self, x, y, lam, p, k=None):
+        """
+        Korepanov, Vitaly I. "Asymmetric least‐squares baseline algorithm with peak screening for automatic processing
+        of the Raman spectra." Journal of Raman Spectroscopy 51.10 (2020): 2061-2065.
+        @param x:
+        @param y:
+        @param lam:
+        @param p:
+        @param k:
+        @return:
+        """
+        baseline, params = whittaker.derpsalsa(y, lam=lam, p=p, k=k)
+        y_corr = y - baseline
+        return y_corr, baseline
 
 
 class BaselineCorrectionsDialog(QMainWindow):
@@ -2590,6 +2604,7 @@ class BaselineCorrectionsDialog(QMainWindow):
 
         self.blcm = blc_methods
         self.methods = self.blcm.methods
+        self.method_groups = self.blcm.method_groups
 
         self.spectrum = None
         self.x = None
@@ -2615,15 +2630,15 @@ class BaselineCorrectionsDialog(QMainWindow):
         mthd_prmtr_layout = QtWidgets.QHBoxLayout()
         self.parameter_layout = QtWidgets.QGridLayout()
 
-        method_group = self.create_method_group()
+        method_box = self.create_method_box()
         self.fill_parameter_layout()
-        parameter_group = QtWidgets.QGroupBox('Parameter')
+        parameter_box = QtWidgets.QGroupBox("Parameter")
         button_layout = self.create_buttons()
 
         # set layouts
-        parameter_group.setLayout(self.parameter_layout)
-        mthd_prmtr_layout.addWidget(method_group)
-        mthd_prmtr_layout.addWidget(parameter_group)
+        parameter_box.setLayout(self.parameter_layout)
+        mthd_prmtr_layout.addWidget(method_box)
+        mthd_prmtr_layout.addWidget(parameter_box)
         main_layout.addLayout(mthd_prmtr_layout)
         main_layout.addLayout(button_layout)
         widget = QtWidgets.QWidget()
@@ -2633,26 +2648,54 @@ class BaselineCorrectionsDialog(QMainWindow):
         self.setWindowModality(Qt.ApplicationModal)
         self.show()
 
-    def create_method_group(self):
+    def create_method_box(self):
         method_layout = QtWidgets.QVBoxLayout()
-        method_group = QtWidgets.QGroupBox('Methods')
-        # method checkboxes
-        method_check_group = QtWidgets.QButtonGroup(self)
-        method_check_group.setExclusive(True)
-        for meth in self.methods.keys():
-            cb = QCheckBox(meth)
-            method_layout.addWidget(cb)
-            method_check_group.addButton(cb)
-            method_check_group.addButton(cb)
-            if meth == self.blcm.current_method:
-                cb.setChecked(True)
-        method_check_group.buttonClicked.connect(self.method_change)
-        method_group.setLayout(method_layout)
-        return method_group
+        method_box = QtWidgets.QGroupBox("Methods")
+
+        # combo box for method category
+        method_combo_widget = QtWidgets.QComboBox()
+        for key in self.method_groups.keys():
+            method_combo_widget.addItem(key)
+        method_combo_widget.currentTextChanged.connect(self.method_group_changed)
+        method_layout.addWidget(method_combo_widget)
+
+        # combo box for method
+        self.combo_widget_methods = QtWidgets.QComboBox()
+        for me in self.method_groups[self.blcm.current_group]:
+            self.combo_widget_methods.addItem(me)
+        self.combo_widget_methods.currentTextChanged.connect(self.method_change)
+        method_layout.addWidget(self.combo_widget_methods)
+
+        method_box.setLayout(method_layout)
+
+        return method_box
+
+    def method_group_changed(self, text):
+        self.blcm.current_group = text
+        self.combo_widget_methods.clear()
+        for me in self.method_groups[self.blcm.current_group]:
+            self.combo_widget_methods.addItem(me)
+        self.method_change(self.method_groups[self.blcm.current_group][0])
+
+    def method_change(self, text):
+        if text is not None and text != "":
+            self.blcm.current_method = text
+        elif text == "":
+            return
+
+        # clear layout
+        self.clear_layout(self.parameter_layout)
+
+        self.parameter_editor = {}
+        self.parameter_label = {}
+
+        # create new layout
+        self.fill_parameter_layout()
+        self.update()
 
     def fill_parameter_layout(self):
         idx = 0
-        for key, val in self.methods[self.blcm.current_method]['parameter'].items():
+        for key, val in self.methods[self.blcm.current_method]["parameter"].items():
             if key == "roi":
                 self.add_roi_editors(val, idx)
                 continue
@@ -2661,7 +2704,7 @@ class BaselineCorrectionsDialog(QMainWindow):
             self.parameter_layout.addWidget(self.parameter_editor[key], idx, 0)
             self.parameter_layout.addWidget(self.parameter_label[key], idx, 1)
             self.parameter_editor[key].setText(str(val))
-            self.methods[self.blcm.current_method]['parameter'][key] = float(self.parameter_editor[key].text())
+            self.methods[self.blcm.current_method]["parameter"][key] = float(self.parameter_editor[key].text())
             idx += 1
 
     def add_roi_editors(self, roi, idx):
@@ -2669,12 +2712,12 @@ class BaselineCorrectionsDialog(QMainWindow):
         roi_layout_v = QtWidgets.QVBoxLayout()
         button_layout_v = QtWidgets.QVBoxLayout()
         button_layout_h = QtWidgets.QHBoxLayout()
-        self.parameter_label['roi'] = QtWidgets.QLabel('regions of interest')
-        button_add = QtWidgets.QPushButton('+')
-        button_remove = QtWidgets.QPushButton('-')
+        self.parameter_label["roi"] = QtWidgets.QLabel("regions of interest")
+        button_add = QtWidgets.QPushButton("+")
+        button_remove = QtWidgets.QPushButton("-")
         button_layout_h.addWidget(button_add)
         button_layout_h.addWidget(button_remove)
-        button_layout_v.addWidget(self.parameter_label['roi'])
+        button_layout_v.addWidget(self.parameter_label["roi"])
         button_layout_v.addLayout(button_layout_h)
         button_add.clicked.connect(self.add_roi)
         button_remove.clicked.connect(self.del_roi)
@@ -2689,28 +2732,28 @@ class BaselineCorrectionsDialog(QMainWindow):
             roi_layout_h.addWidget(editor2)
             roi_layout_v.addLayout(roi_layout_h)
             roi_editors.append([editor1, editor2])
-            self.methods[self.blcm.current_method]['parameter']['roi'][i] = [float(editor1.text()),
+            self.methods[self.blcm.current_method]["parameter"]["roi"][i] = [float(editor1.text()),
                                                                              float(editor2.text())]
         self.parameter_layout.addLayout(roi_layout_v, idx, 0)
-        self.parameter_editor['roi'] = roi_editors
+        self.parameter_editor["roi"] = roi_editors
 
     def add_roi(self):
         try:
-            last_roi = self.methods[self.blcm.current_method]['parameter']['roi'][-1][1]
+            last_roi = self.methods[self.blcm.current_method]["parameter"]["roi"][-1][1]
         except IndexError:
             last_roi = 140
-        self.methods[self.blcm.current_method]['parameter']['roi'].append([last_roi+10, last_roi+40])
-        self.method_change()
+        self.methods[self.blcm.current_method]["parameter"]["roi"].append([last_roi+10, last_roi+40])
+        self.method_change(None)
 
     def del_roi(self):
         try:
-            del self.methods[self.blcm.current_method]['parameter']['roi'][-1]
+            del self.methods[self.blcm.current_method]["parameter"]["roi"][-1]
         except IndexError:
             pass
-        self.method_change()
+        self.method_change(None)
 
     def sort_roi(self, roi_list):
-        return (sorted(roi_list, key=lambda x: x[0]))
+        return sorted(roi_list, key=lambda x: x[0])
 
     def create_buttons(self):
         # buttons for ok, close and apply
@@ -2738,29 +2781,15 @@ class BaselineCorrectionsDialog(QMainWindow):
 
     def plot_baseline(self):
         params = self.methods[self.blcm.current_method]["parameter"].values()
-        return_value = self.methods[self.blcm.current_method]['function'](self.x, self.y, *params)
+        return_value = self.methods[self.blcm.current_method]["function"](self.x, self.y, *params)
         if return_value is None:
             return
         else:
             yb, zb = return_value
-        self.base_line, = self.ax.plot(self.x, zb, 'c--', label='baseline ({})'.format(self.spectrum.get_label()))
-        self.blcSpektrum, = self.ax.plot(self.x, yb, 'c-',
-                                         label='baseline-corrected ({})'.format(self.spectrum.get_label()))
+        self.base_line, = self.ax.plot(self.x, zb, "c--", label="baseline ({})".format(self.spectrum.get_label()))
+        self.blcSpektrum, = self.ax.plot(self.x, yb, "c-",
+                                         label="baseline-corrected ({})".format(self.spectrum.get_label()))
         self.fig.canvas.draw()
-
-    def method_change(self, button=None):
-        if button is not None:
-            self.blcm.current_method = button.text()
-
-        # clear layout
-        self.clear_layout(self.parameter_layout)
-
-        self.parameter_editor = {}
-        self.parameter_label = {}
-
-        # create new layout
-        self.fill_parameter_layout()
-        self.update()
 
     def clear_layout(self, layout):
         for i in reversed(range(layout.count())):
@@ -2785,16 +2814,16 @@ class BaselineCorrectionsDialog(QMainWindow):
         params = self.methods[self.blcm.current_method]["parameter"].values()
         name = self.spectrum.get_label()
         for key, val in self.parameter_editor.items():
-            if key == 'roi':
+            if key == "roi":
                 for i, roi_pe in enumerate(val):
                     roi_start = float(roi_pe[0].text())
                     roi_end = float(roi_pe[1].text())
-                    self.methods[self.blcm.current_method]["parameter"]['roi'][i] = [roi_start, roi_end]
-                self.methods[self.blcm.current_method]["parameter"]['roi'] = self.sort_roi(
-                    self.methods[self.blcm.current_method]["parameter"]['roi'])
+                    self.methods[self.blcm.current_method]["parameter"]["roi"][i] = [roi_start, roi_end]
+                self.methods[self.blcm.current_method]["parameter"]["roi"] = self.sort_roi(
+                    self.methods[self.blcm.current_method]["parameter"]["roi"])
                 continue
             self.methods[self.blcm.current_method]["parameter"][key] = float(val.text())
-        return_value = self.methods[self.blcm.current_method]['function'](self.x, self.y, *params)
+        return_value = self.methods[self.blcm.current_method]["function"](self.x, self.y, *params)
         if return_value is None:
             self.close()
             return
@@ -2802,49 +2831,47 @@ class BaselineCorrectionsDialog(QMainWindow):
             yb, zb = return_value
 
         # Plot
-        label_spct = '{} (baseline-corrected)'.format(name)
-        spct_corr, = self.ax.plot(self.x, yb, 'c-', label=label_spct)[0]
-        self.pw.create_data(self.x, yb, line=spct_corr, label=label_spct, style="-")
-        baseline = self.ax.plot(self.x, zb, 'c--', label='baseline ({})'.format(name))
-        self.pw.create_data(self.x, zb, line=baseline, label='baseline ({})'.format(name), style="-")
+        label_spct = "{} (baseline-corrected)".format(name)
+        spct_corr, = self.ax.plot(self.x, yb, "c-", label=label_spct)
+        self.pw.data.append(self.pw.create_data(self.x, yb, line=spct_corr, label=label_spct, style="-"))
+        baseline, = self.ax.plot(self.x, zb, "c--", label="baseline ({})".format(name))
+        self.pw.data.append(self.pw.create_data(
+            self.x, zb, line=baseline, label="baseline ({})".format(name), style="-"))
+        self.fig.canvas.draw()
         self.close()
 
         # Save baseline corrected data
-        (fileBaseName, fileExtension) = os.path.splitext(name)
-        startFileDirName = os.path.dirname(self.pw.selectedData[0][3])
-        startFileBaseName = startFileDirName + '/' + fileBaseName
-        startFileName = startFileBaseName + '_bgc.txt'
-        save_data = [self.x, yb]
-        save_data = np.transpose(save_data)
-        self.pw.save_to_file('Save background-corrected data in file', startFileName, save_data)
-
-        # Append data
-        self.pw.data.append([self.x, yb, '{}_bgc'.format(fileBaseName), startFileName, '-', 0])
-        self.fig.canvas.draw()
+        # (fileBaseName, fileExtension) = os.path.splitext(name)
+        # startFileDirName = os.path.dirname(self.pw.selectedData[0]["filename"])
+        # startFileBaseName = startFileDirName + "/" + fileBaseName
+        # startFileName = startFileBaseName + "_bgc.txt"
+        # save_data = [self.x, yb]
+        # save_data = np.transpose(save_data)
+        # self.pw.save_to_file("Save background-corrected data in file", startFileName, save_data)
 
     def apply_call(self):
         params = self.methods[self.blcm.current_method]["parameter"].values()
         name = self.spectrum.get_label()
         self.clear_plot()
         for key, val in self.parameter_editor.items():
-            if key == 'roi':
+            if key == "roi":
                 for i, roi_pe in enumerate(val):
                     roi_start = float(roi_pe[0].text())
                     roi_end = float(roi_pe[1].text())
-                    self.methods[self.blcm.current_method]["parameter"]['roi'][i] = [roi_start, roi_end]
-                    self.roi_spans.append(self.ax.axvspan(roi_start, roi_end, alpha=0.5, color='yellow'))
-                self.methods[self.blcm.current_method]["parameter"]['roi'] = self.sort_roi(
-                    self.methods[self.blcm.current_method]["parameter"]['roi'])
+                    self.methods[self.blcm.current_method]["parameter"]["roi"][i] = [roi_start, roi_end]
+                    self.roi_spans.append(self.ax.axvspan(roi_start, roi_end, alpha=0.5, color="yellow"))
+                self.methods[self.blcm.current_method]["parameter"]["roi"] = self.sort_roi(
+                    self.methods[self.blcm.current_method]["parameter"]["roi"])
                 continue
             self.methods[self.blcm.current_method]["parameter"][key] = float(val.text())
-        return_value = self.methods[self.blcm.current_method]['function'](self.x, self.y, *params)
+        return_value = self.methods[self.blcm.current_method]["function"](self.x, self.y, *params)
         if return_value is None:
             self.close()
             return
         else:
             yb, zb = return_value
-        self.base_line, = self.ax.plot(self.x, zb, 'c--', label='baseline ({})'.format(name))
-        self.blcSpektrum, = self.ax.plot(self.x, yb, 'c-', label='baseline-corrected ({})'.format(name))
+        self.base_line, = self.ax.plot(self.x, zb, "c--", label="baseline ({})".format(name))
+        self.blcSpektrum, = self.ax.plot(self.x, yb, "c-", label="baseline-corrected ({})".format(name))
         self.fig.canvas.draw()
 
     def closeEvent(self, event):
@@ -3855,6 +3882,7 @@ class PlotWindow(QMainWindow):
             self.data[j]["y"] = np.delete(self.data[j]["y"], idx)
             self.data[j]["line"].set_data(self.data[j]["x"], self.data[j]["y"])
             self.setFocus()
+            self.canvas.draw()
 
     def del_broken_pixel(self, action):
         """

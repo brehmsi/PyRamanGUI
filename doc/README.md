@@ -23,7 +23,7 @@ shows the windows of the selected folder. You can switch between
 folders by double-clicking at another folder at the side tree or by 
 changing the tab of the workspace.
 There are three different kinds of windows,
-[Spreadsheet <img src="pics/Icon_spreadsheet.png" alt="Icon of Spreadsheet" height="15"/>](##Spreadsheet),
+[Spreadsheet <img src="pics/Icon_spreadsheet.png" alt="Icon of Spreadsheet" height="15"/>](#Spreadsheet),
 [Plotwindow <img src="pics/Icon_plotwindow.png" alt="Icon of Plotwindow" height="15"/>](#Plotwindow),
 [Textwindow <img src="pics/Icon_textwindow.png" alt="Icon of Textwindow" height="15"/>](#Text Window).
 They are explained in more detail in the following sections.
