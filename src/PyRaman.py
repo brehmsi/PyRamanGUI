@@ -1381,11 +1381,11 @@ class SpreadSheetWindow(QMainWindow):
         plot_data = header_menu.addMenu("Plot data")
         plot_data.addAction("Line Plot", self.get_plot_data)
         plot_data.addAction("Dot Plot", self.get_plot_data)
-        delete_column = header_menu.addAction('Delete this column')
-        set_xy = header_menu.addMenu('Set as:')
-        set_xy.addAction('X')
-        set_xy.addAction('Y')
-        set_xy.addAction('Yerr')
+        delete_column = header_menu.addAction("Delete this column")
+        set_xy = header_menu.addMenu("Set as:")
+        set_xy.addAction("X")
+        set_xy.addAction("Y")
+        set_xy.addAction("Yerr")
         set_xy.triggered[QAction].connect(lambda QAction: self.set_column_type(QAction, selected_column))
         convert_unit = header_menu.addMenu("convert unit")
         convert_unit.addAction("cm^-1 to nm")
@@ -1393,10 +1393,10 @@ class SpreadSheetWindow(QMainWindow):
         convert_unit.triggered[QAction].connect(lambda QAction: self.convert_column_unit(QAction, selected_column))
         header_menu.addAction("Flip column", lambda: self.flip_column(selected_column))
         mov_col = header_menu.addMenu("Move column")
-        mov_col.addAction('Move left')
-        mov_col.addAction('Move right')
-        mov_col.addAction('Move to first')
-        mov_col.addAction('Move to last')
+        mov_col.addAction("Move left")
+        mov_col.addAction("Move right")
+        mov_col.addAction("Move to first")
+        mov_col.addAction("Move to last")
         mov_col.triggered[QAction].connect(lambda QAction: self.move_column(QAction, selected_column))
         ac = header_menu.exec_(self.header_table.mapToGlobal(position))
         # Delete selected colums
@@ -3079,10 +3079,14 @@ class FitOptionsDialog(QMainWindow):
         self.setWindowModality(Qt.ApplicationModal)
 
     def create_menubar(self):
-        self.menubar = self.menuBar()
-        fileMenu = self.menubar.addMenu("File")
-        fileMenu.addAction("Save Fit Parameter", self.save_fit_parameter)
-        fileMenu.addAction("Load Fit Parameter", self.load_fit_parameter)
+        menu_bar = self.menuBar()
+        file_menu = menu_bar.addMenu("File")
+        file_menu.addAction("Save Fit Parameter", self.save_fit_parameter)
+        file_menu.addAction("Load Fit Parameter", self.load_fit_parameter)
+
+        edit_menu = menu_bar.addMenu("Edit")
+        edit_menu.addAction("Clear table", self.clear_table)
+        edit_menu.addAction("Sort fit functions by wavenumber", self.sort_fit_functions)
 
     def add_function(self, fct_name, fct_value):
         """
@@ -3139,10 +3143,11 @@ class FitOptionsDialog(QMainWindow):
     def remove_function(self):
         last_key = len(self.used_functions)
         row_indices = [i for i, x in enumerate(self.vheaders) if x == str(last_key)]
-        for j in reversed(row_indices):
-            del self.vheaders[j]
-            self.table.removeRow(j)
-        del self.used_functions[last_key-1]
+        if last_key != 0:
+            for j in reversed(row_indices):
+                del self.vheaders[j]
+                self.table.removeRow(j)
+            del self.used_functions[last_key-1]
 
     def fct_change(self, fct_name, n):
         old_parameters = self.used_functions[n]["parameter"].keys()
@@ -3211,32 +3216,53 @@ class FitOptionsDialog(QMainWindow):
                                                       error_sound=True)
                 # add: replace item with old previous item
 
-    def save_fit_parameter(self):
+    def save_fit_parameter(self, file_name=None):
         """Save fit parameter in txt file"""
 
         # Get fit_parameter in printable form
         print_table, r_squared = self.print_fitparameter()
-
-        # Save fit parameter in file
         save_data = print_table.get_string()
-        filename = self.spectrum.get_label()
-        # startFileDirName = os.path.dirname(self.parent.mw.pHomeRmn)
-        # filename = '{}/{}_fitparameter.txt'.format(startFileDirName, filename)
-        # filename = ""
-        self.parent.save_to_file('Save fit parameter in file', filename, save_data)
 
-    def load_fit_parameter(self):
-        load_filename = QtWidgets.QFileDialog.getOpenFileName(self, 'Load fit parameter')
-        if load_filename[0] != '':
-            filename = load_filename[0]
-        else:
+        # Get file name
+        if file_name is None:
+            file_name = QFileDialog.getSaveFileName(self, "Save fit parameter in file",
+                                                       os.path.dirname(self.parent.mw.pHomeRmn),
+                                                       "All Files (*);;Text Files (*.txt)")
+            if file_name[0] != '':
+                file_name = file_name[0]
+                if file_name[-4:] == ".txt":
+                    pass
+                else:
+                    file_name = str(file_name) + ".txt"
+            else:
+                return
+
+        file = open(file_name, "w+")
+        file.write(save_data)
+        file.close()
+
+    def load_fit_parameter(self, file_name=None):
+        if file_name is None:
+            load_filename = QtWidgets.QFileDialog.getOpenFileName(self, "Load fit parameter")
+            if load_filename[0] != '':
+                file_name = load_filename[0]
+            else:
+                return
+
+        try:
+            table_content = np.genfromtxt(file_name, dtype="str", delimiter="|", skip_header=3, skip_footer=1,
+                                          usecols=(1, 2, 3), autostrip=True)
+        except ValueError as e:
+            print("File not readable")
+            print(e)
             return
 
-        table_content = np.genfromtxt(filename, dtype='str', delimiter='|', skip_header=3, skip_footer=1,
-                                      usecols=(1, 2, 3), autostrip=True)
-
         # set Background
-        self.table.item(0, 1).setText(str(table_content[0][2]))  # starting parameter
+        if table_content[0][0] == "background":
+            self.table.item(0, 2).setText(str(table_content[0][1]))  # starting parameter
+        else:
+            print("File not readable")
+            return
 
         # delete background from table content
         table_content = np.delete(table_content, 0, axis=0)
@@ -3247,7 +3273,6 @@ class FitOptionsDialog(QMainWindow):
         while row < len(table_content):
             if all(tr == "" for tr in table_content[row]):
                 if fct_value:
-                    print(fct_value)
                     self.add_function(fct_name, fct_value)
                 if row == len(table_content)-1:
                     break
@@ -3258,8 +3283,34 @@ class FitOptionsDialog(QMainWindow):
                 if table_content[row][0] == "area under curve":
                     pass
                 else:
-                    fct_value[table_content[row][0]]=[table_content[row][1], 0, np.inf]
+                    fct_value[table_content[row][0]] = [table_content[row][1], 0, np.inf]
                 row += 1
+
+    def sort_fit_functions(self):
+        parameter = []
+        for ufct in self.used_functions:
+            name_fct = ufct["fct"].currentText()
+            parameter.append({
+                "fct": name_fct,
+                "parameter": {}
+            })
+            for key, val in ufct["parameter"].items():
+                parameter[-1]["parameter"][key] = [float(val["value"].text()),
+                                                   float(val["lower boundaries"].text()),
+                                                   float(val["upper boundaries"].text())]
+        parameter.sort(key=self.take_position_value)
+        self.clear_table()
+        for p in parameter:
+            self.add_function(p["fct"], p["parameter"])
+
+    def take_position_value(self, element):
+        """function for sorting purposes"""
+        return element["parameter"]["position"][0]
+
+    def clear_table(self):
+        while len(self.vheaders) > 1:
+            self.remove_function()
+        self.reset_n_fit_fct()
 
     def apply(self):
         self.clear_plot()
@@ -3317,8 +3368,8 @@ class FitOptionsDialog(QMainWindow):
         for ufct in self.used_functions:
             name_fct = ufct["fct"].currentText()
             for key, val in ufct["parameter"].items():
-                parameter[name_fct].append(float(val["value"].text()))  # Peak position in cm^-1
-                if val["lower boundaries"].text()== '':
+                parameter[name_fct].append(float(val["value"].text()))  # Parameter
+                if val["lower boundaries"].text() == '':
                     lower_boundaries[name_fct].append(-np.inf)
                 else:
                     lower_boundaries[name_fct].append(float(val["lower boundaries"].text()))
@@ -3414,6 +3465,8 @@ class FitOptionsDialog(QMainWindow):
         self.fit_functions.n_fit_fct = dict.fromkeys(self.fit_functions.n_fit_fct, 0)
 
     def closeEvent(self, event):
+        self.save_fit_parameter("fit_parameter_cache.txt")
+
         self.reset_n_fit_fct()
         self.closeSignal.emit()
         event.accept
@@ -4109,11 +4162,15 @@ class PlotWindow(QMainWindow):
 
             fit_dialog = FitOptionsDialog(self, x, y, self.data[n]["line"])
             fit_dialog.setMinimumWidth(600)
+            if os.path.isfile("fit_parameter_cache.txt"):
+                fit_dialog.load_fit_parameter(file_name="fit_parameter_cache.txt")
             fit_dialog.show()
 
             loop = QtCore.QEventLoop()
             fit_dialog.closeSignal.connect(loop.quit)
             loop.exec_()
+
+        os.remove("fit_parameter_cache.txt")
 
     def DefineArea(self):
         self.SelectDataset()
