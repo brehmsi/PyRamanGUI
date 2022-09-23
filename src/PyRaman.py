@@ -3778,11 +3778,7 @@ class PlotWindow(QMainWindow):
         analysisMenu.addAction('Baseline Corrections', self.baseline)
 
         # 3.3 Smoothing
-        analysisSmoothing = analysisMenu.addMenu('&Smoothing')
-        analysisSmoothing.addAction('Savitsky-Golay')
-        analysisSmoothing.addAction('Whittaker')
-        analysisSmoothing.triggered[QAction].connect(self.smoothing)
-        analysisMenu.addAction("Smoothing Options", self.smoothing_options)
+        analysisMenu.addAction("Smooth spectrum", self.smoothing)
 
         # 3.4 Analysis find peaks
         analysisMenu.addAction('Find Peak', self.find_peaks)
@@ -4262,7 +4258,7 @@ class PlotWindow(QMainWindow):
             if baseline_dialog.closebutton.isChecked():
                 break
 
-    def smoothing_options(self):
+    def smoothing(self):
         self.SelectDataset()
         smoothing_methods = SmoothingMethods()
         for n in self.selectedDatasetNumber:
@@ -4270,31 +4266,16 @@ class PlotWindow(QMainWindow):
             x = spct.get_xdata()
             y = spct.get_ydata()
 
-            baseline_dialog = SmoothingDialog(self, smoothing_methods)
-            baseline_dialog.get_smoothed_spectrum(x, y, spct)
+            smooth_dialog = SmoothingDialog(self, smoothing_methods)
+            smooth_dialog.get_smoothed_spectrum(x, y, spct)
 
             # wait until QMainWindow is closes
             loop = QtCore.QEventLoop()
-            baseline_dialog.closebutton.clicked.connect(loop.quit)
-            baseline_dialog.finishbutton.clicked.connect(loop.quit)
+            smooth_dialog.closebutton.clicked.connect(loop.quit)
+            smooth_dialog.finishbutton.clicked.connect(loop.quit)
             loop.exec_()
-            if baseline_dialog.closebutton.isChecked():
+            if smooth_dialog.closebutton.isChecked():
                 break
-
-    def smoothing(self, action):
-        self.SelectDataset()
-        method = action.text()
-        for n in self.selectedDatasetNumber:
-            spct = self.data[n]["line"]
-            x = np.array(spct.get_xdata())
-            y = np.array(spct.get_ydata())
-            if method == "Savitsky-Golay":
-                y_smooth = rp.smooth(x, y, method="savgol", window_length=15, polyorder=3)
-            elif method == "Whittaker":
-                y_smooth = rp.smooth(x, y, method="whittaker", Lambda=10**0.5)
-            spct.set_ydata(y_smooth)
-            self.data[n]["y"] = y_smooth
-            self.canvas.draw()
 
     def linear_regression(self):
         self.SelectDataset()

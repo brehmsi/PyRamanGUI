@@ -29,7 +29,7 @@ class SmoothingMethods:
             "Blackman window": {"function": self.blackman, "parameter": {"window length": 5}},
         }
 
-        # contains current method, for smoothing dialog; start method is savitzgy golay
+        # contains current method, for smoothing dialog; start method is savitsky golay
         self.current_method = "Savitsky-Golay"
         self.current_group = "Window"
 
@@ -55,40 +55,45 @@ class SmoothingMethods:
         return y_smooth
 
     def savgol(self, x, y, window_length=5, polyorder=2):
-        odd_window_length = self.odd_window_length(int(window_length))
-        y_smooth = rp.smooth(x, y, method="savgol", window_length=int(odd_window_length), polyorder=int(polyorder))
+        window_length = self.check_window_length(x, window_length)
+        y_smooth = rp.smooth(x, y, method="savgol", window_length=window_length, polyorder=int(polyorder))
+        return y_smooth
+
+    def window_smoothing(self, x, y, window_length=5, method="flat"):
+        window_length = self.check_window_length(x, window_length)
+        y_smooth = rp.smooth(x, y, method=method, window_length=window_length)
         return y_smooth
 
     def flat(self, x, y, window_length=5):
-        odd_window_length = self.odd_window_length(int(window_length))
-        y_smooth = rp.smooth(x, y, method="flat", window_length=int(odd_window_length))
+        y_smooth = self.window_smoothing(x, y, window_length=window_length, method="flat")
         return y_smooth
 
     def hanning(self, x, y, window_length=5):
-        odd_window_length = self.odd_window_length(int(window_length))
-        y_smooth = rp.smooth(x, y, method="hanning", window_length=int(odd_window_length))
+        y_smooth = self.window_smoothing(x, y, window_length=window_length, method="hanning")
         return y_smooth
 
     def hamming(self, x, y, window_length=5):
-        odd_window_length = self.odd_window_length(int(window_length))
-        y_smooth = rp.smooth(x, y, method="hamming", window_length=int(odd_window_length))
+        y_smooth = self.window_smoothing(x, y, window_length=window_length, method="hamming")
         return y_smooth
 
     def bartlett(self, x, y, window_length=5):
-        odd_window_length = self.odd_window_length(int(window_length))
-        y_smooth = rp.smooth(x, y, method="bartlett", window_length=int(odd_window_length))
+        y_smooth = self.window_smoothing(x, y, window_length=window_length, method="bartlett")
         return y_smooth
 
     def blackman(self, x, y, window_length=5):
-        odd_window_length = self.odd_window_length(int(window_length))
-        y_smooth = rp.smooth(x, y, method="blackman", window_length=int(odd_window_length))
+        y_smooth = self.window_smoothing(x, y, window_length=window_length, method="blackman")
         return y_smooth
 
-    def odd_window_length(self, window_length):
-        if (window_length % 2) != 0:
-            return window_length
-        else:
-            return window_length + 1
+    def check_window_length(self, x, window_length):
+
+        # Input vector needs to be bigger than window size.
+        if x.size < window_length:
+            window_length = x.size - 1
+
+        # window_length must be odd
+        if (window_length % 2) == 0:
+             window_length += 1
+        return int(window_length)
 
 
 class SmoothingDialog(QtWidgets.QMainWindow):
