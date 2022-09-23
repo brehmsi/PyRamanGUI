@@ -40,6 +40,7 @@ import myfigureoptions  # see file 'myfigureoptions.py'
 import Database_Measurements  # see file Database_Measurements
 from BrokenAxes import brokenaxes
 import database_spectra
+from smoothing import SmoothingMethods, SmoothingDialog
 
 # This file essentially consists of four parts:
 # 1. Main Window
@@ -3781,6 +3782,7 @@ class PlotWindow(QMainWindow):
         analysisSmoothing.addAction('Savitsky-Golay')
         analysisSmoothing.addAction('Whittaker')
         analysisSmoothing.triggered[QAction].connect(self.smoothing)
+        analysisMenu.addAction("Smoothing Options", self.smoothing_options)
 
         # 3.4 Analysis find peaks
         analysisMenu.addAction('Find Peak', self.find_peaks)
@@ -4251,6 +4253,25 @@ class PlotWindow(QMainWindow):
 
             baseline_dialog = BaselineCorrectionsDialog(self, baseline_methods)
             baseline_dialog.get_baseline(x, y, spct)
+
+            # wait until QMainWindow is closes
+            loop = QtCore.QEventLoop()
+            baseline_dialog.closebutton.clicked.connect(loop.quit)
+            baseline_dialog.finishbutton.clicked.connect(loop.quit)
+            loop.exec_()
+            if baseline_dialog.closebutton.isChecked():
+                break
+
+    def smoothing_options(self):
+        self.SelectDataset()
+        smoothing_methods = SmoothingMethods()
+        for n in self.selectedDatasetNumber:
+            spct = self.data[n]["line"]
+            x = spct.get_xdata()
+            y = spct.get_ydata()
+
+            baseline_dialog = SmoothingDialog(self, smoothing_methods)
+            baseline_dialog.get_smoothed_spectrum(x, y, spct)
 
             # wait until QMainWindow is closes
             loop = QtCore.QEventLoop()
