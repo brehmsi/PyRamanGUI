@@ -1,4 +1,4 @@
-#https://github.com/bendichter/brokenaxes
+# see: https://github.com/bendichter/brokenaxes
 
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec

@@ -1,6 +1,6 @@
+__pycache__/
 env/
 venv/
-__pycache__/
 *.pyc
 *.aux
 *.auxlock
