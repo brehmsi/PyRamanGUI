@@ -226,22 +226,22 @@ class MainWindow(QMainWindow):
         create a menu bar
         """
         menu = self.menuBar()
-        File = menu.addMenu('File')
-        FileNew = File.addMenu('New')
-        FileNew.addAction('Spreadsheet', lambda: self.new_window(None, 'Spreadsheet', None, None))
-        FileNew.addAction('Textwindow', lambda: self.new_window(None, 'Textwindow', '', None))
-        FileNew.addAction('Folder', lambda: self.new_Folder(None))
-        File.addAction('Open Project', self.open)
-        File.addAction('Save Project As ...', lambda: self.save('Save As'))
-        File.addAction('Save Project', lambda: self.save('Save'))
+        File = menu.addMenu("File")
+        FileNew = File.addMenu("New")
+        FileNew.addAction("Spreadsheet", lambda: self.new_window(None, "Spreadsheet", None, None))
+        FileNew.addAction("Textwindow", lambda: self.new_window(None, "Textwindow", "", None))
+        FileNew.addAction("Folder", lambda: self.new_Folder(None))
+        File.addAction("Open Project", self.open)
+        File.addAction("Save Project As ...", lambda: self.save("Save As"))
+        File.addAction("Save Project", lambda: self.save("Save"))
 
-        medit = menu.addMenu('Edit')
-        medit.addAction('Cascade')
-        medit.addAction('Tiled')
+        medit = menu.addMenu("Edit")
+        medit.addAction("Cascade")
+        medit.addAction("Tiled")
         medit.triggered[QAction].connect(self.rearange)
 
-        menu_tools = menu.addMenu('Tools')
-        menu_tools.addAction('Database for measurements', self.execute_database_measurements)
+        menu_tools = menu.addMenu("Tools")
+        menu_tools.addAction("Database for measurements", self.execute_database_measurements)
 
     def show_statusbar_message(self, message, time, error_sound=False):
         self.statusBar.showMessage(message, time)
@@ -252,38 +252,35 @@ class MainWindow(QMainWindow):
         """
         key = event.key()
         if key == (Qt.Key_Control and Qt.Key_S):
-            self.save('Save')
-            self.show_statusbar_message('The project was saved', 2000)
+            self.save("Save")
+            self.show_statusbar_message("The project was saved", 2000)
         else:
             super(MainWindow, self).keyPressEvent(event)
 
     def open(self):
         # Load project in new MainWindow or in existing MW, if empty
-        if self.window['Spreadsheet'] == {} and self.window['Plotwindow'] == {}:
+        if self.window["Spreadsheet"] == {} and self.window["Plotwindow"] == {}:
             self.load()
         else:
             new_MainWindow()
 
     def load(self):
         """
-        Load project from rmn file with pickle
+        Load project from rmn file with json
         @return: None
         """
-        fileName = QtWidgets.QFileDialog.getOpenFileName(self, 'Load',  # get file name
-                                                         self.pHomeRmn, 'All Files (*);;Raman Files (*.rmn)')
+        fileName = QtWidgets.QFileDialog.getOpenFileName(self, "Load",  # get file name
+                                                         self.pHomeRmn, "All Files (*);;Raman Files (*.rmn)")
 
-        if fileName[0] != '':  # if fileName is not empty save in pHomeRmn
+        if fileName[0] != "":  # if fileName is not empty save in pHomeRmn
             self.pHomeRmn = fileName[0]
         else:
             self.close()
             return
 
-        # open file and save content in variable 'v' with pickle or json
-        with open(self.pHomeRmn, 'rb') as file:
-            try:
-                v = pickle.load(file)
-            except pickle.UnpicklingError:
-                v = json.load(file)
+        # open file and save content in variable 'v' with json
+        with open(self.pHomeRmn, "rb") as file:
+            v = json.load(file)
 
         self.treeWidget.clear()
         self.tabWidget.clear()
@@ -304,10 +301,10 @@ class MainWindow(QMainWindow):
         """
 
         # Ask for directory, if none is deposite or 'Save Project As' was pressed
-        if self.pHomeRmn is None or q == 'Save As':
-            fileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Save as', self.pHomeRmn,
-                                                             'All Files (*);;Raman Files (*.rmn)')
-            if fileName[0] != '':
+        if self.pHomeRmn is None or q == "Save As":
+            fileName = QtWidgets.QFileDialog.getSaveFileName(self, "Save as", self.pHomeRmn,
+                                                             "All Files (*);;Raman Files (*.rmn)")
+            if fileName[0] != "":
                 self.pHomeRmn = fileName[0]
             else:
                 return
@@ -322,22 +319,22 @@ class MainWindow(QMainWindow):
                 win_type = self.window_types[val[0].child(j).type()]
                 window = self.window[win_type][win_name]
 
-                if win_type == 'Spreadsheet':
+                if win_type == "Spreadsheet":
                     window_content = window.data
                     window_content_json = window.data.copy()
                     for i in range(len(window_content)):
                         window_content_json[i]["data"] = list(window_content_json[i]["data"])
-                elif win_type == 'Plotwindow':
+                elif win_type == "Plotwindow":
                     window_content_json = self.get_save_data_plotwindow(window)
                     window_content = [window.data, window.fig]
-                elif win_type == 'Textwindow':
+                elif win_type == "Textwindow":
                     window_content_json = window.text
                     window_content = window.text
                 save_dict[key][win_name] = [win_type, window_content]
                 save_dict_json[key][win_name] = [win_type, window_content_json]
 
         # save with json
-        with open(os.path.splitext(self.pHomeRmn)[0] + ".jrmn", 'w', encoding='utf-8') as f:
+        with open(os.path.splitext(self.pHomeRmn)[0] + ".jrmn", "w", encoding="utf-8") as f:
             json.dump(save_dict_json, f, ensure_ascii=False)
 
     def get_save_data_plotwindow(self, window):
@@ -493,22 +490,26 @@ class MainWindow(QMainWindow):
                     ec = mcolors.to_hex(mcolors.to_rgba(line.get_markeredgecolor(), alpha), keep_alpha=True)
                     fc = mcolors.to_hex(mcolors.to_rgba(line.get_markerfacecolor(), alpha), keep_alpha=True)
                     curvedata = {
-                        'line style': line.get_linestyle(),
-                        'draw style': line.get_drawstyle(),
-                        'line width': line.get_linewidth(),
-                        'color': color,
-                        'marker style': line.get_marker(),
-                        'marker size': line.get_markersize(),
-                        'marker face color': fc,
-                        'marker edge color': ec}
+                        "line style": line.get_linestyle(),
+                        "draw style": line.get_drawstyle(),
+                        "line width": line.get_linewidth(),
+                        "color": color,
+                        "marker style": line.get_marker(),
+                        "marker size": line.get_markersize(),
+                        "marker face color": fc,
+                        "marker edge color": ec}
                     window_data[i]["line options"] = curvedata
 
         # get styles for errorbars
         for container in ax1.containers:
             if type(container) == matplotlib.container.ErrorbarContainer:
                 plotline, caplines, barlinecols = container
-                idx = [window.data.index(wd) for wd in window.data if plotline == wd["line"]]
-
+                try:
+                    idx = [window.data.index(wd) for wd in window.data if plotline == wd["line"]]
+                except KeyError as e:
+                    print(e)
+                    print(window.data)
+                    continue
                 error_color = mcolors.to_hex(
                     mcolors.to_rgba(caplines[0].get_markerfacecolor(), barlinecols[0].get_alpha()), keep_alpha=True)
                 window_data[idx[0]]["line options"]["error bar cap size"] = caplines[0].get_markersize()
@@ -568,9 +569,9 @@ class MainWindow(QMainWindow):
                 elif ac == ActCopy:
                     window_name = tree_item.text(0)
                     window = self.window[window_type][window_name]
-                    if window_type == 'Spreadsheet':
+                    if window_type == "Spreadsheet":
                         data = [window_type, window.data.copy()]
-                    elif window_type == 'Plotwindow':
+                    elif window_type == "Plotwindow":
                         # no deepcopy of figure possible => create new figure with pickle
                         buf = io.BytesIO()
                         try:
@@ -582,7 +583,7 @@ class MainWindow(QMainWindow):
                         buf.seek(0)
                         fig_copy = pickle.load(buf)
                         data = [window_type, [window.data.copy(), fig_copy]]
-                    elif window_type == 'Textwindow':
+                    elif window_type == "Textwindow":
                         data = [window_type, window.text]
                     else:
                         return
@@ -746,15 +747,18 @@ class MainWindow(QMainWindow):
                                                             picker=True, pickradius=5, capsize=3,
                                                             label="_Hidden errorbar {}".format(d["label"]))
                 spect.set_label(d["label"])
-                if "error bar line width" in d["line options"].keys():
-                    dlo = d["line options"]
-                    for capline in caplines:
-                        capline.set_markersize(dlo["error bar cap size"])
-                        capline.set_markeredgewidth(dlo["error bar line width"])
-                        capline.set_markerfacecolor(dlo["error bar color"])
-                        capline.set_markeredgecolor(dlo["error bar color"])
-                    barlinecol[0].set_linewidth(dlo["error bar line width"])
-                    barlinecol[0].set_color(dlo["error bar color"])
+                if "line options" in d.keys():
+                    if "error bar line width" in d["line options"].keys():
+                        dlo = d["line options"]
+                        for capline in caplines:
+                            capline.set_markersize(dlo["error bar cap size"])
+                            capline.set_markeredgewidth(dlo["error bar line width"])
+                            capline.set_markerfacecolor(dlo["error bar color"])
+                            capline.set_markeredgecolor(dlo["error bar color"])
+                        barlinecol[0].set_linewidth(dlo["error bar line width"])
+                        barlinecol[0].set_color(dlo["error bar color"])
+                else:
+                    print("no line options")
 
             else:
                 try:
@@ -824,42 +828,31 @@ class MainWindow(QMainWindow):
     def new_window(self, foldername, windowtype, windowcontent, title):
         if foldername is None:
             foldername = self.tabWidget.tabText(self.tabWidget.currentIndex())
-            if foldername == 'Database':
-                self.show_statusbar_message('please open window in other folder', 4000)
+            if foldername == "Database":
+                self.show_statusbar_message("Please open window in other folder", 4000)
                 return
 
         if title is None:
             i = 1
             while i <= 100:
-                title = windowtype + ' ' + str(i)
+                title = windowtype + " " + str(i)
                 if title in self.window[windowtype].keys():
                     i += 1
                 else:
                     break
 
-        if windowtype == 'Spreadsheet':
-            if windowcontent is None:
-                ssd = windowcontent
-            else:
-                # change old data format to new format
-                if isinstance(windowcontent, dict):
-                    ssd = []
-                    for key, val in windowcontent.items():
-                        ssd.append(
-                            dict(data=np.array(val[0]), shortname=val[1], type=val[2], filename=val[3], longname=None,
-                                 unit=None, comments=None, formula=None))
-                else:
-                    ssd = windowcontent
-                    for i in range(len(ssd)):
-                        ssd[i]["data"] = np.array(ssd[i]["data"])
+        if windowtype == "Spreadsheet":
+            if windowcontent is not None:
+                for i in range(len(windowcontent)):
+                    windowcontent[i]["data"] = np.array(windowcontent[i]["data"])
 
             windowtypeInt = 1
-            self.window[windowtype][title] = SpreadSheetWindow(ssd, parent=self)
+            self.window[windowtype][title] = SpreadSheetWindow(windowcontent, parent=self)
             newSS = self.window[windowtype][title]
-            newSS.new_pw_signal.connect(lambda: self.new_window(None, 'Plotwindow', [newSS.plot_data, None], None))
+            newSS.new_pw_signal.connect(lambda: self.new_window(None, "Plotwindow", [newSS.plot_data, None], None))
             newSS.add_pw_signal.connect(lambda pw_name: self.add_Plot(pw_name, newSS.plot_data))
             icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Icon_spreadsheet.png")
-        elif windowtype == 'Plotwindow':
+        elif windowtype == "Plotwindow":
             windowtypeInt = 2
             plotData, fig = windowcontent
 
@@ -870,21 +863,6 @@ class MainWindow(QMainWindow):
                 self.show_statusbar_message("Please select the columns you want to plot!", 4000)
                 return
 
-            # change old data format to new format
-            if not isinstance(plotData[0], dict):
-                for idx, pd in enumerate(plotData):
-                    plotData[idx] = {
-                        "x": pd[0],
-                        "y": pd[1],
-                        "yerr": pd[5],
-                        "plot type": pd[4],
-                        "label": pd[2],
-                        "xaxis": None,
-                        "yaxis": None,
-                        "filename": pd[3],
-                        "spreadsheet title": pd[6] if len(pd) > 6 else None
-                    }
-
             if fig is not None:
                 # necessary to avoid weird error:
                 # (ValueError: figure size must be positive finite not [ 4.58 -0.09])
@@ -892,7 +870,7 @@ class MainWindow(QMainWindow):
             self.window[windowtype][title] = PlotWindow(plotData, fig, self)
             self.update_spreadsheet_menubar()
             icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Icon_plotwindow.png")
-        elif windowtype == 'Textwindow':
+        elif windowtype == "Textwindow":
             windowtypeInt = 3
             txt = windowcontent
             self.window[windowtype][title] = TextWindow(self, txt)
@@ -916,7 +894,7 @@ class MainWindow(QMainWindow):
         if title is None:
             i = 1
             while i <= 100:
-                title = 'Folder ' + str(i)
+                title = "Folder " + str(i)
                 if title in self.folder.keys():
                     i += 1
                 else:
@@ -1020,9 +998,9 @@ class TextWindow(QMainWindow):
         self.menubar = self.menuBar()
 
         # 1. Menu item: File
-        fileMenu = self.menubar.addMenu('&File')
-        fileMenu.addAction('Save Text', self.file_save)
-        fileMenu.addAction('Load Text', self.load_file)
+        fileMenu = self.menubar.addMenu("&File")
+        fileMenu.addAction("Save Text", self.file_save)
+        fileMenu.addAction("Load Text", self.load_file)
 
         # 2. Menu item: Edit
         # editMenu = self.menubar.addMenu('&Edit')
@@ -1033,7 +1011,7 @@ class TextWindow(QMainWindow):
         self.text = self.textfield.toPlainText()
 
     def file_save(self):
-        fileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Load', filter='All Files (*);; Txt Files (*.txt)')
+        fileName = QtWidgets.QFileDialog.getSaveFileName(self, "Save", filter="All Files (*);; Txt Files (*.txt)")
 
         if fileName[0] != '':
             fileName = fileName[0]
@@ -1048,14 +1026,14 @@ class TextWindow(QMainWindow):
         file.close()
 
     def load_file(self):
-        fileName = QtWidgets.QFileDialog.getOpenFileName(self, 'Load', filter='All Files (*);; Txt Files (*.txt)')
+        fileName = QtWidgets.QFileDialog.getOpenFileName(self, "Load", filter="All Files (*);; Txt Files (*.txt)")
 
-        if fileName[0] != '':
+        if fileName[0] != "":
             fileName = fileName[0]
         else:
             return
 
-        file = open(fileName, 'rb')
+        file = open(fileName, "rb")
         bintext = file.read()
         file.close()
 
@@ -2864,7 +2842,11 @@ class BaselineCorrectionsDialog(QMainWindow):
                 self.methods[self.blcm.current_method]["parameter"]["roi"] = self.sort_roi(
                     self.methods[self.blcm.current_method]["parameter"]["roi"])
                 continue
-            self.methods[self.blcm.current_method]["parameter"][key] = float(val.text())
+            try:
+                self.methods[self.blcm.current_method]["parameter"][key] = float(val.text())
+            except ValueError as e:
+                self.pw.mw.show_statusbar_message(e, 4000)
+                return
         return_value = self.methods[self.blcm.current_method]["function"](self.x, self.y, *params)
         if return_value is None:
             self.close()
