@@ -10,6 +10,7 @@ import operator
 import os
 import pickle
 import prettytable
+import pybaselines
 import rampy as rp
 import re
 import scipy
@@ -26,14 +27,13 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QTableWidget, QMessageBo
                              QTreeWidgetItem, QTableWidgetItem, QPushButton, QWidget, QMenu,
                              QAction, QDialog, QFileDialog, QAbstractItemView)
 from matplotlib.backends.qt_editor import _formlayout as formlayout
-from scipy import sparse, signal, special, stats
+from scipy import signal, special, stats
 from scipy.optimize import curve_fit
-from scipy.sparse.linalg import spsolve
 from sympy.utilities.lambdify import lambdify
 from sklearn import decomposition
 from tabulate import tabulate
 from pybaselines import whittaker
-import pybaselines
+
 
 # Import files
 import myfigureoptions  # see file 'myfigureoptions.py'
@@ -199,7 +199,7 @@ class MainWindow(QMainWindow):
         Create the main window
         """
         self.setWindowIcon(self.PyramanIcon)
-        self.setWindowTitle('PyRaman')  # set window title
+        self.setWindowTitle('PyRamanGui')  # set window title
 
         # the user can control the size of child widgets by dragging the boundary between them
         self.mainWidget.setHandleWidth(10)
@@ -217,7 +217,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.mainWidget)
 
         self.setStatusBar(self.statusBar)
-        self.show_statusbar_message('Welcome to PyRaman', 3000)
+        self.show_statusbar_message('Welcome to PyRamanGui', 3000)
 
         self.create_menubar()
 
@@ -1658,7 +1658,7 @@ class SpreadSheetWindow(QMainWindow):
             try:
                 load_data[j] = np.transpose(load_data[j])
             except IndexError as e:
-                print("The data format is not readabel for PyRaman\n", e)
+                print("The data format is not readabel for PyRamanGui\n", e)
                 return
 
             if isinstance(load_data[j][0], float):
@@ -4658,8 +4658,8 @@ class PlotWindow(QMainWindow):
             print_table.append(['Cluster Size in nm', L_a, L_a_err])
             print_table.append(['I_D/I_G', ratio, ratio_err])
 
-            save_data = r'R^2=%.6f \n' % r_squared + 'Lorentz 1 = D-Bande, BWF (Breit-Wigner-Fano) 1 = G-Bande \n' + tabulate(
-                print_table, headers=['Parameters', 'Values', 'Errors'])
+            save_data = r'R^2=%.6f \n' % r_squared + 'Lorentz 1 = D-Bande, BWF (Breit-Wigner-Fano) 1 = G-Bande \n' + \
+                        tabulate(print_table, headers=['Parameters', 'Values', 'Errors'])
             print('\n')
             print(self.data[n]["line"].get_label())
             print(save_data)
