@@ -41,7 +41,8 @@ The following python packages have to be installed:
 
 On **Linux** (Ubuntu, Debian) a package can be installed with following command:
 ```
-sudo apt-get install matplotlib numpy prettytable pybaselines PyQt5 rampy scipy scikit-learn sympy
+sudo apt-get install pytho3-matplotlib pytho3-numpy pytho3-prettytable pytho3-pybaselines pytho3-PyQt5 pytho3-rampy 
+pytho3-scipy pytho3-scikit-learn pytho3-sympy
 ```
 
 
