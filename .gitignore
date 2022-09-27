@@ -10,3 +10,4 @@ venv/
 *.out
 *.toc
 *.gz
+database_peakpositions.db

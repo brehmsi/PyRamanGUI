@@ -19,10 +19,10 @@ Run 'python3 .../src/PyRamanGui.py'
 
 ## Windows
 Install [Anaconda](https://www.anaconda.com/products/distribution). Make sure to enable the 'Add Anaconda to the system 
-PATH environment variable' box during installation. Otherwise PyRamanGui can't find the python executable installed 
+PATH environment variable' box during installation. Otherwise, PyRamanGui can't find the python executable installed 
 by Anaconda.
 
-Copy the PyRamanGui directory to a path you have chosen. To run PyRamanGui double click the 'WindowsRun.bat' file
+Copy the PyRamanGui directory to a path you have chosen. To run PyRamanGui double-click the 'WindowsRun.bat' file
 
 # Requirements
 PyRamanGui requires:
@@ -47,8 +47,8 @@ sudo apt-get install matplotlib numpy prettytable pybaselines PyQt5 rampy scipy 
 
 On **Windows** with Anaconda:
 
-Click on 'Environments' ond the left sidebar. Select 'Not installed' in the drop-down menu
-Check all the boxes for the needed packages and click Apply.
+Open Anaconda. Click on 'Environments' ond the left sidebar. Select 'Not installed' in the drop-down menu
+Check all the boxes for the needed packages and click 'Apply'.
 
 # License
 This project is licensed under the Apache License 2.0   
