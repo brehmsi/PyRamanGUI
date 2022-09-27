@@ -4,7 +4,6 @@ import os
 import platform
 import sqlite3
 import subprocess
-from os.path import join as pjoin
 from PyQt5 import QtGui, QtCore, QtWidgets
 from PyQt5.QtCore import Qt, pyqtSlot
 from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QSizePolicy, QMessageBox,
@@ -21,11 +20,11 @@ class DatabaseMeasurements(QMainWindow):
         super().__init__()
         self.path_of_database = os.path.join(os.path.dirname(__file__), 'Sampledatabase.db')
         self.date = str(date.today())
-        self.sample = 'MgAlON'
-        self.materialclass = 'MgAlON'
-        self.wavelength = '532nm'
-        self.donor = 'Martin Rudolph'
-        self.loc = 'C:/Users/Simon/Desktop/ITP_Computer/Daten/SFB920'  # memory location
+        self.sample = ''
+        self.materialclass = ''
+        self.wavelength = ''
+        self.donor = ''
+        self.loc = ''  # memory location
 
         self.setWindowTitle('Data base Raman measurements')
         self.entries()
@@ -308,11 +307,3 @@ class EntryWindow(QMainWindow):
 
     def cancel(self):
         self.close()
-
-
-#if __name__ == "__main__":
-#    app = QApplication(sys.argv)
-#    DBM = DatabaseMeasurements()
-#    DBM.showMaximized()
-#    app.quit
-#    sys.exit(app.exec_())
