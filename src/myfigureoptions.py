@@ -53,9 +53,9 @@ def figure_edit(axes, parent=None):
         axl = ax
         figure_edit.axis_is_broken = False
     else:
-        ax = axes[0]         # main axis
-        ax1 = axes[1]        # axis of first segment
-        axl = axes[-1]       # axis of last segment
+        ax = axes[0]  # main axis
+        ax1 = axes[1]  # axis of first segment
+        axl = axes[-1]  # axis of last segment
         figure_edit.axis_is_broken = True
 
     # Get / General
@@ -571,11 +571,8 @@ def figure_edit(axes, parent=None):
     if data is not None:
         apply_callback(data)
 
+
 # Monkey-patch original figureoptions
 from matplotlib.backends.qt_editor import figureoptions
+
 figureoptions.figure_edit = figure_edit
-
-
-
-
-

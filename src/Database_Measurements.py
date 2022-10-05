@@ -1,5 +1,3 @@
-# Autor: Simon Brehm
-
 import os
 import platform
 import sqlite3

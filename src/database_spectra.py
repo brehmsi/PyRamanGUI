@@ -13,7 +13,7 @@ class DatabasePeakPosition(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.path_of_database = os.path.join(os.path.dirname(__file__), 'database_peakpositions.db')
-        self.n_materials = 0    # number of plotted materials
+        self.n_materials = 0  # number of plotted materials
 
         self.setWindowTitle('Data base peak positions')
         self.resize(QtCore.QSize(900, 450))
@@ -122,7 +122,7 @@ class DatabasePeakPosition(QtWidgets.QMainWindow):
                       QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsTristate)
         item.setCheckState(1, QtCore.Qt.Unchecked)
         self.entryList.addTopLevelItem(item)
-        item.setText(0, str(self.entryList.topLevelItemCount()-1))
+        item.setText(0, str(self.entryList.topLevelItemCount() - 1))
         conn = sqlite3.connect(self.path_of_database)
         c = conn.cursor()
         query = "INSERT INTO stocks (ID, material, comments, peak_positions, reference, doi) VALUES (?, ?, ?, ?, ?, ?)"

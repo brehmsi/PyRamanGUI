@@ -14,7 +14,6 @@ import pybaselines
 import rampy as rp
 import re
 import scipy
-import sympy as sp
 import sys
 from matplotlib.figure import Figure
 from matplotlib.backend_bases import MouseEvent
@@ -34,13 +33,13 @@ from sklearn import decomposition
 from tabulate import tabulate
 from pybaselines import whittaker
 
-
 # Import files
 import myfigureoptions  # see file 'myfigureoptions.py'
 import Database_Measurements  # see file Database_Measurements
 from BrokenAxes import brokenaxes
 import database_spectra
 from smoothing import SmoothingMethods, SmoothingDialog
+
 
 # This file essentially consists of four parts:
 # 1. Main Window
@@ -235,7 +234,7 @@ class MainWindow(QMainWindow):
         medit = menu.addMenu("Edit")
         medit.addAction("Cascade")
         medit.addAction("Tiled")
-        medit.triggered[QAction].connect(self.rearange)
+        medit.triggered[QAction].connect(self.rearrange)
 
         menu_tools = menu.addMenu("Tools")
         menu_tools.addAction("Database for measurements", self.execute_database_measurements)
@@ -546,24 +545,24 @@ class MainWindow(QMainWindow):
         if tree_item is not None:
             if event.button() == QtCore.Qt.RightButton:
                 item_text = tree_item.text(0)
-                TreeItemMenu = QMenu()
-                ActRename = TreeItemMenu.addAction('Rename')
-                ActDelete = TreeItemMenu.addAction('Delete')
-                ActCopy = TreeItemMenu.addAction('Copy')
-                ac = TreeItemMenu.exec_(self.treeWidget.mapToGlobal(event.pos()))
+                tree_item_menu = QMenu()
+                act_rename = tree_item_menu.addAction('Rename')
+                act_delete = tree_item_menu.addAction('Delete')
+                act_copy = tree_item_menu.addAction('Copy')
+                ac = tree_item_menu.exec_(self.treeWidget.mapToGlobal(event.pos()))
                 window_type = self.window_types[tree_item.type()]
 
-                if ac == ActRename:
+                if ac == act_rename:
                     self.treeWidget.editItem(tree_item)
                     self.treeWidget.itemChanged.connect(lambda item, column:
                                                         self.rename_window(item, column, item_text))
-                elif ac == ActDelete:
+                elif ac == act_delete:
                     if tree_item.type() == 0:  # if item is folder:
                         self.close_folder(foldername=tree_item.text(0))
                     else:
                         title = tree_item.text(0)
                         self.windowWidget[window_type][title].close()
-                elif ac == ActCopy:
+                elif ac == act_copy:
                     window_name = tree_item.text(0)
                     window = self.window[window_type][window_name]
                     if window_type == "Spreadsheet":
@@ -585,15 +584,15 @@ class MainWindow(QMainWindow):
                     else:
                         return
                     folder_name = self.tabWidget.tabText(self.tabWidget.currentIndex())
-                    self.new_window(folder_name, data[0], data[1], window_name+"_Copy")
+                    self.new_window(folder_name, data[0], data[1], window_name + "_Copy")
         else:
             if event.button() == QtCore.Qt.RightButton:
-                TreeItemMenu = QMenu()
-                MenuNew = TreeItemMenu.addMenu('&New')
+                tree_item_menu = QMenu()
+                MenuNew = tree_item_menu.addMenu('&New')
                 ActNewFolder = MenuNew.addAction('Folder')
                 ActNewSpreadsheet = MenuNew.addAction('Spreadsheet')
                 ActNewText = MenuNew.addAction('Text window')
-                ac = TreeItemMenu.exec_(self.treeWidget.mapToGlobal(event.pos()))
+                ac = tree_item_menu.exec_(self.treeWidget.mapToGlobal(event.pos()))
                 # Rename
                 if ac == ActNewFolder:
                     self.new_Folder(None)
@@ -602,17 +601,17 @@ class MainWindow(QMainWindow):
                 elif ac == ActNewText:
                     self.new_window(None, 'Textwindow', '', None)
 
-    def change_folder(self, droppedItem, itemAtDropLocation):
+    def change_folder(self, dropped_item, item_at_drop_location):
         """function is called every time a qtreewidgetitem is dropped"""
-        if itemAtDropLocation.parent() is None:
-            new_folder = itemAtDropLocation
+        if item_at_drop_location.parent() is None:
+            new_folder = item_at_drop_location
         else:
-            new_folder = itemAtDropLocation.parent()
+            new_folder = item_at_drop_location.parent()
         foldername = new_folder.text(0)
-        windowtyp = droppedItem.type()
-        windowname = droppedItem.text(0)
-        if new_folder.type() == 0 and droppedItem.type() != 0:  # dropevent in folder
-            previous_folder = droppedItem.parent().text(0)
+        windowtyp = dropped_item.type()
+        windowname = dropped_item.text(0)
+        if new_folder.type() == 0 and dropped_item.type() != 0:  # dropevent in folder
+            previous_folder = dropped_item.parent().text(0)
             self.tabWidget.setCurrentWidget(self.folder[previous_folder][1])
             wind = self.window[self.window_types[windowtyp]][windowname]
             mdi = self.folder[foldername][1]
@@ -684,7 +683,7 @@ class MainWindow(QMainWindow):
             except TypeError as e:
                 print(e)
 
-    def rearange(self, q):
+    def rearrange(self, q):
         # rearrange open windows
         if q.text() == "Cascade":
             self.tabWidget.currentWidget().cascadeSubWindows()
@@ -1061,6 +1060,7 @@ class FormulaInterpreter:
     written by Christopher Tao
     source: https://levelup.gitconnected.com/how-to-write-a-formula-string-parser-in-python-5362210afeab
     """
+
     def __init__(self, data):
         self.data = data
         self.ops = {
@@ -1075,7 +1075,7 @@ class FormulaInterpreter:
             return self.data[col_formula]['data']
         elif re.match(r'\A\(.+\)\Z', f) and self.parentheses_enclosed(f):  # e.g. '(Col(1)-Col(2))'
             return self.interprete_formula(f[1:-1])
-        elif f.replace('.', '', 1).isdigit():                               # constant numbers: e.g. '2+3*Col(0)'
+        elif f.replace('.', '', 1).isdigit():  # constant numbers: e.g. '2+3*Col(0)'
             return float(f)
         elif '+' in f or '-' in f or '*' in f or '/' in f:
             rest_f = self.remove_matched_parentheses(f)
@@ -1099,9 +1099,9 @@ class FormulaInterpreter:
             else:
                 pos = len(split_f[0])
 
-            left = f[:pos]          # left component
-            right = f[pos + 1:]     # right component
-            op = f[pos]             # the operator
+            left = f[:pos]  # left component
+            right = f[pos + 1:]  # right component
+            op = f[pos]  # the operator
             return self.ops[op](self.interprete_formula(left), self.interprete_formula(right))
         else:
             print('There is something wrong with the formula')
@@ -1130,7 +1130,7 @@ class FormulaInterpreter:
         if re.search(r"(?<!Col)\(", formula):
             match_end_par = re.search(r"(?<!Col\(\d)\)", formula)
             end_par = match_end_par.start()  # index of first ')'
-            start_par = [m.start() for m in re.finditer(r"(?<!Col)\(", formula[:end_par])][-1] # index of last '('
+            start_par = [m.start() for m in re.finditer(r"(?<!Col)\(", formula[:end_par])][-1]  # index of last '('
             return self.remove_matched_parentheses(formula[:start_par] + formula[end_par + 1:])
         else:
             return formula
@@ -1423,7 +1423,7 @@ class SpreadSheetWindow(QMainWindow):
 
     def select_all_X(self):
         for c in range(self.cols):
-            if self.data[c]["type"]=="X":
+            if self.data[c]["type"] == "X":
                 self.header_table.item(0, c).setSelected(True)
 
     def pca_nmf(self):
@@ -1466,7 +1466,7 @@ class SpreadSheetWindow(QMainWindow):
 
         # insert data in table
         for idx, y_i in enumerate(y_transformed):
-            self.new_col(data_content=y_i, short_name="{} {}".format(analysis_name, idx+1))
+            self.new_col(data_content=y_i, short_name="{} {}".format(analysis_name, idx + 1))
 
     def set_column_type(self, qaction, log_col):
         """
@@ -1716,7 +1716,7 @@ class SpreadSheetWindow(QMainWindow):
         col = item.column()
         row = item.row()
 
-        if row == 0:    # Long Name
+        if row == 0:  # Long Name
             self.data[col]["longname"] = content
         elif row == 1:
             self.data[col]["axis label"] = content
@@ -2049,7 +2049,8 @@ class LineDrawer:
                 self.arrow_style = key
 
         # get color
-        self.color = mcolors.to_hex(mcolors.to_rgba(self.arrow.get_edgecolor(), self.arrow.get_alpha()), keep_alpha=True)
+        self.color = mcolors.to_hex(mcolors.to_rgba(self.arrow.get_edgecolor(), self.arrow.get_alpha()),
+                                    keep_alpha=True)
 
         # get line width
         self.line_width = self.arrow.get_linewidth()
@@ -2385,6 +2386,7 @@ class DataSetSelecter(QtWidgets.QDialog):
 
 class BaselineCorrectionMethods:
     """Class containing all implemented methods of base line correction"""
+
     def __init__(self):
         # all implemented baseline correction methods
         self.method_groups = {
@@ -2718,7 +2720,7 @@ class BaselineCorrectionsDialog(QMainWindow):
             last_roi = self.methods[self.blcm.current_method]["parameter"]["roi"][-1][1]
         except IndexError:
             last_roi = 140
-        self.methods[self.blcm.current_method]["parameter"]["roi"].append([last_roi+10, last_roi+40])
+        self.methods[self.blcm.current_method]["parameter"]["roi"].append([last_roi + 10, last_roi + 40])
         self.method_change(None)
 
     def del_roi(self):
@@ -2934,7 +2936,7 @@ class FitFunctions:
         sigma = 1 / np.sqrt(8 * np.log(2)) * f_G
         gamma = 1 / 2 * f_L
         norm_factor = 5.24334
-        return norm_factor*h*sigma*special.voigt_profile(x-xc, sigma, gamma)
+        return norm_factor * h * sigma * special.voigt_profile(x - xc, sigma, gamma)
 
     def FctSumme(self, x, *p):
         """
@@ -3083,7 +3085,7 @@ class FitOptionsDialog(QMainWindow):
         add_rows = len(parameters)
 
         self.table.setRowCount(self.table.rowCount() + add_rows)
-        self.vheaders.extend([str(len(self.used_functions))]*add_rows)
+        self.vheaders.extend([str(len(self.used_functions))] * add_rows)
         self.table.setVerticalHeaderLabels(self.vheaders)
 
         rows = self.table.rowCount()
@@ -3100,11 +3102,11 @@ class FitOptionsDialog(QMainWindow):
             cbox.addItem(key)
         cbox.setCurrentText(fct_name)
         n_fct = len(self.used_functions)
-        cbox.currentTextChanged.connect(lambda: self.fct_change(cbox.currentText(), n_fct-1))
+        cbox.currentTextChanged.connect(lambda: self.fct_change(cbox.currentText(), n_fct - 1))
         self.table.setCellWidget(rows - add_rows, 0, cbox)
         self.used_functions[-1]["fct"] = cbox
 
-        # configurate cells
+        # configure cells
         self.table.item(rows - 2, 0).setFlags(Qt.NoItemFlags)  # no interaction with these cells
         self.table.item(rows - 1, 0).setFlags(Qt.NoItemFlags)
         self.used_functions[-1]["parameter"] = {}
@@ -3127,7 +3129,7 @@ class FitOptionsDialog(QMainWindow):
             for j in reversed(row_indices):
                 del self.vheaders[j]
                 self.table.removeRow(j)
-            del self.used_functions[last_key-1]
+            del self.used_functions[last_key - 1]
 
     def fct_change(self, fct_name, n):
         old_parameters = self.used_functions[n]["parameter"].keys()
@@ -3138,9 +3140,9 @@ class FitOptionsDialog(QMainWindow):
             row_index = self.vheaders.index(str(n + 1)) + len(new_parameters)
             for item in self.table.findItems(del_para, QtCore.Qt.MatchExactly):
                 try:
-                    end = self.vheaders.index(str(n+2))
+                    end = self.vheaders.index(str(n + 2))
                 except ValueError:
-                    end = len(self.vheaders)+1
+                    end = len(self.vheaders) + 1
                 if self.vheaders.index(str(n + 1)) <= self.table.row(item) < end:
                     row_index = self.table.row(item)
                 else:
@@ -3153,7 +3155,7 @@ class FitOptionsDialog(QMainWindow):
         row_index = self.vheaders.index(str(n + 1)) + len(old_parameters)
         for new_para in [element for element in new_parameters if element not in old_parameters]:
             self.table.insertRow(row_index)
-            self.vheaders.insert(row_index, str(n+1))
+            self.vheaders.insert(row_index, str(n + 1))
             self.table.setVerticalHeaderLabels(self.vheaders)
 
             # set items in new cell
@@ -3206,8 +3208,8 @@ class FitOptionsDialog(QMainWindow):
         # Get file name
         if file_name is None:
             file_name = QFileDialog.getSaveFileName(self, "Save fit parameter in file",
-                                                       os.path.dirname(self.parent.mw.pHomeRmn),
-                                                       "All Files (*);;Text Files (*.txt)")
+                                                    os.path.dirname(self.parent.mw.pHomeRmn),
+                                                    "All Files (*);;Text Files (*.txt)")
             if file_name[0] != '':
                 file_name = file_name[0]
                 if file_name[-4:] == ".txt":
@@ -3254,9 +3256,9 @@ class FitOptionsDialog(QMainWindow):
             if all(tr == "" for tr in table_content[row]):
                 if fct_value:
                     self.add_function(fct_name, fct_value)
-                if row == len(table_content)-1:
+                if row == len(table_content) - 1:
                     break
-                fct_name = table_content[row+1][0][:-2]
+                fct_name = table_content[row + 1][0][:-2]
                 row += 2
                 fct_value = {}
             else:
@@ -3370,7 +3372,7 @@ class FitOptionsDialog(QMainWindow):
         return p_start, boundaries
 
     def plot_functions(self, param, store_line=False):
-        x1 = np.linspace(min(self.x), max(self.x), int((max(self.x)-min(self.x))*5))
+        x1 = np.linspace(min(self.x), max(self.x), int((max(self.x) - min(self.x)) * 5))
         y_fit = self.fit_functions.FctSumme(x1, *param)
         line, = self.ax.plot(x1, y_fit, "-r")
         self.plotted_functions.append(line)
@@ -3423,7 +3425,7 @@ class FitOptionsDialog(QMainWindow):
             r_squared = 1 - (ss_res / ss_tot)
         else:
             r_squared = None
-            perr = [""]*len(popt)
+            perr = [""] * len(popt)
 
         print_table = prettytable.PrettyTable()
         print_table.field_names = ["Parameters", "Values", "Errors"]
@@ -3506,10 +3508,10 @@ class PlotWindow(QMainWindow):
         self.mw = parent
         self.vertical_line = None
         self.fit_functions = FitFunctions()
-        self.blc = BaselineCorrectionMethods()       # class for everything related to Baseline corrections
+        self.blc = BaselineCorrectionMethods()  # class for everything related to Baseline corrections
         self.inserted_text = []  # Storage for text inserted in the plot
         self.drawn_line = []  # Storage for lines and arrows drawn in the plot
-        self.peak_positions = {} # dict to store Line2D object marking peak positions
+        self.peak_positions = {}  # dict to store Line2D object marking peak positions
 
         self.plot()
         self.create_statusbar()
@@ -3707,10 +3709,10 @@ class PlotWindow(QMainWindow):
         # 2. menu item: Edit
         editMenu = menubar.addMenu('&Edit')
 
-        #editDelete = editMenu.addMenu('Delete broken pixel - LabRam')
-        #editDelete.addAction("532nm")
-        #editDelete.addAction("633nm")
-        #editDelete.triggered[QAction].connect(self.del_broken_pixel)
+        # editDelete = editMenu.addMenu('Delete broken pixel - LabRam')
+        # editDelete.addAction("532nm")
+        # editDelete.addAction("633nm")
+        # editDelete.triggered[QAction].connect(self.del_broken_pixel)
 
         editDeletePixel = editMenu.addAction('Delete single datapoint', self.del_datapoint)
         editDeletePixel.setStatusTip(
@@ -3781,7 +3783,7 @@ class PlotWindow(QMainWindow):
 
         # Vertical line for comparison of peak positions
         self.VertLineAct = QAction(QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Tool_Line.png"),
-                              'Vertical Line', self)
+                                   'Vertical Line', self)
         self.VertLineAct.setStatusTip('Vertical line for comparison of peak position')
         self.VertLineAct.triggered.connect(self.create_vertical_line)
         self.VertLineAct.setCheckable(True)
@@ -3828,7 +3830,7 @@ class PlotWindow(QMainWindow):
         return data_dict
 
     def go_to_spreadsheet(self, line):
-        line_index =[d["line"] for d in self.data].index(line)
+        line_index = [d["line"] for d in self.data].index(line)
         if self.data[line_index]["spreadsheet title"]:
             spreadsheet_name = self.data[line_index]["spreadsheet title"]
             item = self.mw.treeWidget.findItems(spreadsheet_name, Qt.MatchFixedString | Qt.MatchRecursive)
@@ -3922,12 +3924,12 @@ class PlotWindow(QMainWindow):
         data_idx_diff = {'532nm': 957, '633nm': 924}
         self.SelectDataset()
         for j in self.selectedDatasetNumber:
-            data_idx = 629         # index of first broken data point
+            data_idx = 629  # index of first broken data point
             border = 6
             print('Following data points of {} were deleted'.format(self.data[j]["label"]))
             while data_idx <= len(self.data[j]["x"]):
                 data_min_idx = np.argmin(self.data[j]["y"][data_idx - border:data_idx + border])
-                if data_min_idx == 0 or data_min_idx == 2*border:
+                if data_min_idx == 0 or data_min_idx == 2 * border:
                     QMessageBox.about(self, "Title",
                                       "Please select this data point manually (around {} in the data set {})".format(
                                           self.data[j]["x"][data_idx], self.data[j]["y"]))
@@ -4169,11 +4171,11 @@ class PlotWindow(QMainWindow):
         self.ax.autoscale(False)
         y_min, y_max = self.ax.get_ylim()
         x_min, x_max = self.ax.get_xlim()
-        x_range = x_max-x_min
+        x_range = x_max - x_min
         self.mw.show_statusbar_message('Left click shifts limits, Right click to finish', 4000)
 
-        line_1 = LineBuilder([x_min+0.01*x_range], [y_min, y_max], self.canvas)
-        line_2 = LineBuilder([x_max-0.01*x_range], [y_min, y_max], self.canvas, loop=True)
+        line_1 = LineBuilder([x_min + 0.01 * x_range], [y_min, y_max], self.canvas)
+        line_2 = LineBuilder([x_max - 0.01 * x_range], [y_min, y_max], self.canvas, loop=True)
 
         x_min = line_1.get_xdata()  # lower limit
         x_max = line_2.get_xdata()  # upper limit
@@ -4211,7 +4213,7 @@ class PlotWindow(QMainWindow):
             xs = spct.get_xdata()
             ys = spct.get_ydata()
             min_y = min(ys)
-            y_shifted = ys-min_y
+            y_shifted = ys - min_y
             spct.set_ydata(y_shifted)
             self.data[n]["y"] = y_shifted
             self.canvas.draw()
@@ -4401,7 +4403,7 @@ class PlotWindow(QMainWindow):
             # baseline correction
             # Asymmetric least‐squares baseline algorithm with peak screening
             # for automatic processing of the Raman spectra
-            yb, zb = self.blc.derpsALS(x, y, 1000000, 0.01)   # (lambda, p) parameter for baseline correction
+            yb, zb = self.blc.derpsALS(x, y, 1000000, 0.01)  # (lambda, p) parameter for baseline correction
             self.ax.plot(x, zb, 'c--', label='baseline ({})'.format(self.data[n]["line"].get_label()))
             self.ax.plot(x, yb, 'c-', label='baseline-corrected ({})'.format(self.data[n]["line"].get_label()))
             self.canvas.draw()
@@ -4436,7 +4438,8 @@ class PlotWindow(QMainWindow):
             y_BWF = []
             for j in range(aB):
                 y_BWF.append(np.array(
-                    popt[0] + self.fit_functions.BreitWignerFct(x1, popt[4 * j + 3 * aLG + 1], popt[4 * j + 3 * aLG + 2],
+                    popt[0] + self.fit_functions.BreitWignerFct(x1, popt[4 * j + 3 * aLG + 1],
+                                                                popt[4 * j + 3 * aLG + 2],
                                                                 popt[4 * j + 3 * aLG + 3], popt[4 * j + 3 * aLG + 4])))
             y_Ges = np.array(self.fit_functions.FctSumme(x1, *popt))
             self.ax.plot(x1, y_Ges, '-r')
@@ -4462,7 +4465,7 @@ class PlotWindow(QMainWindow):
             area_Lorentz_err = []
             for j in range(aL):
                 area_Lorentz.append(np.trapz(y_L[j], x1))
-                area_Lorentz_err.append(None)           # add error later
+                area_Lorentz_err.append(None)  # add error later
 
             area_Gauss = []
             area_Gauss_err = []
@@ -4508,8 +4511,8 @@ class PlotWindow(QMainWindow):
             # ID/IG = C(lambda)/L_a
             # mit C(514.5 nm) = 4.4 nm
             ratio = I_D / I_G
-            ratio_err = None            # add error later
-            L_a = 4.4 / ratio       # in nm
+            ratio_err = None  # add error later
+            L_a = 4.4 / ratio  # in nm
             L_a_err = None
 
             print_table.append(['I_D/I_G', ratio, ratio_err])
@@ -4521,31 +4524,31 @@ class PlotWindow(QMainWindow):
             print(self.data[n]["line"].get_label())
             print(save_data)
 
-            #(fileBaseName, fileExtension) = os.path.splitext(self.data[n]["line"].get_label())
-            #startFileDirName = os.path.dirname(self.selectedData[0]["filename"])
-            #with open(startFileDirName + "/ID-IG.txt", "a") as file_cluster:
+            # (fileBaseName, fileExtension) = os.path.splitext(self.data[n]["line"].get_label())
+            # startFileDirName = os.path.dirname(self.selectedData[0]["filename"])
+            # with open(startFileDirName + "/ID-IG.txt", "a") as file_cluster:
             #    file_cluster.write('\n' + str(fileBaseName) + '   %.4f' % ratio + '   %.4f' % ratio_err)
 
-            #pos_G_max = pos_G + b_G / (2 * q_G)
-            #with open(startFileDirName + "/G-Position.txt", "a") as file_GPosition:
+            # pos_G_max = pos_G + b_G / (2 * q_G)
+            # with open(startFileDirName + "/G-Position.txt", "a") as file_GPosition:
             #    file_GPosition.write('\n{} {:.4f}  {:.4f}'.format(fileBaseName, pos_G_max, 0.0))
 
             # Save the fit parameter
-            #startFileBaseName = startFileDirName + '/' + fileBaseName
-            #startFileName = startFileBaseName + '_fitpara.txt'
+            # startFileBaseName = startFileDirName + '/' + fileBaseName
+            # startFileName = startFileBaseName + '_fitpara.txt'
             # self.save_to_file('Save fit parameter in file', startFileName, save_data)
 
             # Save the Fit data
-            #startFileName = startFileBaseName + '_fitdata.txt'
-            #save_data = [x1]
-            #for j in y_L:
+            # startFileName = startFileBaseName + '_fitdata.txt'
+            # save_data = [x1]
+            # for j in y_L:
             #    save_data.append(j)
-            #for j in y_G:
+            # for j in y_G:
             #    save_data.append(j)
-            #for j in y_BWF:
+            # for j in y_BWF:
             #    save_data.append(j)
-            #save_data.append(y_Ges)
-            #save_data = np.transpose(save_data)
+            # save_data.append(y_Ges)
+            # save_data = np.transpose(save_data)
             # self.save_to_file('Save fit data in file', startFileName, save_data)
 
     def norm_to_water(self):
@@ -4563,7 +4566,7 @@ class PlotWindow(QMainWindow):
             yb, baseline = self.blc.drPLS(xs, ys, lam=9000000)
 
             # norm spectrum regarding water peak
-            norm_factor = np.max(yb[np.argwhere((xs>3000) & (xs<3700))])
+            norm_factor = np.max(yb[np.argwhere((xs > 3000) & (xs < 3700))])
             yb = yb / norm_factor
             self.data[n]["y"] = yb
             self.data[n]["line"].set_data(xs, yb)
@@ -4598,8 +4601,8 @@ class PlotWindow(QMainWindow):
         # other peaks
         peak_pos = [900, 982, 1030, 1045, 1190, 1256, 1291]
         peak_fwhm = [25, 30, 15, 15, 55, 55, 35]
-        peak_pos.extend(pos_PS+pos_Caros)
-        peak_fwhm.extend(fwhm_PS+fwhm_Caros)
+        peak_pos.extend(pos_PS + pos_Caros)
+        peak_fwhm.extend(fwhm_PS + fwhm_Caros)
 
         # sort list according to peak positions
         peak_pos = sorted(peak_pos)
@@ -4625,17 +4628,18 @@ class PlotWindow(QMainWindow):
             p_bounds_low = [-0.001]
             p_bounds_up = [np.inf]
             for (start_pos, start_width) in zip(peak_pos, peak_fwhm):
-                start_height = max(y[np.where((x > (start_pos-3)) & (x < (start_pos+3)))])*0.9
+                start_height = max(y[np.where((x > (start_pos - 3)) & (x < (start_pos + 3)))]) * 0.9
                 if start_height < 0:
                     start_height = 0
                 start_width = 15
                 p_start.extend([start_pos, start_height, start_width])
-                p_bounds_low.extend([start_pos-10, 0, 0])
-                p_bounds_up.extend([start_pos+10, np.inf, np.inf])
+                p_bounds_low.extend([start_pos - 10, 0, 0])
+                p_bounds_up.extend([start_pos + 10, np.inf, np.inf])
             p_bounds = [p_bounds_low, p_bounds_up]
 
             try:
-                popt, pcov = curve_fit(self.fit_functions.FctSumme, x, y, p0=p_start, bounds=p_bounds, absolute_sigma=False)
+                popt, pcov = curve_fit(self.fit_functions.FctSumme, x, y, p0=p_start, bounds=p_bounds,
+                                       absolute_sigma=False)
             except RuntimeError as e:
                 self.mw.show_statusbar_message(str(e), 4000)
                 continue
@@ -4685,7 +4689,7 @@ class PlotWindow(QMainWindow):
             idx_Caros = [peak_pos.index(p) for p in pos_Caros]
             for j in idx_PS:
                 with open("{}/PS_intensity_PS{}cm-1.txt".format(directory_name, peak_pos[j]), "a") as f:
-                    f.write('\n{} {:.4f}  {:.4f}'.format(name, popt[3*j+2], perr[3*j+2]))
+                    f.write('\n{} {:.4f}  {:.4f}'.format(name, popt[3 * j + 2], perr[3 * j + 2]))
 
             for j in idx_Caros:
                 with open("{}/PS_intensity_Caros{}cm-1.txt".format(directory_name, peak_pos[j]), "a") as f:

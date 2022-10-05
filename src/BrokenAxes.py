@@ -103,7 +103,7 @@ class BrokenAxes:
                       width_ratios=width_ratios)
 
         gs = gridspec.GridSpec(*args, **kwargs)
-        self.big_ax = self.fig.gca() 
+        self.big_ax = self.fig.gca()
 
         self.old_lines = self.fig.axes[0].get_lines()
 
@@ -170,7 +170,7 @@ class BrokenAxes:
         # and share x and y between them
         for i, ax in enumerate(self.axs):
             if ylims is not None:
-                ax.set_ylim(ylims[::-1][i//ncols])
+                ax.set_ylim(ylims[::-1][i // ncols])
                 ax.get_shared_y_axes().join(ax, self.first_col[i // ncols])
             if xlims is not None:
                 ax.set_xlim(xlims[i % ncols])
@@ -208,7 +208,7 @@ class BrokenAxes:
         len_axs = len(self.axs)
         for l in range(len_axs):
             self.axs[l].set_zorder(l)
-        self.big_ax.set_zorder(l+1)
+        self.big_ax.set_zorder(l + 1)
 
     @staticmethod
     def draw_diag(ax, xpos, xlen, ypos, ylen, **kwargs):
@@ -401,6 +401,7 @@ class BrokenAxes:
 
 class CallCurator:
     """Used by BrokenAxes.__getattr__ to pass methods to internal axes."""
+
     def __init__(self, method, broken_axes):
         self.method = method
         self.broken_axes = broken_axes

@@ -4,6 +4,7 @@ from PyQt5 import QtWidgets, QtCore
 
 class SmoothingMethods:
     """Class containing all implemented methods for smoothing"""
+
     def __init__(self):
         self.method_groups = {
             "Spline":
@@ -22,9 +23,9 @@ class SmoothingMethods:
             "Mean Square Error spline": {"function": self.msespline, "parameter": {}},
             "Savitsky-Golay": {"function": self.savgol, "parameter": {"window length": 5, "polynomial order": 2}},
             "Whittaker": {"function": self.whittaker, "parameter": {"lambda": 10 ** 0.5}},
-            "Flat window":  {"function": self.flat, "parameter": {"window length": 5}},
+            "Flat window": {"function": self.flat, "parameter": {"window length": 5}},
             "Hanning window": {"function": self.hanning, "parameter": {"window length": 5}},
-            "Hamming window":  {"function": self.hamming, "parameter": {"window length": 5}},
+            "Hamming window": {"function": self.hamming, "parameter": {"window length": 5}},
             "Bartlett window": {"function": self.bartlett, "parameter": {"window length": 5}},
             "Blackman window": {"function": self.blackman, "parameter": {"window length": 5}},
         }
@@ -92,7 +93,7 @@ class SmoothingMethods:
 
         # window_length must be odd
         if (window_length % 2) == 0:
-             window_length += 1
+            window_length += 1
         return int(window_length)
 
 
@@ -274,15 +275,6 @@ class SmoothingDialog(QtWidgets.QMainWindow):
         self.pw.data.append(self.pw.create_data(self.x, y_smooth, line=spct_smooth, label=label_spct, style="-"))
         self.fig.canvas.draw()
         self.close()
-
-        # Save baseline corrected data
-        # (fileBaseName, fileExtension) = os.path.splitext(name)
-        # startFileDirName = os.path.dirname(self.pw.selectedData[0]["filename"])
-        # startFileBaseName = startFileDirName + "/" + fileBaseName
-        # startFileName = startFileBaseName + "_bgc.txt"
-        # save_data = [self.x, yb]
-        # save_data = np.transpose(save_data)
-        # self.pw.save_to_file("Save background-corrected data in file", startFileName, save_data)
 
     def apply_call(self):
         params = self.methods[self.sm.current_method]["parameter"].values()
