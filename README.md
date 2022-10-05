@@ -51,11 +51,10 @@ The following python packages have to be installed:
   - rampy
   - scipy
   - sklearn
-  - sympy
 
 On **Linux** (Ubuntu, Debian) a package can be installed with following command:
 ```
-pip install matplotlib numpy prettytable pybaselines pyqt5 rampy scipy scikit-learn sympy
+pip install matplotlib numpy prettytable pybaselines pyqt5 rampy scipy scikit-learn 
 ```
 
 
@@ -63,6 +62,18 @@ On **Windows** with Anaconda:
 
 Open Anaconda. Click on 'Environments' ond the left sidebar. Select 'Not installed' in the drop-down menu
 Check all the boxes for the needed packages and click 'Apply'.
+
+Alternative:
+Open the Anaconda Command (CMD.exe Prompt)
+
+Change the directory with the command
+```
+ cd\
+```
+Run
+```
+pip install matplotlib numpy prettytable pybaselines pyqt5 rampy scipy scikit-learn 
+```
 
 # License
 This project is licensed under the Apache License 2.0   
