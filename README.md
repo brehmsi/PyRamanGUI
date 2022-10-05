@@ -14,8 +14,22 @@ A tutorial on how to use PyRamanGui can be found here [Tutorial](doc/README.md)
 
 # Installation
 ## Linux
-Copy the PyRamanGui directory to a path you have chosen. 
-Run 'python3 .../src/PyRamanGui.py'
+Open a terminal and go to the directory where you want to clone the files.
+Run the following command. Git automatically creates a folder with the repository name and downloads the files there.
+```
+git clone https://gitlab.com/brehmsi/PyRamanGUI.git
+```
+
+Change directory to source files
+```
+cd pyramangui/src
+```
+
+
+Run PyRamanGUI
+```
+python3 pyramangui.py
+```
 
 ## Windows
 Install [Anaconda](https://www.anaconda.com/products/distribution). Make sure to enable the 'Add Anaconda to the system 
