@@ -148,25 +148,22 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
         event : QDropEvent
         """
         event.setDropAction(Qt.MoveAction)
-        itemAtDropLocation = self.itemAt(event.pos())
+        item_at_drop_location = self.itemAt(event.pos())
 
-        if itemAtDropLocation is None:
+        if item_at_drop_location is None:
             # no drops outside of folders
             return
-        elif itemAtDropLocation != self.dragged_item.parent():
+        elif item_at_drop_location != self.dragged_item.parent():
             # send signal if parents (folder) of item changes during drag-drop-event
-            self.itemDropped.emit(self.dragged_item, itemAtDropLocation)
+            self.itemDropped.emit(self.dragged_item, item_at_drop_location)
 
         # keep the default behaviour
         super(RamanTreeWidget, self).dropEvent(event)
 
         if self.dragged_item.parent() is None:
             print("The item was dropped outside a folder. This will cause some issues")
-            # print(self.dragged_item)
-            # print(itemAtDropLocation.childCount())
-            itemAtDropLocation.addChild(self.dragged_item)
-            itemAtDropLocation.setExpanded(True)
-            # print(itemAtDropLocation.childCount())
+            item_at_drop_location.addChild(self.dragged_item)
+            item_at_drop_location.setExpanded(True)
 
 
 class MainWindow(QMainWindow):
@@ -3508,7 +3505,7 @@ class PlotWindow(QMainWindow):
         self.data = plot_data
         self.mw = parent
         self.vertical_line = None
-        self.functions = FitFunctions()
+        self.fit_functions = FitFunctions()
         self.blc = BaselineCorrectionMethods()       # class for everything related to Baseline corrections
         self.inserted_text = []  # Storage for text inserted in the plot
         self.drawn_line = []  # Storage for lines and arrows drawn in the plot
@@ -3830,7 +3827,6 @@ class PlotWindow(QMainWindow):
                      }
         return data_dict
 
-    #### Functions and other stuff ####
     def go_to_spreadsheet(self, line):
         line_index =[d["line"] for d in self.data].index(line)
         if self.data[line_index]["spreadsheet title"]:
@@ -3898,13 +3894,15 @@ class PlotWindow(QMainWindow):
         else:
             return
 
-        if isinstance(data, (np.ndarray, np.generic)):
-            np.savetxt(SaveFileName, data, fmt='%.5f')
-            np.savetxt(SaveFileName, data, fmt='%.5f')
-        else:
-            file = open(SaveFileName, 'w+')
-            file.write(data)
-            file.close()
+        try:
+            if isinstance(data, (np.ndarray, np.generic)):
+                np.savetxt(SaveFileName, data, fmt='%.5f')
+            else:
+                file = open(SaveFileName, 'w+')
+                file.write(data)
+                file.close()
+        except Exception as e:
+            print(e)
 
     def del_datapoint(self):
         self.SelectDataset()
@@ -4081,10 +4079,11 @@ class PlotWindow(QMainWindow):
         self.canvas.draw()
 
     def quick_fit(self, q):
+        """fit one peak without opening the fit dialog"""
         self.SelectDataset()
         if self.selectedDatasetNumber:
             x_min, x_max = self.SelectArea()
-            self.functions.n_fit_fct[q.text()] = 1
+            self.fit_functions.n_fit_fct[q.text()] = 1
         else:
             return
 
@@ -4096,7 +4095,7 @@ class PlotWindow(QMainWindow):
             idx_peaks, properties = signal.find_peaks(y, height=0.1 * max(y))
             if idx_peaks.size > 0:
                 p = round(x[idx_peaks[0]], 2)
-                h = round(properties['peak_heights'][0], 2)
+                h = round(properties["peak_heights"][0], 2)
                 w = signal.peak_widths(y, idx_peaks)[0][0]
             else:
                 self.mw.show_statusbar_message("Couldn't find good start parameters \n"
@@ -4105,13 +4104,13 @@ class PlotWindow(QMainWindow):
             p_start = [0, p, h, w]
 
             try:
-                popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0=p_start)
+                popt, pcov = curve_fit(self.fit_functions.FctSumme, x, y, p0=p_start)
             except RuntimeError or ValueError as e:
                 self.mw.show_statusbar_message(str(e), 4000)
-                self.functions.n_fit_fct = dict.fromkeys(self.functions.n_fit_fct, 0)
+                self.fit_functions.n_fit_fct = dict.fromkeys(self.fit_functions.n_fit_fct, 0)
                 return
             x1 = np.linspace(min(x), max(x), 1000)
-            y1 = self.functions.FctSumme(x1, *popt)
+            y1 = self.fit_functions.FctSumme(x1, *popt)
             line, = self.ax.plot(x1, y1, '-r')
             label = line.get_label()
             self.data.append(self.create_data(x1, y1, label=label, style='-r', line=line))
@@ -4124,7 +4123,7 @@ class PlotWindow(QMainWindow):
                 print_param.append([parmeter_name[idx], po])
             print(tabulate(print_param, headers=['Parameters', 'Values']))
 
-        self.functions.n_fit_fct = dict.fromkeys(self.functions.n_fit_fct, 0)
+        self.fit_functions.n_fit_fct = dict.fromkeys(self.fit_functions.n_fit_fct, 0)
 
     def open_fit_dialog(self):
         self.SelectDataset()
@@ -4163,7 +4162,7 @@ class PlotWindow(QMainWindow):
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
             label = "{}_cut".format(spct.get_label())
-            line, = self.ax.plot(x, y, label=label, picker=True, pickradius=5)[0]
+            line, = self.ax.plot(x, y, label=label, picker=True, pickradius=5)
             self.data.append(self.create_data(x, y, label=label, line=line, filename=self.selectedData[0]["filename"]))
 
     def SelectArea(self):
@@ -4220,7 +4219,6 @@ class PlotWindow(QMainWindow):
     def baseline(self):
         self.SelectDataset()
         x_min, x_max = self.SelectArea()
-        baseline_methods = BaselineCorrectionMethods()
         for n in self.selectedDatasetNumber:
             spct = self.data[n]["line"]
             xs = spct.get_xdata()
@@ -4229,7 +4227,7 @@ class PlotWindow(QMainWindow):
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
-            baseline_dialog = BaselineCorrectionsDialog(self, baseline_methods)
+            baseline_dialog = BaselineCorrectionsDialog(self, self.blc)
             baseline_dialog.get_baseline(x, y, spct)
 
             # wait until QMainWindow is closes
@@ -4271,18 +4269,18 @@ class PlotWindow(QMainWindow):
             y = ys[np.logical_not(np.isnan(ys))]
 
             # Fit
-            popt, pcov = curve_fit(self.functions.LinearFct, x, y)
+            popt, pcov = curve_fit(self.fit_functions.LinearFct, x, y)
 
             # Errors and R**2
             perr = np.sqrt(np.diag(pcov))
-            residuals = y - self.functions.LinearFct(x, *popt)
+            residuals = y - self.fit_functions.LinearFct(x, *popt)
             ss_res = np.sum(residuals ** 2)
             ss_tot = np.sum((y - np.mean(y)) ** 2)
             r_squared = 1 - (ss_res / ss_tot)
 
             # Plot determined linear function
             x1 = np.linspace(min(x), max(x), 1000)
-            y1 = self.functions.LinearFct(x1, *popt)
+            y1 = self.fit_functions.LinearFct(x1, *popt)
             line, = self.ax.plot(x1, y1, '-r')
             label = line.get_label()
             self.data.append(self.create_data(x, y, label=label, line=line, style='-'))
@@ -4319,11 +4317,11 @@ class PlotWindow(QMainWindow):
             x = np.concatenate((x1, x2))
             y = np.concatenate((y1, y2))
 
-            popt, pcov = curve_fit(self.functions.LinearFct, x, y)
+            popt, pcov = curve_fit(self.fit_functions.LinearFct, x, y)
 
             # Plot determined linear function
             x_plot = np.linspace(min(x), max(x), 1000)
-            self.ax.plot(x_plot, self.functions.LinearFct(x_plot, *popt), '-r')
+            self.ax.plot(x_plot, self.fit_functions.LinearFct(x_plot, *popt), '-r')
             self.canvas.draw()
 
             # get index of G peak
@@ -4339,30 +4337,12 @@ class PlotWindow(QMainWindow):
 
     def fit_D_G(self):
         """
-        Partially based on Christian's Mathematica Notebook
-        Fitroutine for D and G bands in spectra of carbon compounds
+        fit routine for D and G bands in spectra of carbon compounds
         """
         # Select which data set will be fitted
         self.SelectDataset()
-        # if self.selectedData == []:
-        #    return
 
-        # Limits for Backgroundcorrection
-        x_min = 200
-        x_max = 4000
-
-        # parameter for background-correction
-        p = 0.0005  # asymmetry 0.001 <= p <= 0.1 is a good choice  recommended from Eilers and Boelens for Raman: 0.001
-        # recommended from Simon: 0.0005
-        lam = 10000000  # smoothness 10^2 <= lambda <= 10^9         recommended from Eilers and Boelens for Raman: 10^7
-        # recommended from Simon: 10^7
-
-        # Limits for FitProcess
-        # define fitarea
-        x_min_fit = 945
-        x_max_fit = 1830
-
-        # Fitprocess
+        # fit process
         # D-Band: Lorentz
         # G-Band: BreitWignerFano
         self.fit_functions.n_fit_fct['Lorentz'] = 1  # number of Lorentzian
@@ -4414,26 +4394,29 @@ class PlotWindow(QMainWindow):
 
         # iterate through all selected data sets
         for n in self.selectedDatasetNumber:
-            x = self.data[n]["x"]
-            y = self.data[n]["y"]
 
-            # Limit data to fit range
-            working_x = x[np.where((x > x_min) & (x < x_max))]
-            working_y = y[np.where((x > x_min) & (x < x_max))]
+            x = self.data[n]["line"].get_xdata()
+            y = self.data[n]["line"].get_ydata()
 
-            yb, zb = self.blc.ALS(working_x, working_y, p, lam)
-            baseline, = self.ax.plot(working_x, zb, 'c--',
-                                     label='baseline ({})'.format(self.data[n]["line"].get_label()))
-            blcSpektrum, = self.ax.plot(working_x, yb, 'c-',
-                                        label='baseline-corrected ({})'.format(self.data[n]["line"].get_label()))
+            # baseline correction
+            # Asymmetric least‐squares baseline algorithm with peak screening
+            # for automatic processing of the Raman spectra
+            yb, zb = self.blc.derpsALS(x, y, 1000000, 0.01)   # (lambda, p) parameter for baseline correction
+            self.ax.plot(x, zb, 'c--', label='baseline ({})'.format(self.data[n]["line"].get_label()))
+            self.ax.plot(x, yb, 'c-', label='baseline-corrected ({})'.format(self.data[n]["line"].get_label()))
             self.canvas.draw()
 
-            # limit data to fitarea
-            working_y = yb[np.where((working_x > x_min_fit) & (working_x < x_max_fit))]
-            working_x = working_x[np.where((working_x > x_min_fit) & (working_x < x_max_fit))]
+            # Limits for FitProcess
+            # define fit region
+            x_min_fit = 945
+            x_max_fit = 1830
+
+            # limit data to fit region
+            working_y = yb[np.where((x > x_min_fit) & (x < x_max_fit))]
+            working_x = x[np.where((x > x_min_fit) & (x < x_max_fit))]
 
             try:
-                popt, pcov = curve_fit(self.functions.FctSumme, working_x, working_y, p0=p_start, bounds=p_bounds,
+                popt, pcov = curve_fit(self.fit_functions.FctSumme, working_x, working_y, p0=p_start, bounds=p_bounds,
                                        absolute_sigma=False)
             except RuntimeError as e:
                 self.mw.show_statusbar_message(str(e), 4000)
@@ -4444,18 +4427,18 @@ class PlotWindow(QMainWindow):
             y_L = []
             for j in range(aL):
                 y_L.append(np.array(
-                    popt[0] + self.functions.LorentzFct(x1, popt[1 + 3 * j], popt[2 + 3 * j], popt[3 + 3 * j])))
+                    popt[0] + self.fit_functions.LorentzFct(x1, popt[1 + 3 * j], popt[2 + 3 * j], popt[3 + 3 * j])))
             y_G = []
             for j in range(aG):
                 y_G.append(np.array(
-                    popt[0] + self.functions.GaussianFct(x1, popt[1 + 3 * aL + 3 * j], popt[2 + 3 * aL + 3 * j],
-                                                         popt[3 + 3 * aL + 3 * j])))
+                    popt[0] + self.fit_functions.GaussianFct(x1, popt[1 + 3 * aL + 3 * j], popt[2 + 3 * aL + 3 * j],
+                                                             popt[3 + 3 * aL + 3 * j])))
             y_BWF = []
             for j in range(aB):
                 y_BWF.append(np.array(
-                    popt[0] + self.functions.BreitWignerFct(x1, popt[4 * j + 3 * aLG + 1], popt[4 * j + 3 * aLG + 2],
-                                                            popt[4 * j + 3 * aLG + 3], popt[4 * j + 3 * aLG + 4])))
-            y_Ges = np.array(self.functions.FctSumme(x1, *popt))
+                    popt[0] + self.fit_functions.BreitWignerFct(x1, popt[4 * j + 3 * aLG + 1], popt[4 * j + 3 * aLG + 2],
+                                                                popt[4 * j + 3 * aLG + 3], popt[4 * j + 3 * aLG + 4])))
+            y_Ges = np.array(self.fit_functions.FctSumme(x1, *popt))
             self.ax.plot(x1, y_Ges, '-r')
             for j in y_G:
                 self.ax.plot(x1, j, '--g')
@@ -4469,165 +4452,29 @@ class PlotWindow(QMainWindow):
             # Calculate Errors and R square
             perr = np.sqrt(np.diag(pcov))
 
-            residuals = working_y - self.functions.FctSumme(working_x, *popt)
+            residuals = working_y - self.fit_functions.FctSumme(working_x, *popt)
             ss_res = np.sum(residuals ** 2)
             ss_tot = np.sum((working_y - np.mean(working_y)) ** 2)
             r_squared = 1 - (ss_res / ss_tot)
 
-            # Calculate Peak-Areas and there Errors
-            r, a0, h, xc, b, Q = sp.symbols('r a0 h xc b Q', real=True)
-
-            # Anti-Derivative of Lorentzian Function
-            F_L = (x_max_fit - x_min_fit) * a0 - b * h * sp.atan(2 * (xc - x_max_fit) / b) / 2 + b * h * sp.atan(
-                2 * (xc - x_min_fit) / b) / 2
-            Flam_L = lambdify([a0, xc, h, b], F_L)
-
-            # Anti-Derivative of Gaussian Function
-            F_G = (4 * a0 * (x_max_fit - x_min_fit) * sp.sqrt(sp.log(2)) - sp.sqrt(sp.pi) * b * h * sp.erf(
-                2 * (xc - x_max_fit) * sp.sqrt(sp.log(2)) / b) +
-                   sp.sqrt(sp.pi) * b * h * sp.erf(2 * (xc - x_min_fit) * sp.sqrt(sp.log(2)) / b)) / (
-                          4 * sp.sqrt(sp.log(2)))
-            Flam_G = lambdify([a0, xc, h, b], F_G)
-
-            # Anti-Derivative of Breit-Wigner-Fano Function
-            F_B = (Q * b * h * (sp.log(b ** 2 / 4 + xc ** 2 - 2 * xc * x_max_fit + x_max_fit ** 2) - sp.log(
-                b ** 2 / 4 + xc ** 2 - 2 * xc * x_min_fit + x_min_fit ** 2)) -
-                   b * h * (Q - 1) * (Q + 1) * sp.atan(2 * (xc - x_max_fit) / b) + b * h * (Q - 1) * (Q + 1) * sp.atan(
-                        2 * (xc - x_min_fit) / b) + 2 * x_max_fit * (Q ** 2 * a0 + h) - 2 * x_min_fit * (
-                           Q ** 2 * a0 + h)) / (2 * Q ** 2)
-            Flam_B = lambdify([a0, xc, h, b, Q], F_B)
-
-            # Calculate partial derivates
-            dF_La0 = sp.diff(F_L, a0)
-            dF_Lh = sp.diff(F_L, h)
-            dF_Lxc = sp.diff(F_L, xc)
-            dF_Lb = sp.diff(F_L, b)
-
-            dF_Ga0 = sp.diff(F_G, a0)
-            dF_Gh = sp.diff(F_G, h)
-            dF_Gxc = sp.diff(F_G, xc)
-            dF_Gb = sp.diff(F_G, b)
-
-            dF_Ba0 = sp.diff(F_B, a0)
-            dF_Bh = sp.diff(F_B, h)
-            dF_Bxc = sp.diff(F_B, xc)
-            dF_Bb = sp.diff(F_B, b)
-            dF_BQ = sp.diff(F_B, Q)
-
-            # Calculate Error of Peak Area with law of error propagation
-            da0, dh, dxc, db, dQ = sp.symbols('da0 dh dxc db dQ', real=True)
-
-            DeltaF_L = sp.Abs(dF_La0) * da0 + sp.Abs(dF_Lh) * dh + sp.Abs(dF_Lxc) * dxc + sp.Abs(dF_Lb) * db
-            DeltaFlam_L = lambdify([a0, da0, xc, dxc, h, dh, b, db], DeltaF_L)
-            DeltaF_G = sp.Abs(dF_Ga0) * da0 + sp.Abs(dF_Gh) * dh + sp.Abs(dF_Gxc) * dxc + sp.Abs(dF_Gb) * db
-            DeltaFlam_G = lambdify([a0, da0, xc, dxc, h, dh, b, db], DeltaF_G)
-            DeltaF_B = sp.Abs(dF_Ba0) * da0 + sp.Abs(dF_Bh) * dh + sp.Abs(dF_Bxc) * dxc + sp.Abs(dF_Bb) * db + sp.Abs(
-                dF_BQ) * dQ
-            DeltaFlam_B = lambdify([a0, da0, xc, dxc, h, dh, b, db, Q, dQ], DeltaF_B)
-
             # Peak Area
-            area_D = 0
-            area_G = 0
-            area_D_err = 0
-            area_G_err = 0
-            pos_G = 1600
-            pos_G_err = 0
-            b_G = 0
-            q_G = 0
-
-            I_D = 0
-            I_G = 0
-
-            xD = 1350
-            xG = 1600
-            absxD = 1350
-            absxG = 1600
-
             area_Lorentz = []
             area_Lorentz_err = []
             for j in range(aL):
-                area_Lorentz.append(Flam_L(popt[0], popt[1 + 3 * j], popt[2 + 3 * j], popt[3 + 3 * j]))
-                area_Lorentz_err.append(
-                    DeltaFlam_L(popt[0], perr[0], popt[3 * j + 1], perr[3 * j + 1], popt[3 * j + 2], perr[3 * j + 2],
-                                popt[3 * j + 3], perr[3 * j + 3]))
-                if np.abs(popt[1 + 3 * j] - xD) < absxD:
-                    area_D = area_Lorentz[j]
-                    area_D_err = area_Lorentz_err[j]
-                    absxD = np.abs(popt[1 + 3 * j] - xD)
-                    I_D = popt[2 + 3 * j]
-                elif np.abs(popt[1 + 3 * j] - xG) < absxG:
-                    area_G = area_Lorentz[j]
-                    area_G_err = area_Lorentz_err[j]
-                    absxG = np.abs(popt[1 + 3 * j] - xD)
-                    I_G = popt[2 + 3 * j]
-                    pos_G = popt[1 + 3 * j]
-                    pos_G_err = perr[1 + 3 * j]
-                    b_G = popt[3 + 3 * j]
-                    q_G = popt[4 + 3 * j]
-                else:
-                    pass
+                area_Lorentz.append(np.trapz(y_L[j], x1))
+                area_Lorentz_err.append(None)           # add error later
 
             area_Gauss = []
             area_Gauss_err = []
             for j in range(aG):
-                area_Gauss.append(
-                    Flam_G(popt[0], popt[1 + 3 * aL + 3 * j], popt[2 + 3 * aL + 3 * j], popt[3 + 3 * aL + 3 * j]))
-                area_Gauss_err.append(DeltaFlam_G(popt[0], perr[0], popt[3 * j + 3 * aL + 1], perr[3 * j + 3 * aL + 1],
-                                                  popt[3 * j + 3 * aL + 2], perr[3 * j + 3 * aL + 2],
-                                                  popt[3 * j + 3 * aL + 3],
-                                                  perr[3 * j + 3 * aL + 3]))
-                if np.abs(popt[1 + 3 * aL + 3 * j] - xD) < absxD:
-                    area_D = area_Gauss[j]
-                    area_D_err = area_Gauss_err[j]
-                    absxD = np.abs(popt[1 + 3 * aL + 3 * j] - xD)
-                    I_D = popt[2 + 3 * aL + 3 * j]
-                elif np.abs(popt[1 + 3 * aL + 3 * j] - xG) < absxG:
-                    area_G = area_Gauss[j]
-                    area_G_err = area_Gauss_err[j]
-                    absxG = np.abs(popt[1 + 3 * aL + 3 * j] - xD)
-                    I_G = popt[2 + 3 * aL + 3 * j]
-                    pos_G = popt[1 + 3 * aL + 3 * j]
-                    pos_G_err = perr[1 + 3 * aL + 3 * j]
-                else:
-                    pass
+                area_Gauss.append(np.trapz(y_G[j], x1))
+                area_Gauss_err.append(None)
 
             area_BWF = []
             area_BWF_err = []
             for j in range(aB):
-                area_BWF.append(
-                    Flam_B(popt[0], popt[4 * j + 3 * aLG + 1], popt[4 * j + 3 * aLG + 2], popt[4 * j + 3 * aLG + 3],
-                           popt[4 * j + 3 * aLG + 4]))
-                area_BWF_err.append(DeltaFlam_B(popt[0], perr[0], popt[4 * j + 3 * aLG + 1], perr[4 * j + 3 * aLG + 1],
-                                                popt[4 * j + 3 * aLG + 2], perr[4 * j + 3 * aLG + 2],
-                                                popt[4 * j + 3 * aLG + 3], perr[4 * j + 3 * aLG + 3],
-                                                popt[4 * j + 3 * aLG + 4], perr[4 * j + 3 * aLG + 4]))
-                if np.abs(popt[4 * j + 3 * aLG + 1] - xD) < absxD:
-                    area_D = area_BWF[j]
-                    area_D_err = area_BWF_err[j]
-                    absxD = np.abs(popt[4 * j + 3 * aLG + 1] - xD)
-                    I_D = popt[4 * j + 3 * aLG + 2]
-                elif np.abs(popt[4 * j + 3 * aLG + 1] - xG) < absxG:
-                    area_G = area_BWF[j]
-                    area_G_err = area_BWF_err[j]
-                    absxG = np.abs(popt[4 * j + 3 * aLG + 1] - xD)
-                    I_G = popt[4 * j + 3 * aLG + 2]
-                    pos_G = popt[4 * j + 3 * aLG + 1]
-                    pos_G_err = perr[4 * j + 3 * aLG + 1]
-                    b_G = popt[4 * j + 3 * aLG + 3]
-                    q_G = popt[4 * j + 3 * aLG + 4]
-                else:
-                    pass
-
-            # Estimate Cluster size
-            # ID/IG = C(lambda)/L_a
-            # mit C(514.5 nm) = 44 Angstrom
-
-            L_a = 4.4 * area_G / area_D
-            L_a_err = L_a * (area_D_err / area_D + area_G_err / area_G)
-            area_ratio = area_D / area_G
-            area_ratio_err = area_ratio * (area_D_err / area_D + area_G_err / area_G)
-            ratio = I_D / I_G
-            ratio_err = 0
+                area_BWF.append(np.trapz(y_BWF[j], x1))
+                area_BWF_err.append(None)
 
             # get data into printable form
             print_table = [['Background', popt[0], perr[0]]]
@@ -4636,6 +4483,7 @@ class PlotWindow(QMainWindow):
                 print_table.append(['Lorentz %i' % (j + 1)])
                 print_table.append(['Raman Shift in cm-1', popt[j * 3 + 1], perr[j * 3 + 1]])
                 print_table.append(['Peak height in cps', popt[j * 3 + 2], perr[j * 3 + 2]])
+                I_D = popt[j * 3 + 2]
                 print_table.append(['FWHM in cm-1', popt[j * 3 + 3], perr[j * 3 + 3]])
                 print_table.append(['Peak area in cps*cm-1', area_Lorentz[j], area_Lorentz_err[j]])
                 print_table.append(['', '', ''])
@@ -4650,13 +4498,22 @@ class PlotWindow(QMainWindow):
                 print_table.append(['BWF %i' % (j + 1)])
                 print_table.append(['Raman Shift in cm-1', popt[j * 3 + 3 * aLG + 1], perr[j * 3 + 3 * aLG + 1]])
                 print_table.append(['Peak height in cps', popt[j * 3 + 3 * aLG + 2], perr[j * 3 + 3 * aLG + 2]])
+                I_G = popt[j * 3 + 3 * aLG + 2]
                 print_table.append(['FWHM in cm-1', popt[j * 3 + 3 * aLG + 3], perr[j * 3 + 3 * aLG + 3]])
                 print_table.append(['BWF Coupling Coefficient', popt[j * 3 + 3 * aLG + 4], perr[j * 3 + 3 * aLG + 4]])
                 print_table.append(['Peak area in cps*cm-1', area_BWF[j], area_BWF_err[j]])
                 print_table.append(['', '', ''])
 
-            print_table.append(['Cluster Size in nm', L_a, L_a_err])
+            # Estimate Cluster size
+            # ID/IG = C(lambda)/L_a
+            # mit C(514.5 nm) = 4.4 nm
+            ratio = I_D / I_G
+            ratio_err = None            # add error later
+            L_a = 4.4 / ratio       # in nm
+            L_a_err = None
+
             print_table.append(['I_D/I_G', ratio, ratio_err])
+            print_table.append(['Cluster Size in nm', L_a, L_a_err])
 
             save_data = r'R^2=%.6f \n' % r_squared + 'Lorentz 1 = D-Bande, BWF (Breit-Wigner-Fano) 1 = G-Bande \n' + \
                         tabulate(print_table, headers=['Parameters', 'Values', 'Errors'])
@@ -4664,31 +4521,31 @@ class PlotWindow(QMainWindow):
             print(self.data[n]["line"].get_label())
             print(save_data)
 
-            (fileBaseName, fileExtension) = os.path.splitext(self.data[n]["line"].get_label())
-            startFileDirName = os.path.dirname(self.selectedData[0][3])
-            with open(startFileDirName + "/ID-IG.txt", "a") as file_cluster:
-                file_cluster.write('\n' + str(fileBaseName) + '   %.4f' % ratio + '   %.4f' % ratio_err)
+            #(fileBaseName, fileExtension) = os.path.splitext(self.data[n]["line"].get_label())
+            #startFileDirName = os.path.dirname(self.selectedData[0]["filename"])
+            #with open(startFileDirName + "/ID-IG.txt", "a") as file_cluster:
+            #    file_cluster.write('\n' + str(fileBaseName) + '   %.4f' % ratio + '   %.4f' % ratio_err)
 
-            pos_G_max = pos_G + b_G / (2 * q_G)
-            with open(startFileDirName + "/G-Position.txt", "a") as file_GPosition:
-                file_GPosition.write('\n{} {:.4f}  {:.4f}'.format(fileBaseName, pos_G_max, 0.0))
+            #pos_G_max = pos_G + b_G / (2 * q_G)
+            #with open(startFileDirName + "/G-Position.txt", "a") as file_GPosition:
+            #    file_GPosition.write('\n{} {:.4f}  {:.4f}'.format(fileBaseName, pos_G_max, 0.0))
 
             # Save the fit parameter
-            startFileBaseName = startFileDirName + '/' + fileBaseName
-            startFileName = startFileBaseName + '_fitpara.txt'
+            #startFileBaseName = startFileDirName + '/' + fileBaseName
+            #startFileName = startFileBaseName + '_fitpara.txt'
             # self.save_to_file('Save fit parameter in file', startFileName, save_data)
 
             # Save the Fit data
-            startFileName = startFileBaseName + '_fitdata.txt'
-            save_data = [x1]
-            for j in y_L:
-                save_data.append(j)
-            for j in y_G:
-                save_data.append(j)
-            for j in y_BWF:
-                save_data.append(j)
-            save_data.append(y_Ges)
-            save_data = np.transpose(save_data)
+            #startFileName = startFileBaseName + '_fitdata.txt'
+            #save_data = [x1]
+            #for j in y_L:
+            #    save_data.append(j)
+            #for j in y_G:
+            #    save_data.append(j)
+            #for j in y_BWF:
+            #    save_data.append(j)
+            #save_data.append(y_Ges)
+            #save_data = np.transpose(save_data)
             # self.save_to_file('Save fit data in file', startFileName, save_data)
 
     def norm_to_water(self):
@@ -4778,7 +4635,7 @@ class PlotWindow(QMainWindow):
             p_bounds = [p_bounds_low, p_bounds_up]
 
             try:
-                popt, pcov = curve_fit(self.functions.FctSumme, x, y, p0=p_start, bounds=p_bounds, absolute_sigma=False)
+                popt, pcov = curve_fit(self.fit_functions.FctSumme, x, y, p0=p_start, bounds=p_bounds, absolute_sigma=False)
             except RuntimeError as e:
                 self.mw.show_statusbar_message(str(e), 4000)
                 continue
@@ -4786,16 +4643,16 @@ class PlotWindow(QMainWindow):
             # Plot the Fit Data
             x_fit = np.linspace(x_min, x_max, 3000)
             for j in range(self.fit_functions.n_fit_fct['Lorentz']):
-                y_Lorentz = self.functions.LorentzFct(x_fit, popt[1 + 3 * j], popt[2 + 3 * j], popt[3 + 3 * j])
+                y_Lorentz = self.fit_functions.LorentzFct(x_fit, popt[1 + 3 * j], popt[2 + 3 * j], popt[3 + 3 * j])
                 peak_areas.append(np.trapz(y_Lorentz))
                 self.ax.plot(x_fit, popt[0] + y_Lorentz, '--g')
-            self.ax.plot(x_fit, self.functions.FctSumme(x_fit, *popt), '-r')
+            self.ax.plot(x_fit, self.fit_functions.FctSumme(x_fit, *popt), '-r')
             self.canvas.draw()
 
             # Calculate Errors and R square
             perr = np.sqrt(np.diag(pcov))
 
-            residuals = y - self.functions.FctSumme(x, *popt)
+            residuals = y - self.fit_functions.FctSumme(x, *popt)
             ss_res = np.sum(residuals ** 2)
             ss_tot = np.sum((y - np.mean(y)) ** 2)
             r_squared = 1 - (ss_res / ss_tot)
