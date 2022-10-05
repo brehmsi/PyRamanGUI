@@ -142,7 +142,7 @@ def figure_edit(axes, parent=None):
         old_legend = ax.get_legend()
         _visible = old_legend._visible
         _draggable = old_legend._draggable is not None
-        _ncol = old_legend._ncol
+        _ncol = old_legend._ncols
         _fontsize = int(old_legend._fontsize)
         _frameon = old_legend.get_frame_on()
         _shadow = old_legend.shadow
@@ -315,39 +315,9 @@ def figure_edit(axes, parent=None):
         fills.append([fill_data, label, ""])
     has_fills = bool(fills)
 
-    # Get / Images
-    imagedict = {}
-    for image in ax.get_images():
-        label = image.get_label()
-        if '_nolegend_' in label:
-            continue
-        imagedict[label] = image
-    imagelabels = sorted(imagedict, key=cmp_key)
-    images = []
-    cmaps = [(cmap, name) for name, cmap in sorted(cm.cmap_d.items())]
-    for label in imagelabels:
-        image = imagedict[label]
-        cmap = image.get_cmap()
-        if cmap not in cm.cmap_d.values():
-            cmaps = [(cmap, cmap.name)] + cmaps
-        low, high = image.get_clim()
-        imagedata = [
-            ('Label', label),
-            ('Colormap', [cmap.name] + cmaps),
-            ('Min. value', low),
-            ('Max. value', high),
-            ('Interpolation',
-             [image.get_interpolation()]
-             + [(name, name) for name in sorted(mimage.interpolations_names)])]
-        images.append([imagedata, label, ""])
-    # Is there an image displayed?
-    has_image = bool(images)
-
     datalist = [(general, "General", ""), (axis_options, "Axis", ""), (legend, "Legend", "")]
     if curves:
         datalist.append((curves, "Curves", ""))
-    if images:
-        datalist.append((images, "Images", ""))
     if errorbars:
         datalist.append((errorbars, "Errorbar", ""))
     if fills:
@@ -362,7 +332,6 @@ def figure_edit(axes, parent=None):
         axis_options = data.pop(0)
         legend = data.pop(0)
         curves = data.pop(0) if has_curve else []
-        images = data.pop(0) if has_image else []
         errorbars = data.pop(0) if has_errorbar else []
         fills = data.pop(0) if has_fills else []
         if data:
@@ -553,15 +522,6 @@ def figure_edit(axes, parent=None):
                     fill.remove()
                 except ValueError as e:
                     print(e)
-
-        # Set / Images
-        for index, image_settings in enumerate(images):
-            image = imagedict[imagelabels[index]]
-            label, cmap, low, high, interpolation = image_settings
-            image.set_label(label)
-            image.set_cmap(cm.get_cmap(cmap))
-            image.set_clim(*sorted([low, high]))
-            image.set_interpolation(interpolation)
 
         # Redraw
         figure.canvas.draw()

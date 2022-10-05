@@ -117,7 +117,7 @@ class BrokenAxes:
         if self.big_ax.get_legend() is not None:
             old_legend = self.big_ax.get_legend()
             leg_draggable = old_legend._draggable is not None
-            leg_ncol = old_legend._ncol
+            leg_ncol = old_legend._ncols
             leg_fontsize = int(old_legend._fontsize)
             leg_frameon = old_legend.get_frame_on()
             leg_shadow = old_legend.shadow

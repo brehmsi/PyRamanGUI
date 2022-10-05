@@ -442,7 +442,7 @@ class MainWindow(QMainWindow):
             old_legend = ax.get_legend()
             _visible = old_legend._visible
             _draggable = old_legend._draggable is not None
-            _ncol = old_legend._ncol
+            _ncol = old_legend._ncols
             _fontsize = int(old_legend._fontsize)
             _frameon = old_legend.get_frame_on()
             _shadow = old_legend.shadow
