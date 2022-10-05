@@ -44,7 +44,7 @@ The first one is to use the menu bar item "File" &rarr; "New" and the second one
 right-click on the side tree. 
 The new window then opens in the opened folder.
 
-##  Spreadsheet <img src="pics/Icon_spreadsheet.png" alt="Icon of Spreadsheet" height="15"/>
+##  Spreadsheet <img src="pics/Icon_spreadsheet.png" alt="Icon of Spreadsheet" height="20"/>
 <img src="pics/Example_Table.PNG" width="200"/>
 
 The spreadsheet contains the data in a table, which can either be loaded ("File"
@@ -62,7 +62,7 @@ The data can be plotted over the drop-down menu or the menu bar at the top.
 For the x values, the closest column on the left side of the selected column is used.
 
 
-##  Plot Window <img src="pics/Icon_plotwindow.png" alt="Icon of Plotwindow" height="15"/>
+##  Plot Window <img src="pics/Icon_plotwindow.png" alt="Icon of Plotwindow" height="20"/>
 <img src="pics/Example_PlotWindow.PNG" width="200"/>
 
 The plot window is the most complex of the three windows.
@@ -111,10 +111,12 @@ on the inserted text.
 The menu bar consists of three drop-down menus (File, Edit, Analysis) and a fourth menu item (Data base peak position)
 
 - **File** 
-  - **save to file**: save the plotted data in file
+  - **save to file**: save the plotted data in .txt file
 - **Edit**
   - **delete data point**
+  - **remove cosmic spikes**
   - **define data area**
+  - **shift spectrum to zero line**
   - **normalize spectrum**
   - **add up or subtract two spectra**
 - **Analysis**
@@ -138,7 +140,7 @@ The menu bar consists of three drop-down menus (File, Edit, Analysis) and a four
 
 
 
-## Text Window <img src="pics/Icon_textwindow.png" alt="Icon of Textwindow" height="15"/>
+## Text Window <img src="pics/Icon_textwindow.png" alt="Icon of Textwindow" height="20"/>
 <img src="pics/Example_TextWindow.PNG" width="200"/>
 
 The text window offers an opportunity to take notes and document a project.
