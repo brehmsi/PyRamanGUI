@@ -142,7 +142,11 @@ def figure_edit(axes, parent=None):
         old_legend = ax.get_legend()
         _visible = old_legend._visible
         _draggable = old_legend._draggable is not None
-        _ncol = old_legend._ncols
+        try:
+            # dependent on matplotlib version (>= 3.6.0 _ncols else _ncol)
+            _ncol = old_legend._ncol
+        except AttributeError:
+            _ncol = old_legend._ncols
         _fontsize = int(old_legend._fontsize)
         _frameon = old_legend.get_frame_on()
         _shadow = old_legend.shadow

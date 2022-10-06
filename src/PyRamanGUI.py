@@ -28,14 +28,13 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QTableWidget, QMessageBo
 from matplotlib.backends.qt_editor import _formlayout as formlayout
 from scipy import signal, special, stats
 from scipy.optimize import curve_fit
-from sympy.utilities.lambdify import lambdify
 from sklearn import decomposition
 from tabulate import tabulate
 from pybaselines import whittaker
 
 # Import files
-import myfigureoptions  # see file 'myfigureoptions.py'
-import Database_Measurements  # see file Database_Measurements
+import myfigureoptions
+import Database_Measurements
 from BrokenAxes import brokenaxes
 import database_spectra
 from smoothing import SmoothingMethods, SmoothingDialog
@@ -442,7 +441,11 @@ class MainWindow(QMainWindow):
             old_legend = ax.get_legend()
             _visible = old_legend._visible
             _draggable = old_legend._draggable is not None
-            _ncol = old_legend._ncols
+            try:
+                # dependent on matplotlib version (>= 3.6.0 _ncols else _ncol)
+                _ncol = old_legend._ncol
+            except AttributeError:
+                _ncol = old_legend._ncols
             _fontsize = int(old_legend._fontsize)
             _frameon = old_legend.get_frame_on()
             _shadow = old_legend.shadow
