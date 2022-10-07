@@ -54,7 +54,7 @@ The following python packages have to be installed:
 
 On **Linux** (Ubuntu, Debian) a package can be installed with following command:
 ```
-pip install matplotlib numpy prettytable pybaselines pyqt5 rampy scipy scikit-learn 
+pip install matplotlib numpy prettytable pybaselines pyqt5 pyside2 rampy scipy scikit-learn tabulate
 ```
 
 
@@ -70,9 +70,9 @@ Change the directory with the command
 ```
  cd\
 ```
-Run
+Run as administrator
 ```
-pip install matplotlib numpy prettytable pybaselines pyqt5 rampy scipy scikit-learn 
+pip install --user matplotlib numpy prettytable pybaselines pyqt5 pyside2 rampy scipy scikit-learn tabulate
 ```
 
 # License
