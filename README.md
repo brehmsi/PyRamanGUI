@@ -12,6 +12,39 @@ Provides a general purpose tool for Raman spectra evaluation
   
 A tutorial on how to use PyRamanGui can be found here [Tutorial](doc/README.md)
 
+# Requirements
+PyRamanGui requires:
+  - [python](https://www.python.org/downloads/) >= 3.6
+  
+The following python packages have to be installed:
+  - matplotlib
+  - numpy
+  - prettytable
+  - pybaselines
+  - PyQt5
+  - rampy
+  - scipy
+  - sklearn
+
+On **Linux** (Ubuntu, Debian) a package can be installed with following command:
+```
+pip install matplotlib numpy prettytable pybaselines pyqt5 pyside2 rampy scipy scikit-learn tabulate
+```
+
+
+On **Windows** with Anaconda:
+
+Open the Anaconda Command Prompt (CMD.exe Prompt)
+
+Change the directory with the command
+```
+ cd\
+```
+Run as administrator
+```
+pip install --user matplotlib numpy prettytable pybaselines pyqt5 pyside2 rampy scipy scikit-learn tabulate
+```
+
 # Installation
 ## Linux
 Open a terminal and go to the directory where you want to clone the files.
@@ -37,43 +70,6 @@ PATH environment variable' box during installation. Otherwise, PyRamanGui can't 
 by Anaconda.
 
 Copy the PyRamanGui directory to a path you have chosen. To run PyRamanGui double-click the 'WindowsRun.bat' file
-
-# Requirements
-PyRamanGui requires:
-  - [python](https://www.python.org/downloads/) >= 3.6
-  
-The following python packages have to be installed:
-  - matplotlib
-  - numpy
-  - prettytable
-  - pybaselines
-  - PyQt5
-  - rampy
-  - scipy
-  - sklearn
-
-On **Linux** (Ubuntu, Debian) a package can be installed with following command:
-```
-pip install matplotlib numpy prettytable pybaselines pyqt5 pyside2 rampy scipy scikit-learn tabulate
-```
-
-
-On **Windows** with Anaconda:
-
-Open Anaconda. Click on 'Environments' ond the left sidebar. Select 'Not installed' in the drop-down menu
-Check all the boxes for the needed packages and click 'Apply'.
-
-Alternative:
-Open the Anaconda Command (CMD.exe Prompt)
-
-Change the directory with the command
-```
- cd\
-```
-Run as administrator
-```
-pip install --user matplotlib numpy prettytable pybaselines pyqt5 pyside2 rampy scipy scikit-learn tabulate
-```
 
 # License
 This project is licensed under the Apache License 2.0   

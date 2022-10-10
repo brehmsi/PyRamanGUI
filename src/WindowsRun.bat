@@ -1,3 +1,3 @@
 set mypath=%cd%
 cd ..
-pythonw %mypath%\PyRamanGui.py
+python %mypath%\PyRamanGui.py
