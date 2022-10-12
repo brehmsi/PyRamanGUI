@@ -1,4 +1,4 @@
-# PyRamanGui - A general purpose Raman evaluation tool 
+# PyRamanGUI - A general purpose Raman evaluation tool 
   - Author: Simon Brehm (Email: simon.brehm@physik.tu-freiberg.de) 
   - Coding language: Python 
 
@@ -10,10 +10,10 @@ Provides a general purpose tool for Raman spectra evaluation
   - general-purpose background fitting procedure
   - increased reproducibility of fitting processes 
   
-A tutorial on how to use PyRamanGui can be found here [Tutorial](doc/README.md)
+A tutorial on how to use PyRamanGUI can be found here [Tutorial](doc/README.md)
 
 # Requirements
-PyRamanGui requires:
+PyRamanGUI requires:
   - [python](https://www.python.org/downloads/) >= 3.6
   
 The following python packages have to be installed:
@@ -34,7 +34,7 @@ pip install matplotlib numpy prettytable pybaselines pyqt5 pyside2 rampy scipy s
 
 On **Windows** with Anaconda:
 Install [Anaconda](https://www.anaconda.com/products/distribution). Make sure to enable the 'Add Anaconda to the system 
-PATH environment variable' box during installation. Otherwise, PyRamanGui can't find the python executable installed 
+PATH environment variable' box during installation. Otherwise, PyRamanGUI cannot find the python executable installed 
 by Anaconda.
 
 Open the Anaconda Command Prompt (CMD.exe Prompt)
@@ -70,7 +70,7 @@ python3 pyramangui.py
 ## Windows
 
 
-Copy the PyRamanGui directory to a path you have chosen. To run PyRamanGui double-click the 'WindowsRun.bat' file
+Copy the PyRamanGUI directory to a path you have chosen. To run PyRamanGUI, double-click the 'WindowsRun.bat' file
 
 # License
 This project is licensed under the Apache License 2.0   
