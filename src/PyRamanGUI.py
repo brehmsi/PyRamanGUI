@@ -2182,7 +2182,7 @@ class InsertText:
         self.fig = self.text_annotation.figure
         if self.fig is None or self.text_annotation is None:
             return
-        self.fig.canvas.mpl_connect('pick_event', self.on_pick)
+        self.fig.canvas.mpl_connect("pick_event", self.on_pick)
 
         # get text
         self.text = self.text_annotation.get_text()
@@ -2198,8 +2198,8 @@ class InsertText:
         if event.artist == self.text_annotation and event.mouseevent.button == 1 and event.mouseevent.dblclick is True:
             self.edit()
         elif event.artist == self.text_annotation and event.mouseevent.button == 1:
-            self.cid2 = self.fig.canvas.mpl_connect('button_release_event', self.on_release)
-            self.cid3 = self.fig.canvas.mpl_connect('motion_notify_event', self.on_motion)
+            self.cid2 = self.fig.canvas.mpl_connect("button_release_event", self.on_release)
+            self.cid3 = self.fig.canvas.mpl_connect("motion_notify_event", self.on_motion)
         elif event.artist == self.text_annotation and event.mouseevent.button == 3:
             self.text_options()
         else:
@@ -2238,17 +2238,17 @@ class InsertText:
     def text_options(self):
         """Option dialog"""
         text_options_list = [
-            ('Text', self.text),
-            ('Font size', self.font_size),
-            ('Color', self.color),
-            ('Remove Text', False)
+            ("Text", self.text),
+            ("Font size", self.font_size),
+            ("Color", self.color),
+            ("Remove Text", False)
         ]
 
-        text_option_menu = formlayout.fedit(text_options_list, title="Text options")
+        text_option_menu = formlayout.fedit(text_options_list, title="Text options", apply=self.apply_options)
         if text_option_menu is not None:
-            self.apply_callback(text_option_menu)
+            self.apply_options(text_option_menu)
 
-    def apply_callback(self, options):
+    def apply_options(self, options):
         (self.text, self.font_size, self.color, remove_text) = options
 
         self.text_annotation.set_text(self.text)
@@ -4562,11 +4562,12 @@ class PlotWindow(QMainWindow):
         self.SelectDataset()
         for n in self.selectedDatasetNumber:
             # get data
-            xs = self.data[n]["x"]
-            ys = self.data[n]["y"]
+            spct = self.data[n]["line"]
+            xs = spct.get_xdata()
+            ys = spct.get_ydata()
 
             # background correction
-            yb, baseline = self.blc.drPLS(xs, ys, lam=9000000)
+            yb, baseline = self.blc.drPLS(xs, ys, lam=9000000, eta=0.5)
 
             # norm spectrum regarding water peak
             norm_factor = np.max(yb[np.argwhere((xs > 3000) & (xs < 3700))])
@@ -4681,7 +4682,7 @@ class PlotWindow(QMainWindow):
             print(fit_parameter_table)
 
             # save the fit parameter
-            directory_name, file_name_spectrum = os.path.split(self.selectedData[n][3])
+            directory_name, file_name_spectrum = os.path.split(self.data[n]["filename"])
             (fileBaseName, fileExtension) = os.path.splitext(file_name_spectrum)
             file_name_parameter = '{}/{}_fitparameter.txt'.format(directory_name, fileBaseName)
             self.save_to_file('Save fit parameter in file', file_name_parameter, fit_parameter_table)
