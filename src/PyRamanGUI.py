@@ -1074,6 +1074,10 @@ class FormulaInterpreter:
     def interprete_formula(self, f):
         if re.match(r'\ACol\([0-9]+\)\Z', f):
             col_formula = int(re.findall(r'\b\d+\b', f)[0])
+            if col_formula >= len(self.data):
+                # in case there are not enough columns
+                print('There is something wrong with the formula')
+                return np.full(len(self.data[0]['data']), 0)
             return self.data[col_formula]['data']
         elif re.match(r'\A\(.+\)\Z', f) and self.parentheses_enclosed(f):  # e.g. '(Col(1)-Col(2))'
             return self.interprete_formula(f[1:-1])
@@ -1732,12 +1736,21 @@ class SpreadSheetWindow(QMainWindow):
                 return
             else:
                 Interpreter = FormulaInterpreter(self.data)
-                new_data = Interpreter.interprete_formula(content)
-                if new_data is not None:
+                try:
+                    new_data = Interpreter.interprete_formula(content)
+                except Exception as e:
+                    print(e)
+                    new_data = None
+                if new_data is None:
+                    return
+                elif isinstance(new_data, float):
+                    self.data[col]["data"] = np.full(len(self.data[col]), new_data)
+                else:
                     self.data[col]["data"] = new_data
-                    for r in range(len(self.data[col]["data"])):
-                        newcell = QTableWidgetItem(str(self.data[col]["data"][r]))
-                        self.data_table.setItem(r, col, newcell)
+
+                for r in range(len(self.data[col]["data"])):
+                    newcell = QTableWidgetItem(str(self.data[col]["data"][r]))
+                    self.data_table.setItem(r, col, newcell)
 
     def new_col(self, data_content=None, short_name=None):
         # adds a new column at end of table
@@ -4098,14 +4111,16 @@ class PlotWindow(QMainWindow):
             y = ys[np.where((xs > x_min) & (xs < x_max))]
             idx_peaks, properties = signal.find_peaks(y, height=0.1 * max(y))
             if idx_peaks.size > 0:
-                p = round(x[idx_peaks[0]], 2)
-                h = round(properties["peak_heights"][0], 2)
-                w = signal.peak_widths(y, idx_peaks)[0][0]
+                background = round(np.mean(np.concatenate([y[:3], y[-3:]])), 2)
+                idx = np.argmax(properties["peak_heights"]) # get index of highest peak
+                p = round(x[idx_peaks[idx]], 2)
+                h = round(properties["peak_heights"][idx] - background, 2)
+                w = signal.peak_widths(y, idx_peaks)[0][idx]
             else:
                 self.mw.show_statusbar_message("Couldn't find good start parameters \n"
                                                "Use Fit Dialog please", 4000)
                 return
-            p_start = [0, p, h, w]
+            p_start = [background, p, h, w]
 
             try:
                 popt, pcov = curve_fit(self.fit_functions.FctSumme, x, y, p0=p_start)
