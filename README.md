@@ -17,25 +17,25 @@ PyRamanGUI requires:
   - [python](https://www.python.org/downloads/) >= 3.6
   
 The following python packages have to be installed:
-  - matplotlib
-  - numpy
-  - prettytable
-  - pybaselines
-  - PyQt5
-  - rampy
-  - scipy
-  - sklearn
+  - matplotlib (3.5.3)
+  - numpy (1.12.3)
+  - prettytable (3.3.0)
+  - pybaselines (0.8.0)
+  - PyQt5 (5.15.7)
+  - rampy (0.4.9)
+  - scipy (1.4.1)
+  - sklearn (1.0.2)
+
+It may also work with other versions, but it has been tested only with these.
 
 On **Linux** (Ubuntu, Debian) a package can be installed with following command:
 ```
-pip install matplotlib numpy prettytable pybaselines pyqt5 pyside2 rampy scipy scikit-learn tabulate
+pip install matplotlib==3.5.3 numpy==1.12.1 prettytable==3.3.0 pybaselines==0.8.0 pyqt5==5.15.7 pyside2 rampy==0.4.9 scipy==1.4.1 scikit-learn==1.0.2 tabulate
 ```
 
 
 On **Windows** with Anaconda:
-Install [Anaconda](https://www.anaconda.com/products/distribution). Make sure to enable the 'Add Anaconda to the system 
-PATH environment variable' box during installation. Otherwise, PyRamanGUI cannot find the python executable installed 
-by Anaconda.
+Install [Anaconda](https://www.anaconda.com/products/distribution). 
 
 Open the Anaconda Command Prompt (CMD.exe Prompt)
 
@@ -45,7 +45,7 @@ Change the directory with the command
 ```
 Run as administrator
 ```
-pip install --user matplotlib numpy prettytable pybaselines pyqt5 pyside2 rampy scipy scikit-learn tabulate
+pip install --user matplotlib==3.5.3 numpy==1.12.1 prettytable==3.3.0 pybaselines==0.8.0 pyqt5==5.15.7 pyside2 rampy==0.4.9 scipy==1.4.1 scikit-learn==1.0.2 tabulate
 ```
 
 # Installation
@@ -64,13 +64,12 @@ cd pyramangui/src
 
 Run PyRamanGUI
 ```
-python3 pyramangui.py
+python3 PyRamanGUI.py
 ```
 
 ## Windows
 
-
-Copy the PyRamanGUI directory to a path you have chosen. To run PyRamanGUI, double-click the 'WindowsRun.bat' file
+Download the PyRamanGUI directory. To run PyRamanGUI, go in the directory src and double-click the 'WindowsRun.bat' file
 
 # License
 This project is licensed under the Apache License 2.0   
