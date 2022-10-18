@@ -30,7 +30,7 @@ It may also work with other versions, but it has been tested only with these.
 
 On **Linux** (Ubuntu, Debian) a package can be installed with following command:
 ```
-pip install matplotlib==3.5.3 numpy==1.12.1 prettytable==3.3.0 pybaselines==0.8.0 pyqt5==5.15.7 pyside2 rampy==0.4.9 scipy==1.4.1 scikit-learn==1.0.2 tabulate
+pip install matplotlib==3.5.3 numpy==1.12.1 prettytable==3.3.0 pybaselines==0.8.0 pyqt5==5.15.7 pyside2 rampy==0.4.9 scipy==1.4.1 scikit-learn==1.0.2 
 ```
 
 
@@ -45,7 +45,7 @@ Change the directory with the command
 ```
 Run as administrator
 ```
-pip install --user matplotlib==3.5.3 numpy==1.12.1 prettytable==3.3.0 pybaselines==0.8.0 pyqt5==5.15.7 pyside2 rampy==0.4.9 scipy==1.4.1 scikit-learn==1.0.2 tabulate
+pip install --user matplotlib==3.5.3 numpy==1.12.1 prettytable==3.3.0 pybaselines==0.8.0 pyqt5==5.15.7 pyside2 rampy==0.4.9 scipy==1.4.1 scikit-learn==1.0.2 
 ```
 
 # Installation

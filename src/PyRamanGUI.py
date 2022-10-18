@@ -29,7 +29,6 @@ from matplotlib.backends.qt_editor import _formlayout as formlayout
 from scipy import signal, special, stats
 from scipy.optimize import curve_fit
 from sklearn import decomposition
-from tabulate import tabulate
 from pybaselines import whittaker
 
 # Import files
@@ -4121,13 +4120,17 @@ class PlotWindow(QMainWindow):
             self.data.append(self.create_data(x1, y1, label=label, style='-r', line=line))
             self.canvas.draw()
 
-            print('\n {} {}'.format(self.data[j]["line"].get_label(), q.text()))
-            parmeter_name = ['background', 'Raman Shift in cm^-1', 'Intensity', 'FWHM', 'additional Parameter']
-            print_param = []
+            # print parameter
+            print_table = prettytable.PrettyTable()
+            print_table.field_names = ["Parameters", "Values"]
+            parameter_name = ["Background", "Raman Shift in cm^-1", "Intensity", "FWHM", "Additional Parameter"]
             for idx, po in enumerate(popt):
-                print_param.append([parmeter_name[idx], po])
-            print(tabulate(print_param, headers=['Parameters', 'Values']))
+                print_table.add_row([parameter_name[idx], po])
 
+            print("\n {} {}".format(self.data[j]["line"].get_label(), q.text()))
+            print(print_table)
+
+        # set number of fit functions to 0 again
         self.fit_functions.n_fit_fct = dict.fromkeys(self.fit_functions.n_fit_fct, 0)
 
     def open_fit_dialog(self):
@@ -4291,14 +4294,15 @@ class PlotWindow(QMainWindow):
             self.data.append(self.create_data(x, y, label=label, line=line, style='-'))
             self.canvas.draw()
 
-            # Print results
+            # print results
+            print_table = prettytable.PrettyTable()
+            print_table.field_names = ["Parameters", "Values", "Errors"]
+            parameter_name = ["Slope", "y-Intercept"]
+            for i in range(len(popt)):
+                print_table.add_row([parameter_name[i], popt[i], perr[i]])
             print('\n {}'.format(spct.get_label()))
             print(r'R^2={:.4f}'.format(r_squared))
-            parmeter_name = ['Slope', 'y-Intercept']
-            print_param = []
-            for i in range(len(popt)):
-                print_param.append([parmeter_name[i], popt[i], perr[i]])
-            print(tabulate(print_param, headers=['Parameters', 'Values', 'Errors']))
+            print(print_table)
 
     def hydrogen_estimation(self):
         """
@@ -4483,10 +4487,9 @@ class PlotWindow(QMainWindow):
                 area_BWF_err.append(None)
 
             # get data into printable form
-            print_table = [['Background', popt[0], perr[0]]]
-            print_table.append(['', '', ''])
+            print_table = [['Background', popt[0], perr[0]], ['', '', '']]
             for j in range(aL):
-                print_table.append(['Lorentz %i' % (j + 1)])
+                print_table.append(['Lorentz %i' % (j + 1), "", ""])
                 print_table.append(['Raman Shift in cm-1', popt[j * 3 + 1], perr[j * 3 + 1]])
                 print_table.append(['Peak height in cps', popt[j * 3 + 2], perr[j * 3 + 2]])
                 I_D = popt[j * 3 + 2]
@@ -4494,14 +4497,14 @@ class PlotWindow(QMainWindow):
                 print_table.append(['Peak area in cps*cm-1', area_Lorentz[j], area_Lorentz_err[j]])
                 print_table.append(['', '', ''])
             for j in range(aG):
-                print_table.append(['Gauss %i' % (j + 1)])
+                print_table.append(['Gauss %i' % (j + 1), "", ""])
                 print_table.append(['Raman Shift in cm-1', popt[j * 3 + 3 * aL + 1], perr[j * 3 + 3 * aL + 1]])
                 print_table.append(['Peak height in cps', popt[j * 3 + 3 * aL + 2], perr[j * 3 + 3 * aL + 2]])
                 print_table.append(['FWHM in cm-1', popt[j * 3 + 3 * aL + 3], perr[j * 3 + 3 * aL + 3]])
                 print_table.append(['Peak area in cps*cm-1', area_Gauss[j], area_Gauss_err[j]])
                 print_table.append(['', '', ''])
             for j in range(aB):
-                print_table.append(['BWF %i' % (j + 1)])
+                print_table.append(['BWF %i' % (j + 1), "", ""])
                 print_table.append(['Raman Shift in cm-1', popt[j * 3 + 3 * aLG + 1], perr[j * 3 + 3 * aLG + 1]])
                 print_table.append(['Peak height in cps', popt[j * 3 + 3 * aLG + 2], perr[j * 3 + 3 * aLG + 2]])
                 I_G = popt[j * 3 + 3 * aLG + 2]
@@ -4521,8 +4524,11 @@ class PlotWindow(QMainWindow):
             print_table.append(['I_D/I_G', ratio, ratio_err])
             print_table.append(['Cluster Size in nm', L_a, L_a_err])
 
-            save_data = r'R^2=%.6f \n' % r_squared + 'Lorentz 1 = D-Bande, BWF (Breit-Wigner-Fano) 1 = G-Bande \n' + \
-                        tabulate(print_table, headers=['Parameters', 'Values', 'Errors'])
+            save_data = prettytable.PrettyTable()
+            save_data.field_names = ["Parameters", "Values", "Errors"]
+            save_data.add_rows(print_table)
+            save_data = "R^2={:.6f} \n Lorentz 1 = D-Bande, BWF (Breit-Wigner-Fano) 1 = G-Bande \n {}".format(r_squared, save_data)
+
             print('\n')
             print(self.data[n]["line"].get_label())
             print(save_data)
@@ -4665,18 +4671,22 @@ class PlotWindow(QMainWindow):
             ss_tot = np.sum((y - np.mean(y)) ** 2)
             r_squared = 1 - (ss_res / ss_tot)
 
-            # store fitparameter in table
+            # store fit parameter in list
             print_table = [['Background', popt[0], perr[0]], ['', '', '']]
             for j in range(self.fit_functions.n_fit_fct['Lorentz']):
-                print_table.append(['Lorentz %i' % (j + 1)])
+                print_table.append(['Lorentz %i' % (j + 1), "", ""])
                 print_table.append(['Raman Shift in cm-1', popt[j * 3 + 1], perr[j * 3 + 1]])
                 print_table.append(['Peak height in cps', popt[j * 3 + 2], perr[j * 3 + 2]])
                 print_table.append(['FWHM in cm-1', popt[j * 3 + 3], perr[j * 3 + 3]])
                 print_table.append(['Peak area in cps*cm-1', peak_areas[j], ''])
                 print_table.append(['', '', ''])
-            fit_parameter_table = tabulate(print_table, headers=['Parameters', 'Values', 'Errors'])
 
-            # print fitparameter
+            # use prettytable to create printable table
+            fit_parameter_table = prettytable.PrettyTable()
+            fit_parameter_table.field_names = ["Parameters", "Values", "Errors"]
+            fit_parameter_table.add_rows(print_table)
+
+            # print fit parameter
             print('\n')
             print(self.data[n]["line"].get_label(), "R^2={}".format(r_squared))
             print(fit_parameter_table)
