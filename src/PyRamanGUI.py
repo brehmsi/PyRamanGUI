@@ -4331,8 +4331,8 @@ class PlotWindow(QMainWindow):
         x_min_2 = 1900
         x_max_2 = 2300
         for n in self.selectedDatasetNumber:
-            x = self.data[n]["x"]
-            y = self.data[n]["y"]
+            x = self.data[n]["line"].get_xdata()
+            y = self.data[n]["line"].get_ydata()
 
             x1 = x[np.where((x > x_min_1) & (x < x_max_1))]
             y1 = y[np.where((x > x_min_1) & (x < x_max_1))]
@@ -4353,9 +4353,11 @@ class PlotWindow(QMainWindow):
 
             # calculate m/I(G):
             mIG = popt[0] / y[idx_G]
+
+            print(self.data[n]["line"].get_label())
             if mIG > 0:
-                H_content = 21.7 + 16.6 * math.log(mIG * 10 ** 4)
-                print(mIG, H_content)
+                hydrogen_content = 21.7 + 16.6 * math.log(mIG * 10 ** 4)
+                print("Slope: {}\nhydrogen content: {}".format(mIG, hydrogen_content))
             else:
                 print('negative slope')
 
