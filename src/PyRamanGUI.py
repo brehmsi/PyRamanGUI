@@ -263,7 +263,8 @@ class MainWindow(QMainWindow):
         Load project from rmn file with json
         @return: None
         """
-        fileName = QtWidgets.QFileDialog.getOpenFileName(self, "Load",  # get file name
+        # get file name
+        fileName = QtWidgets.QFileDialog.getOpenFileName(self, "Load",
                                                          self.pHomeRmn, "All Files (*);;Raman Files (*.rmn)")
 
         if fileName[0] != "":  # if fileName is not empty save in pHomeRmn
@@ -296,8 +297,9 @@ class MainWindow(QMainWindow):
 
         # Ask for directory, if none is deposite or 'Save Project As' was pressed
         if self.pHomeRmn is None or q == "Save As":
-            fileName = QtWidgets.QFileDialog.getSaveFileName(self, "Save as", self.pHomeRmn,
-                                                             "All Files (*);;Raman Files (*.rmn)")
+            fileName = QtWidgets.QFileDialog.getSaveFileName(
+                self, "Save as", self.pHomeRmn, "All Files (*);;Raman Files (*.rmn)")
+
             if fileName[0] != "":
                 self.pHomeRmn = fileName[0]
             else:
@@ -865,6 +867,13 @@ class MainWindow(QMainWindow):
                 # necessary to avoid weird error:
                 # (ValueError: figure size must be positive finite not [ 4.58 -0.09])
                 fig.set_size_inches(10, 10)
+
+            # make plotData list to numpy array, since its easier to work with
+            for pd in plotData:
+                pd["x"] = np.array(pd["x"])
+                pd["y"] = np.array(pd["y"])
+
+
             self.window[windowtype][title] = PlotWindow(plotData, fig, self)
             self.update_spreadsheet_menubar()
             icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Icon_plotwindow.png")
@@ -2332,14 +2341,14 @@ class DataPointPicker:
         self.fig.canvas.draw()
 
 
-class DataSetSelecter(QtWidgets.QDialog):
+class DataSetSelecter(QtWidgets.QMainWindow):
     """
     Select one or several datasets
 
     Parameters
     ----------
-    data_set_names           # names of all datasets
-    select_only_one          # if True only on Dataset can be selected
+    data_set_names           # names of all data sets
+    select_only_one          # if True only one Dataset can be selected
     """
 
     def __init__(self, data_set_names, select_only_one=True):
@@ -2351,27 +2360,43 @@ class DataSetSelecter(QtWidgets.QDialog):
         self.create_dialog()
 
     def create_dialog(self):
-        layout = QtWidgets.QGridLayout()
+        scroll_area = QtWidgets.QScrollArea()
+        layout = QtWidgets.QVBoxLayout()
+        content_widget = QtWidgets.QWidget()
+
+
+
         if self.select_only_one is False:
-            check_all = QCheckBox("Select all", self)
-            myFont = QtGui.QFont()
-            myFont.setBold(True)
-            check_all.setFont(myFont)
+            check_all = QCheckBox("Select all", content_widget)
+            font = QtGui.QFont()
+            font.setBold(True)
+            check_all.setFont(font)
             check_all.stateChanged.connect(self.select_all)
-            layout.addWidget(check_all, 0, 0)
+            layout.addWidget(check_all)
 
         for idx, name in enumerate(self.data_set_names):
-            self.CheckDataset.append(QCheckBox(name, self))
-            layout.addWidget(self.CheckDataset[idx], idx + 1, 0)
+            self.CheckDataset.append(QCheckBox(name, content_widget))
+            layout.addWidget(self.CheckDataset[idx])
             if self.select_only_one is True:
                 self.CheckDataset[idx].stateChanged.connect(self.onStateChange)
 
-        ok_button = QPushButton("OK", self)
-        layout.addWidget(ok_button, len(self.data_set_names) + 1, 0)
-        ok_button.clicked.connect(self.Ok_button)
-        self.setLayout(layout)
+        # ok button
+        self.ok_button = QPushButton("OK", self)
+        self.ok_button.clicked.connect(self.apply_ok)
+        layout.addWidget(self.ok_button)
+
+        content_widget.setLayout(layout)
+
+        # scroll area properties
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(content_widget)
+
+        self.setCentralWidget(scroll_area)
+
         self.setWindowTitle("Select Dataset")
-        self.exec_()
+        self.show()
 
     @pyqtSlot(int)
     def onStateChange(self, state):
@@ -2389,8 +2414,8 @@ class DataSetSelecter(QtWidgets.QDialog):
             for cd in self.CheckDataset:
                 cd.setCheckState(Qt.Unchecked)
 
-    def Ok_button(self):
-        """ OK Button for function SecetedDataset """
+    def apply_ok(self):
+        """ ok button was clicked """
         for idx, d in enumerate(self.CheckDataset):
             if d.isChecked():
                 self.selectedDatasetNumber.append(idx)
@@ -3280,7 +3305,12 @@ class FitOptionsDialog(QMainWindow):
                 if table_content[row][0] == "area under curve":
                     pass
                 else:
-                    fct_value[table_content[row][0]] = [table_content[row][1], 0, np.inf]
+                    if table_content[row][0] == "BWF coupling coefficient":
+                        lower_boundary = -np.inf
+                    else:
+                        lower_boundary = 0
+                    upper_boundary = np.inf
+                    fct_value[table_content[row][0]] = [table_content[row][1], lower_boundary, upper_boundary]
                 row += 1
 
     def sort_fit_functions(self):
@@ -3527,6 +3557,7 @@ class PlotWindow(QMainWindow):
         self.inserted_text = []  # Storage for text inserted in the plot
         self.drawn_line = []  # Storage for lines and arrows drawn in the plot
         self.peak_positions = {}  # dict to store Line2D object marking peak positions
+        self.selectedData = []
 
         self.plot()
         self.create_statusbar()
@@ -3872,7 +3903,7 @@ class PlotWindow(QMainWindow):
         else:
             self.mw.show_statusbar_message('OOPS! Something went wrong!', 3000)
 
-    def SelectDataset(self, select_only_one=False):
+    def select_data_set(self, select_only_one=False):
         data_sets_name = []
         self.selectedData = []
         for d in self.data:
@@ -3883,22 +3914,62 @@ class PlotWindow(QMainWindow):
             self.selectedDatasetNumber = [0]
         else:
             DSS = DataSetSelecter(data_sets_name, select_only_one)
+
+            loop = QtCore.QEventLoop()
+            DSS.ok_button.clicked.connect(loop.quit)
+            loop.exec_()
             self.selectedDatasetNumber = DSS.selectedDatasetNumber
 
         for j in self.selectedDatasetNumber:
             self.selectedData.append(self.data[j])
 
     def menu_save_to_file(self):
-        self.SelectDataset()
-        for d in self.selectedData:
-            if d["filename"] is not None:
-                startFileDirName = os.path.dirname(d["filename"])
-                startFileName = '{}/{}'.format(startFileDirName, d["label"])
+        self.select_data_set()
+
+        start_file_name = None
+
+        if len(self.selectedDatasetNumber) > 1:
+            msg = QtWidgets.QMessageBox()
+            msg.setWindowTitle("Do you want to save the data in one file or every data set in a single file?")
+            msg.setText("Yes - one file \nNo  - data set in several files")
+            msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            ret = msg.exec_()
+
+            if ret == QMessageBox.Yes:
+                save_data = []
+                for d in self.selectedData:
+                    if d["filename"] is not None:
+                        startFileDirName = os.path.dirname(d["filename"])
+                        start_file_name = '{}/{}'.format(startFileDirName, d["label"])
+                    else:
+                        start_file_name = None
+                    save_data.append(d["x"])
+                    save_data.append(d["y"])
+                if save_data:
+                    # check that every column has same length, otherwise fill up with np.nan
+                    max_length = max([len(i) for i in save_data])
+                    for sd in save_data:
+                        np.append(sd, np.full(max_length-len(sd), np.nan))
+
+                    # transpose data and save it
+                    save_data = np.transpose(save_data)
+                    self.save_to_file('Save data selected data in file', start_file_name, save_data)
+            elif ret == QMessageBox.No:
+                for d in self.selectedData:
+                    if d["filename"] is not None:
+                        startFileDirName = os.path.dirname(d["filename"])
+                        start_file_name = '{}/{}'.format(startFileDirName, d["label"])
+                    else:
+                        start_file_name = None
+                    save_data = [d["x"], d["y"]]
+                    save_data = np.transpose(save_data)
+                    self.save_to_file('Save data selected data in file', start_file_name, save_data)
             else:
-                startFileName = None
-            save_data = [d["x"], d["y"]]
+                return
+        elif len(self.selectedDatasetNumber) == 1:
+            save_data = [self.selectedData[0]["x"], self.selectedData[0]["y"]]
             save_data = np.transpose(save_data)
-            self.save_to_file('Save data selected data in file', startFileName, save_data)
+            self.save_to_file('Save data selected data in file', start_file_name, save_data)
 
     def save_to_file(self, WindowName, startFileName, data):
         SaveFileName = QFileDialog.getSaveFileName(self, WindowName, startFileName, "All Files (*);;Text Files (*.txt)")
@@ -3919,10 +3990,11 @@ class PlotWindow(QMainWindow):
                 file.write(data)
                 file.close()
         except Exception as e:
+            self.mw.show_statusbar_message(e, 3000)
             print(e)
 
     def del_datapoint(self):
-        self.SelectDataset()
+        self.select_data_set()
         for j in self.selectedDatasetNumber:
             pickDP = DataPointPicker(self.data[j]["line"], 0)
             idx = pickDP.idx
@@ -3937,7 +4009,7 @@ class PlotWindow(QMainWindow):
         Deletes data point with number 630+n*957, because this pixel is broken in CCD detector of LabRam
         """
         data_idx_diff = {'532nm': 957, '633nm': 924}
-        self.SelectDataset()
+        self.select_data_set()
         for j in self.selectedDatasetNumber:
             data_idx = 629  # index of first broken data point
             border = 6
@@ -3976,7 +4048,7 @@ class PlotWindow(QMainWindow):
         Chemometrics and Intelligent Laboratory Systems 179 (2018): 82-84.
         @return: spectrum without spikes
         """
-        self.SelectDataset()
+        self.select_data_set()
         for n in self.selectedDatasetNumber:
             y = self.data[n]["y"]
             y_diff = np.diff(y)
@@ -4004,7 +4076,7 @@ class PlotWindow(QMainWindow):
         """
         normalize spectrum regarding to highest peak or regarding selected peak
         """
-        self.SelectDataset()
+        self.select_data_set()
         for n in self.selectedDatasetNumber:
             norm_factor = np.amax(self.data[n]["y"])
             if select_peak:
@@ -4097,7 +4169,7 @@ class PlotWindow(QMainWindow):
 
     def quick_fit(self, q):
         """fit one peak without opening the fit dialog"""
-        self.SelectDataset()
+        self.select_data_set()
         if self.selectedDatasetNumber:
             x_min, x_max = self.SelectArea()
             self.fit_functions.n_fit_fct[q.text()] = 1
@@ -4149,7 +4221,7 @@ class PlotWindow(QMainWindow):
         self.fit_functions.n_fit_fct = dict.fromkeys(self.fit_functions.n_fit_fct, 0)
 
     def open_fit_dialog(self):
-        self.SelectDataset()
+        self.select_data_set()
         if self.selectedDatasetNumber:
             x_min, x_max = self.SelectArea()
 
@@ -4175,7 +4247,7 @@ class PlotWindow(QMainWindow):
         os.remove("fit_parameter_cache.txt")
 
     def DefineArea(self):
-        self.SelectDataset()
+        self.select_data_set()
         x_min, x_max = self.SelectArea()
         for n in self.selectedDatasetNumber:
             spct = self.data[n]["line"]
@@ -4206,7 +4278,7 @@ class PlotWindow(QMainWindow):
         return x_min, x_max
 
     def detemine_area(self):
-        self.SelectDataset()
+        self.select_data_set()
         area = {}
         for n in self.selectedDatasetNumber:
             x = self.data[n]["x"]
@@ -4217,7 +4289,7 @@ class PlotWindow(QMainWindow):
         return area
 
     def find_peaks(self):
-        self.SelectDataset()
+        self.select_data_set()
         for n in self.selectedDatasetNumber:
             x = self.data[n]["x"]
             y = self.data[n]["y"]
@@ -4228,7 +4300,7 @@ class PlotWindow(QMainWindow):
             print(x[idx_peaks])
 
     def shift_spectrum_to_zero(self):
-        self.SelectDataset()
+        self.select_data_set()
         for n in self.selectedDatasetNumber:
             spct = self.data[n]["line"]
             xs = spct.get_xdata()
@@ -4240,7 +4312,7 @@ class PlotWindow(QMainWindow):
             self.canvas.draw()
 
     def baseline(self):
-        self.SelectDataset()
+        self.select_data_set()
         x_min, x_max = self.SelectArea()
         for n in self.selectedDatasetNumber:
             spct = self.data[n]["line"]
@@ -4262,7 +4334,7 @@ class PlotWindow(QMainWindow):
                 break
 
     def smoothing(self):
-        self.SelectDataset()
+        self.select_data_set()
         smoothing_methods = SmoothingMethods()
         for n in self.selectedDatasetNumber:
             spct = self.data[n]["line"]
@@ -4281,7 +4353,7 @@ class PlotWindow(QMainWindow):
                 break
 
     def linear_regression(self):
-        self.SelectDataset()
+        self.select_data_set()
         for n in self.selectedDatasetNumber:
             spct = self.data[n]["line"]
             xs = spct.get_xdata()
@@ -4325,7 +4397,7 @@ class PlotWindow(QMainWindow):
         C. Casiraghi, A. C. Ferrari, J. Robertson, Physical Review B 2005, 72, 8 085401.
         """
 
-        self.SelectDataset()
+        self.select_data_set()
         x_min_1 = 600
         x_max_1 = 900
         x_min_2 = 1900
@@ -4364,9 +4436,13 @@ class PlotWindow(QMainWindow):
     def fit_D_G(self):
         """
         fit routine for D and G bands in spectra of carbon compounds
+        with 5 peaks:
+            Lorentz for D peak
+            3x Gaussian for peaks origin from poly acetylen
+            Breit-Wigner Fano for G Peak
         """
         # Select which data set will be fitted
-        self.SelectDataset()
+        self.select_data_set()
 
         # fit process
         # D-Band: Lorentz
@@ -4582,7 +4658,7 @@ class PlotWindow(QMainWindow):
         performs baseline correction on data with Doubly Reweighted Penalized Least Squares and lambda=9000000
         and then normalizes the spectra to the water peak
         """
-        self.SelectDataset()
+        self.select_data_set()
         for n in self.selectedDatasetNumber:
             # get data
             spct = self.data[n]["line"]
@@ -4613,7 +4689,7 @@ class PlotWindow(QMainWindow):
     def fit_sulfuroxyanion(self):
         """function to fit region between 700 and 1400cm-1 in spectra with sulfuroxyanions with Lorentzians"""
         # select spectra, which should be fitted
-        self.SelectDataset()
+        self.select_data_set()
 
         # limit for fit region
         x_min, x_max = [700, 1400]
@@ -4792,7 +4868,7 @@ class PlotWindow(QMainWindow):
         self.vertical_line = None
 
     def scale_spectrum(self):
-        self.SelectDataset(True)
+        self.select_data_set(True)
         for n in self.selectedDatasetNumber:
             try:
                 ms = MoveSpectra(self.data[n]["line"], scaling=True)
@@ -4803,7 +4879,7 @@ class PlotWindow(QMainWindow):
             self.data[n]["y"] = ms.y
 
     def shift_spectrum(self):
-        self.SelectDataset(True)
+        self.select_data_set(True)
         for n in self.selectedDatasetNumber:
             try:
                 ms = MoveSpectra(self.data[n]["line"])
