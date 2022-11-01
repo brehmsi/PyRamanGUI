@@ -312,7 +312,8 @@ class MainWindow(QMainWindow):
                 win_name = val[0].child(j).text(0)
                 win_type = self.window_types[val[0].child(j).type()]
                 window = self.window[win_type][win_name]
-
+                window_content = None
+                window_content_json = None
                 if win_type == "Spreadsheet":
                     window_content = window.data
                     window_content_json = window.data.copy()
