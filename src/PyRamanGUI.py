@@ -34,10 +34,10 @@ from pybaselines import whittaker
 # Import files
 import myfigureoptions
 import Database_Measurements
+import analysisRoutine
 from BrokenAxes import brokenaxes
 import database_spectra
 from smoothing import SmoothingMethods, SmoothingDialog
-
 
 # This file essentially consists of four parts:
 # 1. Main Window
@@ -2611,36 +2611,29 @@ class BaselineCorrectionMethods:
 
 
 class BaselineCorrectionsDialog(QMainWindow):
-    def __init__(self, parent, blc_methods):
+    def __init__(self, parent, x, y, spectrum):
         super(BaselineCorrectionsDialog, self).__init__(parent=parent)
         # contains parent: class PlotWindow
         self.pw = parent
+
+        self.x = x
+        self.y = y
+        self.spectrum = spectrum
 
         # get axis and figure of PlotWindow
         self.ax = self.pw.ax
         self.fig = self.pw.fig
 
-        self.blcm = blc_methods
+        self.blcm = BaselineCorrectionMethods()
         self.methods = self.blcm.methods
         self.method_groups = self.blcm.method_groups
 
-        self.spectrum = None
-        self.x = None
-        self.y = None
         # list containing vertical spans (matplotlib.patches.Polygon) to color regions of interests
         self.roi_spans = []
-
         self.parameter_editor = {}
         self.parameter_label = {}
 
-    def get_baseline(self, x, y, spectrum):
-        self.x = x
-        self.y = y
-        self.spectrum = spectrum
-
-        self.plot_baseline()
         self.create_dialog()
-        self.apply_call()
 
     def create_dialog(self):
         # layouts
@@ -2664,7 +2657,6 @@ class BaselineCorrectionsDialog(QMainWindow):
         self.setCentralWidget(widget)
         self.setWindowTitle("Baseline")
         self.setWindowModality(Qt.ApplicationModal)
-        self.show()
 
     def create_method_box(self):
         method_layout = QtWidgets.QVBoxLayout()
@@ -2857,15 +2849,6 @@ class BaselineCorrectionsDialog(QMainWindow):
             self.x, zb, line=baseline, label="baseline ({})".format(name), style="-"))
         self.fig.canvas.draw()
         self.close()
-
-        # Save baseline corrected data
-        # (fileBaseName, fileExtension) = os.path.splitext(name)
-        # startFileDirName = os.path.dirname(self.pw.selectedData[0]["filename"])
-        # startFileBaseName = startFileDirName + "/" + fileBaseName
-        # startFileName = startFileBaseName + "_bgc.txt"
-        # save_data = [self.x, yb]
-        # save_data = np.transpose(save_data)
-        # self.pw.save_to_file("Save background-corrected data in file", startFileName, save_data)
 
     def apply_call(self):
         params = self.methods[self.blcm.current_method]["parameter"].values()
@@ -3497,72 +3480,6 @@ class FitOptionsDialog(QMainWindow):
         self.reset_n_fit_fct()
         self.closeSignal.emit()
         event.accept
-
-
-class AnalysisRoutineBuilder(QtWidgets.QTableWidget):
-    """
-    https://stackoverflow.com/questions/34533878/drag-and-dropping-rows-between-two-separate-qtablewidgets
-    """
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        self.setDragEnabled(True)
-        self.setAcceptDrops(True)
-        self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        self.setDragDropOverwriteMode(False)
-        self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-        self.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
-
-        self.last_drop_row = None
-
-    # Override this method to get the correct row index for insertion
-    def dropMimeData(self, row, col, mimeData, action):
-        self.last_drop_row = row
-        return True
-
-    def dropEvent(self, event):
-        # The QTableWidget from which selected rows will be moved
-        sender = event.source()
-
-        # Default dropEvent method fires dropMimeData with appropriate parameters (we're interested in the row index).
-        super().dropEvent(event)
-        # Now we know where to insert selected row(s)
-        dropRow = self.last_drop_row
-
-        selectedRows = sender.getselectedRowsFast()
-
-        # Allocate space for transfer
-        for _ in selectedRows:
-            self.insertRow(dropRow)
-
-        # if sender == receiver (self), after creating new empty rows selected rows might change their locations
-        sel_rows_offsets = [0 if self != sender or srow < dropRow else len(selectedRows) for srow in selectedRows]
-        selectedRows = [row + offset for row, offset in zip(selectedRows, sel_rows_offsets)]
-
-        # copy content of selected rows into empty ones
-        for i, srow in enumerate(selectedRows):
-            for j in range(self.columnCount()):
-                cell_widget = sender.cellWidget(srow, j)
-                item = sender.item(srow, j)
-                if item:
-                    source = QtWidgets.QTableWidgetItem(item)
-                    self.setItem(dropRow + i, j, source)
-                elif cell_widget:
-                    self.setCellWidget(dropRow + i, j, cell_widget)
-
-        # delete selected rows
-        for srow in reversed(selectedRows):
-            sender.removeRow(srow)
-
-        event.accept()
-
-    def getselectedRowsFast(self):
-        selectedRows = []
-        for item in self.selectedItems():
-            if item.row() not in selectedRows:
-                selectedRows.append(item.row())
-        selectedRows.sort()
-        return selectedRows
 
 
 class MyCustomToolbar(NavigationToolbar2QT):
@@ -4389,8 +4306,10 @@ class PlotWindow(QMainWindow):
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
-            baseline_dialog = BaselineCorrectionsDialog(self, self.blc)
-            baseline_dialog.get_baseline(x, y, spct)
+            baseline_dialog = BaselineCorrectionsDialog(self, x, y, spct)
+            baseline_dialog.plot_baseline()
+            baseline_dialog.apply_call()
+            baseline_dialog.show()
 
             # wait until QMainWindow is closes
             loop = QtCore.QEventLoop()
@@ -4460,44 +4379,15 @@ class PlotWindow(QMainWindow):
 
     def analysis_routine(self):
         """create own analysis routine consisting background correction and peak fitting"""
-        self.widget_list = []   # for some reason we need that list, otherwise the widget doesn't show in an own window
-        widget = QtWidgets.QWidget()
-        layout = QtWidgets.QHBoxLayout()
-        widget.setLayout(layout)
-        widget.setWindowTitle("Create own analysis routine")
-
-        # first table: available building blocks
-        tw1 = AnalysisRoutineBuilder()
-        tw1.setColumnCount(2)
-        tw1.setHorizontalHeaderLabels(["Analysis Building Blocks", "Methods"])
-        layout.addWidget(tw1)
-
-        # second table: created analysis routine
-        tw2 = AnalysisRoutineBuilder()
-        tw2.setColumnCount(2)
-        tw2.setHorizontalHeaderLabels(["Analysis Blocks", "Methods"])
-        layout.addWidget(tw2)
-
-        blc_methods = self.blc.methods.keys()   # list with implemented baseline correction methods
-
-        items = [
-            ("cosmic spike removal", []),
-            ("smoothing", []),
-            ("baseline correction", blc_methods),
-            ("peak fitting", []),
-            ("Other", [])
-        ]
-
-        for i, (box, method) in enumerate(items):
-            c = QtWidgets.QTableWidgetItem(box)
-            tw1.insertRow(tw1.rowCount())
-            tw1.setItem(i, 0, c)
-            combo_box = QtWidgets.QComboBox(widget)
-            for m in method:
-                combo_box.addItem(m)
-            tw1.setCellWidget(i, 1, combo_box)
-        self.widget_list.append(widget)
-        widget.show()
+        list_of_methods = {
+            "cosmic spike removal": [],
+            "smoothing": [],
+            "baseline correction": BaselineCorrectionsDialog(self, None, None, None),
+            "peak fitting": [],
+            "Other": []
+        }
+        ab = analysisRoutine.MainWindow(self, list_of_methods)
+        ab.show()
 
     def hydrogen_estimation(self):
         """
