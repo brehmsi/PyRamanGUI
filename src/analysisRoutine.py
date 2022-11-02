@@ -8,7 +8,15 @@ class DragFrame(QtWidgets.QFrame):
         self.setLineWidth(1)
         self.setFrameStyle(1)
         self.setLayout(QtWidgets.QVBoxLayout())
-        self.layout().addWidget(QtWidgets.QLabel(label))
+
+        # label
+        label = QtWidgets.QLabel(label)
+        my_font = QtGui.QFont()
+        my_font.setBold(True)
+        label.setFont(my_font)
+        self.layout().addWidget(label)
+
+        # Push button
         push_button = QtWidgets.QPushButton("Click to open Dialog")
         push_button.clicked.connect(self.push_button_clicked)
         self.layout().addWidget(push_button)

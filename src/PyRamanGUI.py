@@ -10,8 +10,6 @@ import operator
 import os
 import pickle
 import prettytable
-import pybaselines
-import rampy as rp
 import re
 import scipy
 import sys
@@ -29,7 +27,7 @@ from matplotlib.backends.qt_editor import _formlayout as formlayout
 from scipy import signal, special, stats
 from scipy.optimize import curve_fit
 from sklearn import decomposition
-from pybaselines import whittaker
+
 
 # Import files
 import myfigureoptions
@@ -37,7 +35,7 @@ import Database_Measurements
 import analysisRoutine
 from BrokenAxes import brokenaxes
 import database_spectra
-from smoothing import SmoothingMethods, SmoothingDialog
+import analysis_methods
 
 # This file essentially consists of four parts:
 # 1. Main Window
@@ -2424,466 +2422,6 @@ class DataSetSelecter(QtWidgets.QMainWindow):
         self.close()
 
 
-class BaselineCorrectionMethods:
-    """Class containing all implemented methods of base line correction"""
-
-    def __init__(self):
-        # all implemented baseline correction methods
-        self.method_groups = {
-            "Whittaker":
-                [
-                    "Asymmetric Least Square",
-                    "Improved Asymmetric Least Square",
-                    "Adaptive Iteratively Reweighted Penalized Least Squares",
-                    "Asymmetrically Reweighted Penalized Least Squares",
-                    "Doubly Reweighted Penalized Least Squares",
-                    "Derivative Peak-Screening Asymmetric Least Square"
-                ],
-            "Spline":
-                ["Univariate Spline", "GCV Spline"],
-            "Polynomial":
-                ["Polynomial", "Polynomial (without regions)"],
-            "Miscellaneous":
-                ["Rubberband", "Rolling Ball"]
-        }
-        self.methods = {
-            "Rubberband":
-                {"function": self.rubberband, "parameter": {}},
-            "Rolling Ball":
-                {"function": self.rolling_ball, "parameter": {"half window": 5}},
-            "Polynomial":
-                {"function": self.polynomial, "parameter": {"order": 3, "roi": [[150, 160], [3800, 4000]]}},
-            "Polynomial (without regions)":
-                {"function": self.polynomial_02, "parameter": {"order": 3}},
-            "Univariate Spline":
-                {"function": self.unispline, "parameter": {"s": 1e0, "roi": [[150, 160], [3800, 4000]]}},
-            "GCV Spline":
-                {"function": self.gcvspline, "parameter": {"s": 0.1, "roi": [[150, 160], [3800, 4000]]}},
-            "Asymmetric Least Square":
-                {"function": self.ALS, "parameter": {"p": 0.001, "lambda": 10000000}},
-            "Improved Asymmetric Least Square":
-                {"function": self.imALS, "parameter": {"p": 0.001, "lambda": 100000}},
-            "Adaptive Iteratively Reweighted Penalized Least Squares":
-                {"function": self.airPLS, "parameter": {"lambda": 10000000}},
-            "Asymmetrically Reweighted Penalized Least Squares":
-                {"function": self.arPLS, "parameter": {"lambda": 10000000}},
-            "Doubly Reweighted Penalized Least Squares":
-                {"function": self.drPLS, "parameter": {"lambda": 1000000, "eta": 0.5}},
-            "Derivative Peak-Screening Asymmetric Least Square":
-                {"function": self.derpsALS, "parameter": {"lambda": 1000000, "p": 0.01}}
-        }
-
-        # contains current method, for baseline dialog; start method is ASL
-        self.current_method = "Asymmetric Least Square"
-        self.current_group = "Whittaker"
-
-    def rubberband(self, x, y):
-        """
-        Rubberband Baseline Correction
-        source: https://dsp.stackexchange.com/questions/2725/how-to-perform-a-rubberband-correction-on-spectroscopic-data
-        """
-        # Find the convex hull
-        v = scipy.spatial.ConvexHull(np.array(list(zip(x, y)))).vertices
-        # Rotate convex hull vertices until they start from the lowest one
-        v = np.roll(v, -v.argmin())
-        # Leave only the ascending part
-        v = v[:v.argmax()]
-
-        # Create baseline using linear interpolation between vertices
-        z = np.interp(x, x[v], y[v])
-        y = y - z
-        # y - background-corrected Intensity-values, z - background
-        return y, z
-
-    def rolling_ball(self, x, y, half_window):
-        baseline, _ = pybaselines.morphological.rolling_ball(y, half_window=int(half_window))
-        y_corr = y - baseline
-        return y_corr, baseline
-
-    def polynomial(self, x, y, p_order, roi):
-        y, z = rp.baseline(x, y, np.array(roi), "poly", polynomial_order=p_order)
-        y = y.flatten()
-        z = z.flatten()
-        return y, z
-
-    def polynomial_02(self, x, y, p_order):
-        baseline, _ = pybaselines.polynomial.poly(y, x_data=x, poly_order=int(p_order))
-        y_corr = y - baseline
-        return y_corr, baseline
-
-    def unispline(self, x, y, s, roi):
-        """
-        @param x: x data
-        @param y: y data
-        @param s: Positive smoothing factor used to choose the number of knots.
-        Number of knots will be increased until the smoothing condition is satisfied:
-        @param roi: region of interest
-        @return: baseline corrected y data and baseline z
-        """
-        try:
-            y, z = rp.baseline(x, y, np.array(roi), "unispline", s=s)
-        except ValueError as e:
-            print(e)
-            return None
-        y = y.flatten()
-        z = z.flatten()
-        return y, z
-
-    def gcvspline(self, x, y, s, roi):
-        """
-        @param x: x data
-        @param y: y data
-        @param s: Positive smoothing factor used to choose the number of knots.
-        Number of knots will be increased until the smoothing condition is satisfied:
-        @param roi: region of interest
-        @return: baseline corrected y data and baseline z
-        """
-        try:
-            y, z = rp.baseline(x, y, np.array(roi), 'gcvspline', s=s)
-        except UnboundLocalError:
-            print('ERROR: Install gcvspline to use this mode (needs a working FORTRAN compiler).')
-            return None
-        y = y.flatten()
-        z = z.flatten()
-        return y, z
-
-    def ALS(self, x, y, p, lam):
-        """
-        baseline correction with Asymmetric Least Squares smoothing
-        based on: P. H. C. Eilers and H. F. M. Boelens. Baseline correction with asymmetric least squares smoothing.
-        Leiden University Medical Centre Report , 1(1):5, 2005. from Eilers and Boelens
-        also look at: https://stackoverflow.com/questions/29156532/python-baseline-correction-library
-        """
-        baseline, _ = whittaker.asls(y, lam=lam, p=p)
-        y_corr = y - baseline
-        return y_corr, baseline
-
-    def airPLS(self, x, y, lam):
-        """
-        adaptive  iteratively  reweighted  penalized  least  squares
-        based on: Zhi-Min  Zhang,  Shan  Chen,  and  Yi-Zeng Liang.
-        Baseline correction using adaptive iteratively reweighted penalized least squares.
-        Analyst, 135(5):1138–1146, 2010.
-        """
-        baseline, params = whittaker.airpls(y, lam=lam)
-        y_corr = y - baseline
-        return y_corr, baseline
-
-    def arPLS(self, x, y, lam):
-        """
-        (automatic) Baseline correction using asymmetrically reweighted penalized least squares smoothing.
-        Baek et al. 2015, Analyst 140: 250-257;
-        """
-        baseline, params = whittaker.arpls(y, lam=lam)
-        y_corr = y - baseline
-        return y_corr, baseline
-
-    def drPLS(self, x, y, lam, eta):
-        """(automatic) Baseline correction method based on doubly reweighted penalized least squares.
-        Xu et al., Applied Optics 58(14):3913-3920."""
-        baseline, params = whittaker.drpls(y, lam=lam, eta=eta)
-        y_corr = y - baseline
-        return y_corr, baseline
-
-    def imALS(self, x, y, p, lam):
-        """
-        He, Shixuan, et al. "Baseline correction for Raman spectra using an improved asymmetric least squares method."
-        Analytical Methods 6.12 (2014): 4402-4407.
-        """
-        baseline, params = whittaker.iasls(y, lam=lam, p=p)
-        y_corr = y - baseline
-        return y_corr, baseline
-
-    def derpsALS(self, x, y, lam, p, k=None):
-        """
-        Korepanov, Vitaly I. "Asymmetric least‐squares baseline algorithm with peak screening for automatic processing
-        of the Raman spectra." Journal of Raman Spectroscopy 51.10 (2020): 2061-2065.
-        @param x:
-        @param y:
-        @param lam:
-        @param p:
-        @param k:
-        @return:
-        """
-        baseline, params = whittaker.derpsalsa(y, lam=lam, p=p, k=k)
-        y_corr = y - baseline
-        return y_corr, baseline
-
-
-class BaselineCorrectionsDialog(QMainWindow):
-    def __init__(self, parent, x, y, spectrum):
-        super(BaselineCorrectionsDialog, self).__init__(parent=parent)
-        # contains parent: class PlotWindow
-        self.pw = parent
-
-        self.x = x
-        self.y = y
-        self.spectrum = spectrum
-
-        # get axis and figure of PlotWindow
-        self.ax = self.pw.ax
-        self.fig = self.pw.fig
-
-        self.blcm = BaselineCorrectionMethods()
-        self.methods = self.blcm.methods
-        self.method_groups = self.blcm.method_groups
-
-        # list containing vertical spans (matplotlib.patches.Polygon) to color regions of interests
-        self.roi_spans = []
-        self.parameter_editor = {}
-        self.parameter_label = {}
-
-        self.create_dialog()
-
-    def create_dialog(self):
-        # layouts
-        main_layout = QtWidgets.QVBoxLayout()
-        mthd_prmtr_layout = QtWidgets.QHBoxLayout()
-        self.parameter_layout = QtWidgets.QGridLayout()
-
-        method_box = self.create_method_box()
-        self.fill_parameter_layout()
-        parameter_box = QtWidgets.QGroupBox("Parameter")
-        button_layout = self.create_buttons()
-
-        # set layouts
-        parameter_box.setLayout(self.parameter_layout)
-        mthd_prmtr_layout.addWidget(method_box)
-        mthd_prmtr_layout.addWidget(parameter_box)
-        main_layout.addLayout(mthd_prmtr_layout)
-        main_layout.addLayout(button_layout)
-        widget = QtWidgets.QWidget()
-        widget.setLayout(main_layout)
-        self.setCentralWidget(widget)
-        self.setWindowTitle("Baseline")
-        self.setWindowModality(Qt.ApplicationModal)
-
-    def create_method_box(self):
-        method_layout = QtWidgets.QVBoxLayout()
-        method_box = QtWidgets.QGroupBox("Methods")
-
-        # combo box for method category
-        method_combo_widget = QtWidgets.QComboBox()
-        for key in self.method_groups.keys():
-            method_combo_widget.addItem(key)
-        method_combo_widget.currentTextChanged.connect(self.method_group_changed)
-        method_layout.addWidget(method_combo_widget)
-
-        # combo box for method
-        self.combo_widget_methods = QtWidgets.QComboBox()
-        for me in self.method_groups[self.blcm.current_group]:
-            self.combo_widget_methods.addItem(me)
-        self.combo_widget_methods.currentTextChanged.connect(self.method_change)
-        method_layout.addWidget(self.combo_widget_methods)
-
-        method_box.setLayout(method_layout)
-
-        return method_box
-
-    def method_group_changed(self, text):
-        self.blcm.current_group = text
-        self.combo_widget_methods.clear()
-        for me in self.method_groups[self.blcm.current_group]:
-            self.combo_widget_methods.addItem(me)
-        self.method_change(self.method_groups[self.blcm.current_group][0])
-
-    def method_change(self, text):
-        if text is not None and text != "":
-            self.blcm.current_method = text
-        elif text == "":
-            return
-
-        # clear layout
-        self.clear_layout(self.parameter_layout)
-
-        self.parameter_editor = {}
-        self.parameter_label = {}
-
-        # create new layout
-        self.fill_parameter_layout()
-        self.update()
-
-    def fill_parameter_layout(self):
-        idx = 0
-        for key, val in self.methods[self.blcm.current_method]["parameter"].items():
-            if key == "roi":
-                self.add_roi_editors(val, idx)
-                continue
-            self.parameter_label[key] = QtWidgets.QLabel(key)
-            self.parameter_editor[key] = QtWidgets.QLineEdit()
-            self.parameter_layout.addWidget(self.parameter_editor[key], idx, 0)
-            self.parameter_layout.addWidget(self.parameter_label[key], idx, 1)
-            self.parameter_editor[key].setText(str(val))
-            self.methods[self.blcm.current_method]["parameter"][key] = float(self.parameter_editor[key].text())
-            idx += 1
-
-    def add_roi_editors(self, roi, idx):
-        roi_editors = []
-        roi_layout_v = QtWidgets.QVBoxLayout()
-        button_layout_v = QtWidgets.QVBoxLayout()
-        button_layout_h = QtWidgets.QHBoxLayout()
-        self.parameter_label["roi"] = QtWidgets.QLabel("regions of interest")
-        button_add = QtWidgets.QPushButton("+")
-        button_remove = QtWidgets.QPushButton("-")
-        button_layout_h.addWidget(button_add)
-        button_layout_h.addWidget(button_remove)
-        button_layout_v.addWidget(self.parameter_label["roi"])
-        button_layout_v.addLayout(button_layout_h)
-        button_add.clicked.connect(self.add_roi)
-        button_remove.clicked.connect(self.del_roi)
-        self.parameter_layout.addLayout(button_layout_v, idx, 1)
-        for i, r in enumerate(roi):
-            roi_layout_h = QtWidgets.QHBoxLayout()
-            editor1 = QtWidgets.QLineEdit()
-            editor1.setText(str(r[0]))
-            roi_layout_h.addWidget(editor1)
-            editor2 = QtWidgets.QLineEdit()
-            editor2.setText(str(r[1]))
-            roi_layout_h.addWidget(editor2)
-            roi_layout_v.addLayout(roi_layout_h)
-            roi_editors.append([editor1, editor2])
-            self.methods[self.blcm.current_method]["parameter"]["roi"][i] = [float(editor1.text()),
-                                                                             float(editor2.text())]
-        self.parameter_layout.addLayout(roi_layout_v, idx, 0)
-        self.parameter_editor["roi"] = roi_editors
-
-    def add_roi(self):
-        try:
-            last_roi = self.methods[self.blcm.current_method]["parameter"]["roi"][-1][1]
-        except IndexError:
-            last_roi = 140
-        self.methods[self.blcm.current_method]["parameter"]["roi"].append([last_roi + 10, last_roi + 40])
-        self.method_change(None)
-
-    def del_roi(self):
-        try:
-            del self.methods[self.blcm.current_method]["parameter"]["roi"][-1]
-        except IndexError:
-            pass
-        self.method_change(None)
-
-    def sort_roi(self, roi_list):
-        return sorted(roi_list, key=lambda x: x[0])
-
-    def create_buttons(self):
-        # buttons for ok, close and apply
-        button_layout = QtWidgets.QHBoxLayout()
-
-        self.finishbutton = QPushButton('Ok')
-        self.finishbutton.setCheckable(True)
-        self.finishbutton.setToolTip('Are you happy with the start parameters? '
-                                     '\n Close the dialog window and save the baseline!')
-        self.finishbutton.clicked.connect(self.finish_call)
-        button_layout.addWidget(self.finishbutton)
-
-        self.closebutton = QPushButton('Close')
-        self.closebutton.setCheckable(True)
-        self.closebutton.setToolTip('Closes the dialog window and baseline is not saved.')
-        self.closebutton.clicked.connect(self.close)
-        button_layout.addWidget(self.closebutton)
-
-        applybutton = QPushButton('Apply')
-        applybutton.setToolTip('Do you want to try the fit parameters? \n Lets do it!')
-        applybutton.clicked.connect(self.apply_call)
-        button_layout.addWidget(applybutton)
-
-        return button_layout
-
-    def plot_baseline(self):
-        params = self.methods[self.blcm.current_method]["parameter"].values()
-        return_value = self.methods[self.blcm.current_method]["function"](self.x, self.y, *params)
-        if return_value is None:
-            return
-        else:
-            yb, zb = return_value
-        self.base_line, = self.ax.plot(self.x, zb, "c--", label="baseline ({})".format(self.spectrum.get_label()))
-        self.blcSpektrum, = self.ax.plot(self.x, yb, "c-",
-                                         label="baseline-corrected ({})".format(self.spectrum.get_label()))
-        self.fig.canvas.draw()
-
-    def clear_layout(self, layout):
-        for i in reversed(range(layout.count())):
-            widget = layout.itemAt(i).widget()
-            if widget is None:
-                self.clear_layout(layout.itemAt(i))
-            else:
-                widget.setParent(None)
-
-    def clear_plot(self):
-        try:
-            self.blcSpektrum.remove()
-        except ValueError:
-            return
-        self.base_line.remove()
-        for rs in self.roi_spans:
-            rs.remove()
-        self.roi_spans = []
-        self.fig.canvas.draw()
-
-    def finish_call(self):
-        params = self.methods[self.blcm.current_method]["parameter"].values()
-        name = self.spectrum.get_label()
-        for key, val in self.parameter_editor.items():
-            if key == "roi":
-                for i, roi_pe in enumerate(val):
-                    roi_start = float(roi_pe[0].text())
-                    roi_end = float(roi_pe[1].text())
-                    self.methods[self.blcm.current_method]["parameter"]["roi"][i] = [roi_start, roi_end]
-                self.methods[self.blcm.current_method]["parameter"]["roi"] = self.sort_roi(
-                    self.methods[self.blcm.current_method]["parameter"]["roi"])
-                continue
-            self.methods[self.blcm.current_method]["parameter"][key] = float(val.text())
-        return_value = self.methods[self.blcm.current_method]["function"](self.x, self.y, *params)
-        if return_value is None:
-            self.close()
-            return
-        else:
-            yb, zb = return_value
-
-        # Plot
-        label_spct = "{} (baseline-corrected)".format(name)
-        spct_corr, = self.ax.plot(self.x, yb, "c-", label=label_spct)
-        self.pw.data.append(self.pw.create_data(self.x, yb, line=spct_corr, label=label_spct, style="-"))
-        baseline, = self.ax.plot(self.x, zb, "c--", label="baseline ({})".format(name))
-        self.pw.data.append(self.pw.create_data(
-            self.x, zb, line=baseline, label="baseline ({})".format(name), style="-"))
-        self.fig.canvas.draw()
-        self.close()
-
-    def apply_call(self):
-        params = self.methods[self.blcm.current_method]["parameter"].values()
-        name = self.spectrum.get_label()
-        self.clear_plot()
-        for key, val in self.parameter_editor.items():
-            if key == "roi":
-                for i, roi_pe in enumerate(val):
-                    roi_start = float(roi_pe[0].text())
-                    roi_end = float(roi_pe[1].text())
-                    self.methods[self.blcm.current_method]["parameter"]["roi"][i] = [roi_start, roi_end]
-                    self.roi_spans.append(self.ax.axvspan(roi_start, roi_end, alpha=0.5, color="yellow"))
-                self.methods[self.blcm.current_method]["parameter"]["roi"] = self.sort_roi(
-                    self.methods[self.blcm.current_method]["parameter"]["roi"])
-                continue
-            try:
-                self.methods[self.blcm.current_method]["parameter"][key] = float(val.text())
-            except ValueError as e:
-                self.pw.mw.show_statusbar_message(e, 4000)
-                return
-        return_value = self.methods[self.blcm.current_method]["function"](self.x, self.y, *params)
-        if return_value is None:
-            self.close()
-            return
-        else:
-            yb, zb = return_value
-        self.base_line, = self.ax.plot(self.x, zb, "c--", label="baseline ({})".format(name))
-        self.blcSpektrum, = self.ax.plot(self.x, yb, "c-", label="baseline-corrected ({})".format(name))
-        self.fig.canvas.draw()
-
-    def closeEvent(self, event):
-        self.clear_plot()
-        event.accept()
-
-
 class FitFunctions:
     """
     Fit functions
@@ -3536,7 +3074,7 @@ class PlotWindow(QMainWindow):
         self.mw = parent
         self.vertical_line = None
         self.fit_functions = FitFunctions()
-        self.blc = BaselineCorrectionMethods()  # class for everything related to Baseline corrections
+        self.blc = analysis_methods.BaselineCorrectionMethods()  # class for everything related to Baseline corrections
         self.inserted_text = []  # Storage for text inserted in the plot
         self.drawn_line = []  # Storage for lines and arrows drawn in the plot
         self.peak_positions = {}  # dict to store Line2D object marking peak positions
@@ -4306,36 +3844,34 @@ class PlotWindow(QMainWindow):
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
-            baseline_dialog = BaselineCorrectionsDialog(self, x, y, spct)
-            baseline_dialog.plot_baseline()
-            baseline_dialog.apply_call()
+            baseline_dialog = analysis_methods.BaselineCorrectionDialog(self, x, y, spct, self.blc)
             baseline_dialog.show()
 
             # wait until QMainWindow is closes
             loop = QtCore.QEventLoop()
-            baseline_dialog.closebutton.clicked.connect(loop.quit)
-            baseline_dialog.finishbutton.clicked.connect(loop.quit)
+            baseline_dialog.close_button.clicked.connect(loop.quit)
+            baseline_dialog.finish_button.clicked.connect(loop.quit)
             loop.exec_()
-            if baseline_dialog.closebutton.isChecked():
+            if baseline_dialog.close_button.isChecked():
                 break
 
     def smoothing(self):
         self.select_data_set()
-        smoothing_methods = SmoothingMethods()
+        smoothing_methods = analysis_methods.SmoothingMethods()
         for n in self.selectedDatasetNumber:
             spct = self.data[n]["line"]
             x = spct.get_xdata()
             y = spct.get_ydata()
 
-            smooth_dialog = SmoothingDialog(self, smoothing_methods)
-            smooth_dialog.get_smoothed_spectrum(x, y, spct)
+            smooth_dialog = analysis_methods.SmoothingDialog(self, x, y, spct, smoothing_methods)
+            smooth_dialog.show()
 
-            # wait until QMainWindow is closes
+            # wait until SmoothingDialog is closed
             loop = QtCore.QEventLoop()
-            smooth_dialog.closebutton.clicked.connect(loop.quit)
-            smooth_dialog.finishbutton.clicked.connect(loop.quit)
+            smooth_dialog.close_button.clicked.connect(loop.quit)
+            smooth_dialog.finish_button.clicked.connect(loop.quit)
             loop.exec_()
-            if smooth_dialog.closebutton.isChecked():
+            if smooth_dialog.close_button.isChecked():
                 break
 
     def linear_regression(self):
@@ -4380,10 +3916,10 @@ class PlotWindow(QMainWindow):
     def analysis_routine(self):
         """create own analysis routine consisting background correction and peak fitting"""
         list_of_methods = {
-            "cosmic spike removal": [],
-            "smoothing": [],
-            "baseline correction": BaselineCorrectionsDialog(self, None, None, None),
-            "peak fitting": [],
+            "Cosmic spike removal": [],
+            "Smoothing": [],
+            "Baseline correction": analysis_methods.BaselineCorrectionsDialog(self, None, None, None),
+            "Peak fitting": [],
             "Other": []
         }
         ab = analysisRoutine.MainWindow(self, list_of_methods)
