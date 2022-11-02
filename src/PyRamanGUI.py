@@ -31,11 +31,11 @@ from sklearn import decomposition
 
 # Import files
 import myfigureoptions
-import Database_Measurements
+import databaseMeasurements
 import analysisRoutine
 from BrokenAxes import brokenaxes
-import database_spectra
-import analysis_methods
+import databaseSpectra
+import analysisMethods
 
 # This file essentially consists of four parts:
 # 1. Main Window
@@ -521,7 +521,7 @@ class MainWindow(QMainWindow):
 
     def execute_database_measurements(self):
         title = 'Database'
-        self.db_measurements = Database_Measurements.DatabaseMeasurements()
+        self.db_measurements = databaseMeasurements.DatabaseMeasurements()
         DBM_tab = self.tabWidget.addTab(self.db_measurements, self.PyramanIcon, title)
 
     def create_sidetree_structure(self, structure):
@@ -3074,7 +3074,7 @@ class PlotWindow(QMainWindow):
         self.mw = parent
         self.vertical_line = None
         self.fit_functions = FitFunctions()
-        self.blc = analysis_methods.BaselineCorrectionMethods()  # class for everything related to Baseline corrections
+        self.blc = analysisMethods.BaselineCorrectionMethods()  # class for everything related to Baseline corrections
         self.inserted_text = []  # Storage for text inserted in the plot
         self.drawn_line = []  # Storage for lines and arrows drawn in the plot
         self.peak_positions = {}  # dict to store Line2D object marking peak positions
@@ -3844,7 +3844,7 @@ class PlotWindow(QMainWindow):
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
-            baseline_dialog = analysis_methods.BaselineCorrectionDialog(self, x, y, spct, self.blc)
+            baseline_dialog = analysisMethods.BaselineCorrectionDialog(self, x, y, spct, self.blc)
             baseline_dialog.show()
 
             # wait until QMainWindow is closes
@@ -3857,13 +3857,13 @@ class PlotWindow(QMainWindow):
 
     def smoothing(self):
         self.select_data_set()
-        smoothing_methods = analysis_methods.SmoothingMethods()
+        smoothing_methods = analysisMethods.SmoothingMethods()
         for n in self.selectedDatasetNumber:
             spct = self.data[n]["line"]
             x = spct.get_xdata()
             y = spct.get_ydata()
 
-            smooth_dialog = analysis_methods.SmoothingDialog(self, x, y, spct, smoothing_methods)
+            smooth_dialog = analysisMethods.SmoothingDialog(self, x, y, spct, smoothing_methods)
             smooth_dialog.show()
 
             # wait until SmoothingDialog is closed
@@ -3918,7 +3918,7 @@ class PlotWindow(QMainWindow):
         list_of_methods = {
             "Cosmic spike removal": [],
             "Smoothing": [],
-            "Baseline correction": analysis_methods.BaselineCorrectionsDialog(self, None, None, None),
+            "Baseline correction": analysisMethods.BaselineCorrectionsDialog(self, None, None, None),
             "Peak fitting": [],
             "Other": []
         }
@@ -4339,7 +4339,7 @@ class PlotWindow(QMainWindow):
         self.fit_functions.n_fit_fct['Lorentz'] = 0
 
     def open_peakdatabase(self):
-        peak_database_dialog = database_spectra.DatabasePeakPosition()
+        peak_database_dialog = databaseSpectra.DatabasePeakPosition()
         peak_database_dialog.setMinimumWidth(600)
         peak_database_dialog.show()
         # wait until QMainWindow is closes
