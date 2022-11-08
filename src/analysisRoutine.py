@@ -1,5 +1,6 @@
 from PyQt5 import QtWidgets, QtCore, QtGui
-
+import json
+import os
 
 class DragFrame(QtWidgets.QFrame):
     def __init__(self, label, method_dialog, parent):
@@ -18,9 +19,9 @@ class DragFrame(QtWidgets.QFrame):
         # labels
         my_font = QtGui.QFont()
         my_font.setBold(True)
-        main_label = QtWidgets.QLabel(label)
-        main_label.setFont(my_font)
-        self.layout().addWidget(main_label)
+        self.main_label = QtWidgets.QLabel(label)
+        self.main_label.setFont(my_font)
+        self.layout().addWidget(self.main_label)
 
         self.method_label = QtWidgets.QLabel("")
         self.layout().addWidget(self.method_label)
@@ -31,14 +32,20 @@ class DragFrame(QtWidgets.QFrame):
         push_button.clicked.connect(self.push_button_clicked)
         self.layout().addWidget(push_button)
 
+        self.label_list = None
+
     def push_button_clicked(self):
-        self.method_dialog.show()
-        self.method_dialog.ok_button.clicked.connect(self.change_label)
+        if isinstance(self.method_dialog, str):
+            self.label_list = self.method_dialog
+            self.method_label.setText(self.label_list)
+        else:
+            self.method_dialog.show()
+            self.method_dialog.ok_button.clicked.connect(self.change_label)
 
     def change_label(self):
-        label_list = self.method_dialog.finish_call()
+        self.label_list = self.method_dialog.finish_call()
         new_label = ""
-        for ll in label_list:
+        for ll in self.label_list:
             new_label += "{}\n".format(ll["name"])
             for key, val in ll["parameter"].items():
                 new_label += "{}={}\n".format(key, val)
@@ -93,6 +100,16 @@ class DropGroupBox(QtWidgets.QGroupBox):
 
         event.accept()
 
+    def getDragFrames(self):
+        """get all DragFrames"""
+        widget_list = []
+        for i in range(self.layout().count()):
+            item = self.layout().itemAt(i)
+            # not spacers
+            if not isinstance(item, QtWidgets.QSpacerItem):
+                widget_list.append(item.widget())
+        return widget_list
+
 
 class MainWindow(QtWidgets.QMainWindow):
 
@@ -100,34 +117,75 @@ class MainWindow(QtWidgets.QMainWindow):
         super(MainWindow, self).__init__(parent=parent)
         self.drag_buttons = []
 
+        # create widget with main layout
         widget = QtWidgets.QWidget()
         main_layout = QtWidgets.QVBoxLayout()
 
-        layout1 = QtWidgets.QHBoxLayout()
-        group_box1 = DropGroupBox("Available Methods")
+        # input field routine name
+        self.routine_name = QtWidgets.QLineEdit("Enter routine name")
 
+        # upper group box with draggable frames
+        self.group_box1 = DropGroupBox("Available Methods")
+        layout1 = QtWidgets.QHBoxLayout()
         for key, val in list_of_methods.items():
-            button = DragFrame(key, val, group_box1)
+            button = DragFrame(key, val, self.group_box1)
             self.drag_buttons.append(button)
             layout1.addWidget(button)
-        group_box1.stretchy = QtWidgets.QSpacerItem(
+        self.group_box1.stretchy = QtWidgets.QSpacerItem(
             10, 10, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
-        layout1.addItem(group_box1.stretchy)
-        group_box1.setLayout(layout1)
+        layout1.addItem(self.group_box1.stretchy)
+        self.group_box1.setLayout(layout1)
 
+        # lower group box
+        self.group_box2 = DropGroupBox("Used Methods")
         layout2 = QtWidgets.QHBoxLayout()
-        group_box2 = DropGroupBox("Used Methods")
-
-        group_box2.setLayout(layout2)
+        self.group_box2.setLayout(layout2)
 
         # set minimum height of group boxes
         minimum_height = 210
-        group_box1.setMinimumHeight(minimum_height)
-        group_box2.setMinimumHeight(minimum_height)
+        self.group_box1.setMinimumHeight(minimum_height)
+        self.group_box2.setMinimumHeight(minimum_height)
 
-        main_layout.addWidget(group_box1)
-        main_layout.addWidget(group_box2)
+        # cancel and ok button
+        button_layout = QtWidgets.QHBoxLayout()
 
+        self.ok_button = QtWidgets.QPushButton("Ok")
+        self.ok_button.clicked.connect(self.ok_call)
+        button_layout.addWidget(self.ok_button)
+
+        self.cancel_button = QtWidgets.QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.cancel_call)
+        button_layout.addWidget(self.cancel_button)
+
+        # put everything together
+        main_layout.addWidget(self.routine_name)
+        main_layout.addWidget(self.group_box1)
+        main_layout.addWidget(self.group_box2)
+        main_layout.addLayout(button_layout)
         widget.setLayout(main_layout)
         self.setCentralWidget(widget)
         self.setWindowModality(QtCore.Qt.ApplicationModal)
+
+    def ok_call(self):
+        # get name of routine
+        name = self.routine_name.text()
+        if name == "Enter routine name" or name == "":
+            message_box = QtWidgets.QMessageBox()
+            message_box.setText("Please enter routine name.")
+            message_box.exec_()
+            return
+
+        # get content of routine
+        frames = self.group_box2.getDragFrames()
+        save_dict = {}
+        for f in frames:
+            save_dict[f.main_label.text()] = f.label_list
+
+        # save in file
+        with open("analysis_routines/{}.txt".format(name), "w", encoding="utf-8") as f:
+            json.dump(save_dict, f, ensure_ascii=False)
+
+        self.close()
+
+    def cancel_call(self):
+        self.close()
