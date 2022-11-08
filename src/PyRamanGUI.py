@@ -24,7 +24,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QTableWidget, QMessageBo
                              QTreeWidgetItem, QTableWidgetItem, QPushButton, QWidget, QMenu,
                              QAction, QDialog, QFileDialog, QAbstractItemView)
 from matplotlib.backends.qt_editor import _formlayout as formlayout
-from scipy import signal, special, stats
+from scipy import signal, stats
 from scipy.optimize import curve_fit
 from sklearn import decomposition
 
@@ -36,6 +36,7 @@ import analysisRoutine
 from BrokenAxes import brokenaxes
 import databaseSpectra
 import analysisMethods
+import peakFitting
 
 # This file essentially consists of four parts:
 # 1. Main Window
@@ -2362,8 +2363,6 @@ class DataSetSelecter(QtWidgets.QMainWindow):
         layout = QtWidgets.QVBoxLayout()
         content_widget = QtWidgets.QWidget()
 
-
-
         if self.select_only_one is False:
             check_all = QCheckBox("Select all", content_widget)
             font = QtGui.QFont()
@@ -2422,604 +2421,6 @@ class DataSetSelecter(QtWidgets.QMainWindow):
         self.close()
 
 
-class FitFunctions:
-    """
-    Fit functions
-    """
-
-    def __init__(self):
-        # number of fit functions
-        self.n_fit_fct = {"Lorentz": 0,
-                          "Gauss": 0,
-                          "Breit-Wigner-Fano": 0,
-                          "Pseudo Voigt": 0,
-                          "Voigt": 0}
-
-        self.function_parameters = {
-            "Linear": {"slope": [1, -np.inf, np.inf],
-                       "intercept": [0, -np.inf, np.inf]},
-            "Lorentz": {"position": [520, 0, np.inf],
-                        "intensity": [100, 0, np.inf],
-                        "FWHM": [15, 0, np.inf]},
-            "Gauss": {"position": [520, 0, np.inf],
-                      "intensity": [100, 0, np.inf],
-                      "FWHM": [15, 0, np.inf]},
-            "Voigt": {"position": [520, 0, np.inf],
-                      "intensity": [100, 0, np.inf],
-                      "FWHM (Gauss)": [15, 0, np.inf],
-                      "FWHM (Lorentz)": [15, 0, np.inf]},
-            "Pseudo Voigt": {"position": [520, 0, np.inf],
-                             "intensity": [100, 0, np.inf],
-                             "FWHM (Gauss)": [15, 0, np.inf],
-                             "FWHM (Lorentz)": [15, 0, np.inf],
-                             "nu": [0.5, 0, 1]},
-            "Breit-Wigner-Fano": {"position": [520, 0, np.inf],
-                                  "intensity": [100, 0, np.inf],
-                                  "FWHM": [15, 0, np.inf],
-                                  "BWF coupling coefficient": [-10, -np.inf, np.inf]}
-        }
-
-        self.implemented_functions = {
-            "Linear": self.LinearFct,
-            "Lorentz": self.LorentzFct,
-            "Gauss": self.GaussianFct,
-            "Voigt": self.VoigtFct,
-            "Pseudo Voigt": self.PseudoVoigt,
-            "Breit-Wigner-Fano": self.BreitWignerFct,
-        }
-
-    def LinearFct(self, x, a, b):
-        """ linear Function """
-        return a * x + b
-
-    def LorentzFct(self, x, xc, h, b):
-        """ definition of Lorentzian for fit process """
-        return h / (1 + (2 * (x - xc) / b) ** 2)
-
-    def GaussianFct(self, x, xc, h, b):
-        """ definition of Gaussian for fit process """
-        return h * np.exp(-4 * math.log(2) * ((x - xc) / b) * ((x - xc) / b))
-
-    def BreitWignerFct(self, x, xc, h, b, Q):
-        """definition of Breit-Wigner-Fano fucntion for fit process
-
-        (look e.g. "Interpretation of Raman spectra of disordered and amorphous carbon" von Ferrari und Robertson)
-        Q is BWF coupling coefficient
-        For Q^-1->0: the Lorentzian line is recovered
-        """
-        return h * (1 + 2 * (x - xc) / (Q * b)) ** 2 / (1 + (2 * (x - xc) / b) ** 2)
-
-    def PseudoVoigt(self, x, xc, h, f_G, f_L, nu):
-        """line profile pseudo function (linear combination of Lorentzian and Gaussian)"""
-        return nu * self.LorentzFct(x, xc, h, f_L) + (1 - nu) * self.GaussianFct(x, xc, h, f_G)
-
-    def VoigtFct(self, x, xc, h, f_G, f_L):
-        sigma = 1 / np.sqrt(8 * np.log(2)) * f_G
-        gamma = 1 / 2 * f_L
-        norm_factor = 5.24334
-        return norm_factor * h * sigma * special.voigt_profile(x - xc, sigma, gamma)
-
-    def FctSumme(self, x, *p):
-        """
-        Summing up the fit functions
-        @param x: x data
-        @param p: fitparameter
-        @return: fitted y data
-        """
-        y_sum = np.full(len(x), p[0])
-        n_para = 1
-        for key, val in self.n_fit_fct.items():
-            for i in range(val):
-                start = n_para
-                end = start + len(self.function_parameters[key])
-                params = p[start: end]
-                y_fct = self.implemented_functions[key](x, *params)
-                n_para = end
-                y_sum += y_fct
-        return y_sum
-
-
-class FitOptionsDialog(QMainWindow):
-    closeSignal = QtCore.pyqtSignal()  # Signal in case Fit-parameter window is closed
-
-    def __init__(self, parent, x, y, spect):
-        """
-        Options Dialog for fit process
-
-        Parameters
-        ----------
-        parent: PlotWindow object
-        x: x data / Raman shift
-        y: y data / Raman intensity
-        spect: Line2D
-        """
-        super(FitOptionsDialog, self).__init__(parent=parent)
-        self.parent = parent
-        self.x = x
-        self.y = y
-        self.spectrum = spect
-
-        # get canvas, axes and figure object of parent
-        self.canvas = self.parent.canvas
-        self.ax = self.parent.ax
-        self.fig = self.parent.fig
-
-        # define variables
-        # plotted function
-        self.plotted_functions = []
-        # list of vertical headers
-        self.vheaders = ["0"]
-
-        self.used_functions = []
-        self.fit_functions = FitFunctions()
-
-        # create actual window
-        self.create_dialog()
-        self.create_menubar()
-
-    def create_dialog(self):
-        self.layout = QtWidgets.QVBoxLayout()
-
-        button_layout_01 = QtWidgets.QHBoxLayout()
-        button_layout_02 = QtWidgets.QHBoxLayout()
-
-        # Button to add Fit function
-        add_button = QPushButton("Add Function")
-        add_button.clicked.connect(lambda: self.add_function(
-            "Lorentz", None))
-        button_layout_01.addWidget(add_button)
-
-        # Button to remove fit function
-        remove_button = QPushButton("Remove Function")
-        remove_button.clicked.connect(self.remove_function)
-        button_layout_01.addWidget(remove_button)
-
-        # Fit Button => accept start values for fit
-        fit_button = QPushButton("Fit")
-        fit_button.clicked.connect(self.fit)
-        button_layout_02.addWidget(fit_button)
-
-        # Apply
-        apply_button = QPushButton("Apply")
-        apply_button.clicked.connect(self.apply)
-        button_layout_02.addWidget(apply_button)
-
-        self.layout.addLayout(button_layout_01)
-        self.layout.addLayout(button_layout_02)
-
-        # create table
-        self.table = QtWidgets.QTableWidget(1, 5)
-        self.table.itemChanged.connect(self.value_changed)
-
-        # set items in each cell
-        for r in range(self.table.rowCount()):
-            for c in range(self.table.columnCount()):
-                cell = QtWidgets.QTableWidgetItem("")
-                self.table.setItem(r, c, cell)
-
-        # set headers
-        self.table.setHorizontalHeaderLabels(["Fit Function", "Parameter", "Value", "Lower Bound", "Upper Bound"])
-        self.table.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
-        self.table.setVerticalHeaderLabels(self.vheaders)
-
-        # background
-        self.table.item(0, 0).setFlags(Qt.NoItemFlags)  # no interaction with this cell
-        self.table.item(0, 1).setText("background")
-        self.table.item(0, 1).setFlags(Qt.NoItemFlags)
-        self.background = self.table.item(0, 2)
-        self.background.setText(str(0.0))
-
-        # bounds
-        self.table.item(0, 3).setText(str(-np.inf))
-        self.table.item(0, 4).setText(str(np.inf))
-
-        self.layout.addWidget(self.table)
-
-        widget = QtWidgets.QWidget()
-        widget.setLayout(self.layout)
-        self.setCentralWidget(widget)
-        self.setWindowTitle("Fit Functions")
-        self.setWindowModality(Qt.ApplicationModal)
-
-    def create_menubar(self):
-        menu_bar = self.menuBar()
-        file_menu = menu_bar.addMenu("File")
-        file_menu.addAction("Save Fit Parameter", self.save_fit_parameter)
-        file_menu.addAction("Load Fit Parameter", self.load_fit_parameter)
-
-        edit_menu = menu_bar.addMenu("Edit")
-        edit_menu.addAction("Clear table", self.clear_table)
-        edit_menu.addAction("Sort fit functions by wavenumber", self.sort_fit_functions)
-
-    def add_function(self, fct_name, fct_value):
-        """
-        add fit function to table
-        """
-
-        self.used_functions.append({})
-
-        # get parameters of function
-        if fct_value is None:
-            parameters = self.fit_functions.function_parameters[fct_name]
-        else:
-            parameters = fct_value
-        add_rows = len(parameters)
-
-        self.table.setRowCount(self.table.rowCount() + add_rows)
-        self.vheaders.extend([str(len(self.used_functions))] * add_rows)
-        self.table.setVerticalHeaderLabels(self.vheaders)
-
-        rows = self.table.rowCount()
-
-        # set items in new cell
-        for r in range(rows - add_rows, rows):
-            for c in range(self.table.columnCount()):
-                cell = QtWidgets.QTableWidgetItem('')
-                self.table.setItem(r, c, cell)
-
-        # add Combobox to select fit function
-        cbox = QtWidgets.QComboBox(self)
-        for key in self.fit_functions.n_fit_fct.keys():
-            cbox.addItem(key)
-        cbox.setCurrentText(fct_name)
-        n_fct = len(self.used_functions)
-        cbox.currentTextChanged.connect(lambda: self.fct_change(cbox.currentText(), n_fct - 1))
-        self.table.setCellWidget(rows - add_rows, 0, cbox)
-        self.used_functions[-1]["fct"] = cbox
-
-        # configure cells
-        self.table.item(rows - 2, 0).setFlags(Qt.NoItemFlags)  # no interaction with these cells
-        self.table.item(rows - 1, 0).setFlags(Qt.NoItemFlags)
-        self.used_functions[-1]["parameter"] = {}
-        for i, (key, val) in enumerate(parameters.items()):
-            self.table.item(rows - add_rows + i, 1).setText(key)
-            self.table.item(rows - add_rows + i, 1).setFlags(Qt.NoItemFlags)
-            self.table.item(rows - add_rows + i, 2).setText(str(val[0]))  # starting value
-            self.table.item(rows - add_rows + i, 3).setText(str(val[1]))  # lower bound
-            self.table.item(rows - add_rows + i, 4).setText(str(val[2]))  # upper bound
-            self.used_functions[-1]["parameter"][key] = {
-                "value": self.table.item(rows - add_rows + i, 2),
-                "lower boundaries": self.table.item(rows - add_rows + i, 3),
-                "upper boundaries": self.table.item(rows - add_rows + i, 4),
-            }
-
-    def remove_function(self):
-        last_key = len(self.used_functions)
-        row_indices = [i for i, x in enumerate(self.vheaders) if x == str(last_key)]
-        if last_key != 0:
-            for j in reversed(row_indices):
-                del self.vheaders[j]
-                self.table.removeRow(j)
-            del self.used_functions[last_key - 1]
-
-    def fct_change(self, fct_name, n):
-        old_parameters = self.used_functions[n]["parameter"].keys()
-        new_parameters = self.fit_functions.function_parameters[fct_name].keys()
-
-        for del_para in list(set(old_parameters) - set(new_parameters)):
-            # get index of row
-            row_index = self.vheaders.index(str(n + 1)) + len(new_parameters)
-            for item in self.table.findItems(del_para, QtCore.Qt.MatchExactly):
-                try:
-                    end = self.vheaders.index(str(n + 2))
-                except ValueError:
-                    end = len(self.vheaders) + 1
-                if self.vheaders.index(str(n + 1)) <= self.table.row(item) < end:
-                    row_index = self.table.row(item)
-                else:
-                    continue
-            # delete row and dictionary entry
-            del self.vheaders[row_index]
-            self.table.removeRow(row_index)
-            del self.used_functions[n]["parameter"][del_para]
-
-        row_index = self.vheaders.index(str(n + 1)) + len(old_parameters)
-        for new_para in [element for element in new_parameters if element not in old_parameters]:
-            self.table.insertRow(row_index)
-            self.vheaders.insert(row_index, str(n + 1))
-            self.table.setVerticalHeaderLabels(self.vheaders)
-
-            # set items in new cell
-            for c in range(self.table.columnCount()):
-                cell = QTableWidgetItem("")
-                self.table.setItem(row_index, c, cell)
-            self.table.item(row_index, 1).setText(new_para)
-            self.table.item(row_index, 1).setFlags(Qt.NoItemFlags)
-            self.table.item(row_index, 2).setText(str(self.fit_functions.function_parameters[fct_name][new_para][0]))
-
-            # boundaries
-            self.table.item(row_index, 3).setText(str(self.fit_functions.function_parameters[fct_name][new_para][1]))
-            self.table.item(row_index, 4).setText(str(self.fit_functions.function_parameters[fct_name][new_para][2]))
-
-            # update dictionary
-            self.used_functions[n]["parameter"][new_para] = {
-                "value": self.table.item(row_index, 2),
-                "lower boundaries": self.table.item(row_index, 3),
-                "upper boundaries": self.table.item(row_index, 4)
-            }
-            row_index += 1
-
-    def value_changed(self, item):
-        if item is None or self.table.item(item.row(), 3) is None or self.table.item(item.row(), 4) is None:
-            return
-        elif item.text() == '' or self.table.item(item.row(), 3).text() == '' or \
-                self.table.item(item.row(), 4).text() == '':
-            return
-        else:
-            pass
-        # check that lower bound is strictly less than upper bound
-        if item.column() == 3:
-            if float(item.text()) > float(self.table.item(item.row(), 4).text()):
-                self.parent.mw.show_statusbar_message('Lower bounds have to be strictly less than upper bounds', 4000,
-                                                      error_sound=True)
-                # add: replace item with old previous item
-        elif item.column() == 4:  # check that upper bound is strictly higher than lower bound
-            if float(item.text()) < float(self.table.item(item.row(), 3).text()):
-                self.parent.mw.show_statusbar_message('Upper bounds have to be strictly higher than lower bounds', 4000,
-                                                      error_sound=True)
-                # add: replace item with old previous item
-
-    def save_fit_parameter(self, file_name=None):
-        """Save fit parameter in txt file"""
-
-        # Get fit_parameter in printable form
-        print_table, r_squared = self.print_fitparameter()
-        save_data = print_table.get_string()
-
-        # Get file name
-        if file_name is None:
-            file_name = QFileDialog.getSaveFileName(self, "Save fit parameter in file",
-                                                    os.path.dirname(self.parent.mw.pHomeRmn),
-                                                    "All Files (*);;Text Files (*.txt)")
-            if file_name[0] != '':
-                file_name = file_name[0]
-                if file_name[-4:] == ".txt":
-                    pass
-                else:
-                    file_name = str(file_name) + ".txt"
-            else:
-                return
-
-        file = open(file_name, "w+")
-        file.write(save_data)
-        file.close()
-
-    def load_fit_parameter(self, file_name=None):
-        if file_name is None:
-            load_filename = QtWidgets.QFileDialog.getOpenFileName(self, "Load fit parameter")
-            if load_filename[0] != '':
-                file_name = load_filename[0]
-            else:
-                return
-
-        try:
-            table_content = np.genfromtxt(file_name, dtype="str", delimiter="|", skip_header=3, skip_footer=1,
-                                          usecols=(1, 2, 3), autostrip=True)
-        except ValueError as e:
-            print("File not readable")
-            print(e)
-            return
-
-        # set Background
-        if table_content[0][0] == "background":
-            self.table.item(0, 2).setText(str(table_content[0][1]))  # starting parameter
-        else:
-            print("File not readable")
-            return
-
-        # delete background from table content
-        table_content = np.delete(table_content, 0, axis=0)
-
-        fct_value = {}
-        row = 0
-        fct_name = None
-        while row < len(table_content):
-            if all(tr == "" for tr in table_content[row]):
-                if fct_value:
-                    self.add_function(fct_name, fct_value)
-                if row == len(table_content) - 1:
-                    break
-                fct_name = table_content[row + 1][0][:-2]
-                row += 2
-                fct_value = {}
-            else:
-                if table_content[row][0] == "area under curve":
-                    pass
-                else:
-                    if table_content[row][0] == "BWF coupling coefficient":
-                        lower_boundary = -np.inf
-                    else:
-                        lower_boundary = 0
-                    upper_boundary = np.inf
-                    fct_value[table_content[row][0]] = [table_content[row][1], lower_boundary, upper_boundary]
-                row += 1
-
-    def sort_fit_functions(self):
-        parameter = []
-        for ufct in self.used_functions:
-            name_fct = ufct["fct"].currentText()
-            parameter.append({
-                "fct": name_fct,
-                "parameter": {}
-            })
-            for key, val in ufct["parameter"].items():
-                parameter[-1]["parameter"][key] = [float(val["value"].text()),
-                                                   float(val["lower boundaries"].text()),
-                                                   float(val["upper boundaries"].text())]
-        parameter.sort(key=self.take_position_value)
-        self.clear_table()
-        for p in parameter:
-            self.add_function(p["fct"], p["parameter"])
-
-    def take_position_value(self, element):
-        """function for sorting purposes"""
-        return element["parameter"]["position"][0]
-
-    def clear_table(self):
-        while len(self.vheaders) > 1:
-            self.remove_function()
-        self.reset_n_fit_fct()
-
-    def apply(self):
-        self.clear_plot()
-        p_start, boundaries = self.get_fit_parameter()
-        self.plot_functions(p_start)
-
-    def fit(self):
-        self.reset_n_fit_fct()
-        self.clear_plot()
-        p_start, boundaries = self.get_fit_parameter()
-        try:
-            popt, pcov = curve_fit(self.fit_functions.FctSumme, self.x, self.y, p0=p_start, bounds=boundaries)
-        except RuntimeError as e:
-            self.parent.mw.show_statusbar_message(str(e), 4000)
-            return
-        except ValueError as e:
-            self.parent.mw.show_statusbar_message(str(e), 4000)
-            return
-
-        self.plot_functions(popt, store_line=True)
-        self.set_fit_parameter(popt)
-        print_table, r_squared = self.print_fitparameter(popt=popt, pcov=pcov)
-        print('\n {}'.format(self.spectrum.get_label()))
-        print(r'R^2={:.4f}'.format(r_squared))
-        print(print_table)
-
-    def set_fit_parameter(self, parameter):
-        self.background.setText(str(parameter[0]))
-
-        for i in range(1, len(parameter)):
-            self.table.item(i, 2).setText(str(parameter[i]))
-
-    def get_fit_parameter(self):
-        self.reset_n_fit_fct()
-
-        # Background
-        p_start = [float(self.background.text())]
-        bg_low = self.table.item(0, 3).text()
-        bg_up = self.table.item(0, 4).text()
-        if bg_low == "":
-            bg_low = -np.inf
-        else:
-            bg_low = float(bg_low)
-        if bg_up == "":
-            bg_up = np.inf
-        else:
-            bg_up = float(bg_up)
-        boundaries = [[bg_low], [bg_up]]
-
-        parameter = {_key: [] for _key in self.fit_functions.n_fit_fct.keys()}
-
-        lower_boundaries = {_key: [] for _key in self.fit_functions.n_fit_fct.keys()}
-        upper_boundaries = {_key: [] for _key in self.fit_functions.n_fit_fct.keys()}
-
-        for ufct in self.used_functions:
-            name_fct = ufct["fct"].currentText()
-            for key, val in ufct["parameter"].items():
-                parameter[name_fct].append(float(val["value"].text()))  # Parameter
-                if val["lower boundaries"].text() == '':
-                    lower_boundaries[name_fct].append(-np.inf)
-                else:
-                    lower_boundaries[name_fct].append(float(val["lower boundaries"].text()))
-                if val["upper boundaries"].text() == '':
-                    upper_boundaries[name_fct].append(np.inf)
-                else:
-                    upper_boundaries[name_fct].append(float(val["upper boundaries"].text()))
-
-            self.fit_functions.n_fit_fct[name_fct] += 1
-
-        for p in parameter.values():
-            p_start.extend(p)
-
-        for lb, ub in zip(lower_boundaries.values(), upper_boundaries.values()):
-            boundaries[0].extend(lb)
-            boundaries[1].extend(ub)
-
-        return p_start, boundaries
-
-    def plot_functions(self, param, store_line=False):
-        x1 = np.linspace(min(self.x), max(self.x), int((max(self.x) - min(self.x)) * 5))
-        y_fit = self.fit_functions.FctSumme(x1, *param)
-        line, = self.ax.plot(x1, y_fit, "-r")
-        self.plotted_functions.append(line)
-        if store_line is True:
-            label = "{} (fit)".format(self.spectrum.get_label())
-            line.set_label(label)
-            self.parent.data.append(self.parent.create_data(x1, y_fit, line=line, label=label, style="-"))
-        n_param = 1
-        for key in self.fit_functions.n_fit_fct.keys():
-            for i in range(self.fit_functions.n_fit_fct[key]):
-                start = n_param
-                end = start + len(self.fit_functions.function_parameters[key])
-                params = param[start: end]
-                y_fit = self.fit_functions.implemented_functions[key](x1, *params)
-                line, = self.ax.plot(x1, y_fit, "--g")
-                self.plotted_functions.append(line)
-                n_param = end
-                if store_line is True:
-                    label = "{} {}".format(key, i)
-                    line.set_label(label)
-                    self.parent.data.append(self.parent.create_data(x1, y_fit, line=line, label=label, style="-"))
-
-        self.canvas.draw()
-
-    def clear_plot(self):
-        for pf in self.plotted_functions:
-            try:
-                pf.remove()
-            except ValueError as e:
-                print("Line couldn't be removed: {}".format(e))
-                continue
-        self.plotted_functions = []
-        self.canvas.draw()
-
-    def print_fitparameter(self, popt=None, pcov=None):
-        """bring fit parameter in printable form"""
-
-        # Get data from table
-        if popt is None:
-            popt = []
-            for r in range(self.table.rowCount()):
-                popt.append(float(self.table.item(r, 2).text()))
-
-        # Calculate Errors and R square
-        if pcov is not None:
-            perr = np.sqrt(np.diag(pcov))
-            residuals = self.y - self.fit_functions.FctSumme(self.x, *popt)
-            ss_res = np.sum(residuals ** 2)
-            ss_tot = np.sum((self.y - np.mean(self.y)) ** 2)
-            r_squared = 1 - (ss_res / ss_tot)
-        else:
-            r_squared = None
-            perr = [""] * len(popt)
-
-        print_table = prettytable.PrettyTable()
-        print_table.field_names = ["Parameters", "Values", "Errors"]
-        print_table.add_rows([["background", popt[0], perr[0]], ["", "", ""]])
-        a = 1
-        for key in self.fit_functions.n_fit_fct.keys():  # iterate over Lorentz, Gauss, BWF
-            for j in range(self.fit_functions.n_fit_fct[key]):  # iterate over used fit functions per L, G or BWF
-                print_table.add_row(["{} {}".format(key, j + 1), "", ""])
-                params = popt[a: a + len(self.fit_functions.function_parameters[key])]
-                area = np.trapz(self.fit_functions.implemented_functions[key](self.x, *params), self.x)
-                for parameter in self.fit_functions.function_parameters[key].keys():
-                    print_table.add_row([parameter, popt[a], perr[a]])
-                    a += 1
-                print_table.add_rows([["area under curve", area, ""], ["", "", ""]])
-
-        return print_table, r_squared
-
-    def reset_n_fit_fct(self):
-        self.fit_functions.n_fit_fct = dict.fromkeys(self.fit_functions.n_fit_fct, 0)
-
-    def closeEvent(self, event):
-        self.save_fit_parameter("fit_parameter_cache.txt")
-
-        self.reset_n_fit_fct()
-        self.closeSignal.emit()
-        event.accept
-
-
 class MyCustomToolbar(NavigationToolbar2QT):
     signal_remove_line = QtCore.pyqtSignal(object)
     signal_axis_break = QtCore.pyqtSignal(list, list)
@@ -3073,7 +2474,7 @@ class PlotWindow(QMainWindow):
         self.data = plot_data
         self.mw = parent
         self.vertical_line = None
-        self.fit_functions = FitFunctions()
+        self.fit_functions = peakFitting.FitFunctions()
         self.blc = analysisMethods.BaselineCorrectionMethods()  # class for everything related to Baseline corrections
         self.inserted_text = []  # Storage for text inserted in the plot
         self.drawn_line = []  # Storage for lines and arrows drawn in the plot
@@ -3746,7 +3147,6 @@ class PlotWindow(QMainWindow):
         self.select_data_set()
         if self.selectedDatasetNumber:
             x_min, x_max = self.SelectArea()
-
         else:
             return
 
@@ -3756,7 +3156,7 @@ class PlotWindow(QMainWindow):
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
-            fit_dialog = FitOptionsDialog(self, x, y, self.data[n]["line"])
+            fit_dialog = peakFitting.FitOptionsDialog(self, x, y, self.data[n]["line"])
             fit_dialog.setMinimumWidth(600)
             if os.path.isfile("fit_parameter_cache.txt"):
                 fit_dialog.load_fit_parameter(file_name="fit_parameter_cache.txt")
@@ -3850,7 +3250,7 @@ class PlotWindow(QMainWindow):
             # wait until QMainWindow is closes
             loop = QtCore.QEventLoop()
             baseline_dialog.close_button.clicked.connect(loop.quit)
-            baseline_dialog.finish_button.clicked.connect(loop.quit)
+            baseline_dialog.ok_button.clicked.connect(loop.quit)
             loop.exec_()
             if baseline_dialog.close_button.isChecked():
                 break
@@ -3869,7 +3269,7 @@ class PlotWindow(QMainWindow):
             # wait until SmoothingDialog is closed
             loop = QtCore.QEventLoop()
             smooth_dialog.close_button.clicked.connect(loop.quit)
-            smooth_dialog.finish_button.clicked.connect(loop.quit)
+            smooth_dialog.ok_button.clicked.connect(loop.quit)
             loop.exec_()
             if smooth_dialog.close_button.isChecked():
                 break
@@ -3914,13 +3314,18 @@ class PlotWindow(QMainWindow):
             print(print_table)
 
     def analysis_routine(self):
-        """create own analysis routine consisting background correction and peak fitting"""
+        """create own analysis routine"""
         list_of_methods = {
-            "Cosmic spike removal": [],
-            "Smoothing": [],
-            "Baseline correction": analysisMethods.BaselineCorrectionsDialog(self, None, None, None),
-            "Peak fitting": [],
-            "Other": []
+            "Cosmic spike removal":
+                "Not yet implemented",
+            "Smoothing":
+                analysisMethods.AnalysisDialog(self, analysisMethods.SmoothingMethods(), add_apply_button=False),
+            "Baseline correction":
+                analysisMethods.AnalysisDialog(self, self.blc, add_apply_button=False),
+            "Peak fitting":
+                peakFitting.Dialog(self),
+            "Other":
+                "Not yet implemented"
         }
         ab = analysisRoutine.MainWindow(self, list_of_methods)
         ab.show()

@@ -289,7 +289,7 @@ class SmoothingMethods:
 
 class AnalysisDialog(QtWidgets.QMainWindow):
     """class to create dialog, parent for BaselineCorrectionDialog and SmoothingDialog"""
-    def __init__(self, parent, method_class, title="Dialog"):
+    def __init__(self, parent, method_class, add_apply_button=True, title="Dialog"):
         super(AnalysisDialog, self).__init__(parent=parent)
         # contains parent: class PlotWindow
         self.pw = parent
@@ -305,12 +305,12 @@ class AnalysisDialog(QtWidgets.QMainWindow):
 
         self.parameter_layout = None
         self.combo_widget_methods = None
-        self.finish_button = None
+        self.ok_button = None
         self.close_button = None
 
-        self.create_dialog()
+        self.create_dialog(add_apply_button)
 
-    def create_dialog(self):
+    def create_dialog(self, add_apply_button):
         # layouts
         main_layout = QtWidgets.QVBoxLayout()
         mthd_prmtr_layout = QtWidgets.QHBoxLayout()
@@ -319,7 +319,7 @@ class AnalysisDialog(QtWidgets.QMainWindow):
         method_box = self.create_method_box()
         self.fill_parameter_layout()
         parameter_box = QtWidgets.QGroupBox("Parameter")
-        button_layout = self.create_buttons()
+        button_layout = self.create_buttons(add_apply_button)
 
         # set layouts
         parameter_box.setLayout(self.parameter_layout)
@@ -440,16 +440,16 @@ class AnalysisDialog(QtWidgets.QMainWindow):
     def sort_roi(self, roi_list):
         return sorted(roi_list, key=lambda x: x[0])
 
-    def create_buttons(self):
+    def create_buttons(self, add_apply_button):
         # buttons for ok, close and apply
         button_layout = QtWidgets.QHBoxLayout()
 
-        self.finish_button = QtWidgets.QPushButton('Ok')
-        self.finish_button.setCheckable(True)
-        self.finish_button.setToolTip('Are you happy with the start parameters? '
-                                     '\n Close the dialog window and save the baseline!')
-        self.finish_button.clicked.connect(self.finish_call)
-        button_layout.addWidget(self.finish_button)
+        self.ok_button = QtWidgets.QPushButton('Ok')
+        self.ok_button.setCheckable(True)
+        self.ok_button.setToolTip(
+            'Are you happy with the start parameters?\n Close the dialog window and save the baseline!')
+        self.ok_button.clicked.connect(self.finish_call)
+        button_layout.addWidget(self.ok_button)
 
         self.close_button = QtWidgets.QPushButton('Close')
         self.close_button.setCheckable(True)
@@ -457,10 +457,11 @@ class AnalysisDialog(QtWidgets.QMainWindow):
         self.close_button.clicked.connect(self.close)
         button_layout.addWidget(self.close_button)
 
-        applybutton = QtWidgets.QPushButton('Apply')
-        applybutton.setToolTip('Do you want to try the fit parameters? \n Lets do it!')
-        applybutton.clicked.connect(self.apply_call)
-        button_layout.addWidget(applybutton)
+        if add_apply_button:
+            apply_button = QtWidgets.QPushButton('Apply')
+            apply_button.setToolTip('Do you want to try the fit parameters? \n Lets do it!')
+            apply_button.clicked.connect(self.apply_call)
+            button_layout.addWidget(apply_button)
 
         return button_layout
 
@@ -473,7 +474,12 @@ class AnalysisDialog(QtWidgets.QMainWindow):
                 widget.setParent(None)
 
     def finish_call(self):
-        pass
+        return [
+            {
+                "name": self.method_class.current_method,
+                "parameter": self.method_class.methods[self.method_class.current_method]["parameter"]
+            }
+        ]
 
     def apply_call(self):
         pass
