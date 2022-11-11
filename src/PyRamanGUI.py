@@ -13,6 +13,7 @@ import prettytable
 import re
 import scipy
 import sys
+import glob
 from matplotlib.figure import Figure
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -2714,15 +2715,20 @@ class PlotWindow(QMainWindow):
 
         analysisFit.addAction("Fit Dialog", self.open_fit_dialog)
 
-        analysisRoutine = analysisMenu.addMenu('&Analysis routines')
-        analysisRoutine.addAction('D und G Bande', self.fit_D_G)
-        analysisRoutine.addAction('Fit Sulfur oxyanion spectrum', self.fit_sulfuroxyanion)
-        analysisRoutine.addAction('Get m/I(G) (Hydrogen content)', self.hydrogen_estimation)
-        analysisRoutine.addAction('Norm to water peak', self.norm_to_water)
-        analysisRoutine.addAction("Create own routine", self.analysis_routine)
+        analysis_routine_menu = analysisMenu.addMenu("&Analysis routines")
+        analysis_routine_menu.addAction("D und G band", self.fit_D_G)
+        analysis_routine_menu.addAction("Fit Sulfur oxyanion spectrum", self.fit_sulfuroxyanion)
+        analysis_routine_menu.addAction("Get m/I(G) (Hydrogen content)", self.hydrogen_estimation)
+        analysis_routine_menu.addAction("Norm to water peak", self.norm_to_water)
+        analysis_routine_menu.addAction("Create own routine", self.create_analysis_routine)
+        own_routine_menu = analysis_routine_menu.addMenu("&Apply own routine")
+        files = glob.glob("analysis_routines/*.txt")
+        for f in files:
+            own_routine_menu.addAction(f)
+        own_routine_menu.triggered[QAction].connect(self.get_own_routine)
 
         # 3.2 Linear regression
-        analysisMenu.addAction('Linear regression', self.linear_regression)
+        analysisMenu.addAction("Linear regression", self.linear_regression)
 
         # 3.3 Analysis baseline correction
         analysisMenu.addAction('Baseline Corrections', self.baseline)
@@ -2737,7 +2743,7 @@ class PlotWindow(QMainWindow):
         analysisMenu.addAction('Get Area below Curve', self.detemine_area)
 
         # 4. menu: spectra data base
-        databaseMenu = menubar.addAction('&Data base peak positions', self.open_peakdatabase)
+        menubar.addAction('&Data base peak positions', self.open_peakdatabase)
 
         self.show()
 
@@ -3313,7 +3319,7 @@ class PlotWindow(QMainWindow):
             print(r'R^2={:.4f}'.format(r_squared))
             print(print_table)
 
-    def analysis_routine(self):
+    def create_analysis_routine(self):
         """create own analysis routine"""
         list_of_methods = {
             "Cosmic spike removal":
@@ -3329,6 +3335,76 @@ class PlotWindow(QMainWindow):
         }
         ab = analysisRoutine.MainWindow(self, list_of_methods)
         ab.show()
+
+    def get_own_routine(self, action):
+        """execute own analysis routine"""
+        self.select_data_set()
+        x_min, x_max = self.SelectArea()
+        for n in self.selectedDatasetNumber:
+            spectrum = self.data[n]["line"]
+            xs = spectrum.get_xdata()
+            ys = spectrum.get_ydata()
+            x = xs[np.where((xs > x_min) & (xs < x_max))]
+            y = ys[np.where((xs > x_min) & (xs < x_max))]
+
+            # opens file and saves content in variable 'v' with json
+            with open(action.text(), "rb") as file:
+                v = json.load(file)
+
+            for key, val in v.items():
+                print(key, val)
+                y = self.apply_own_routine(key, val, x, y)
+
+    def apply_own_routine(self, method, parameter, x, y, label):
+        if method == "Baseline correction":
+            parameter = parameter[0]
+            function = self.blc.methods[parameter["name"]]["function"]
+            params = list(parameter["parameter"].values())
+            yb, zb = function(x, y, *params)
+            # plot
+            line, = self.ax.plot(x, yb, label="{} ({})".format(label, "baseline corrected"))
+            self.canvas.draw()
+            self.create_data(x, yb, line=line, label=line.get_label())
+            return yb
+        elif method == "Smoothing":
+            parameter = parameter[0]
+            function = analysisMethods.SmoothingMethods().methods[parameter["name"]]["function"]
+            params = list(parameter["parameter"].values())
+            y_smoothed = function(x, y, *params)
+            # plot
+            line, = self.ax.plot(x, y_smoothed, label="{} ({})".format(label, "smoothed"))
+            self.canvas.draw()
+            self.create_data(x, y_smoothed, line=line, label=line.get_label())
+            return y_smoothed, "smoothed"
+        elif method == "Peak fitting":
+            for key in self.fit_functions.n_fit_fct.keys():
+                self.fit_functions.n_fit_fct[key] = len([i["name"] for i in parameter if i["name"] == key])
+            p_start = []
+            p_bounds = [[], []]
+            for p in parameter:
+                # fit starting parameter
+                p_start.extend([i[0] for i in p["parameter"].values()])
+                # lower bound
+                p_bounds[0].extend([i[1] for i in p["parameter"].values()])
+                # upper bound
+                p_bounds[1].extend([i[2] for i in p["parameter"].values()])
+            try:
+                popt, pcov = curve_fit(self.fit_functions.FctSumme, x, y, p0=p_start, bounds=p_bounds)
+            except RuntimeError as e:
+                self.mw.show_statusbar_message(str(e), 4000)
+                return None, "fit"
+
+            # set number of fit functions to 0 again
+            y_fit = self.fit_functions.FctSumme(x, *popt)
+            self.fit_functions.n_fit_fct = dict.fromkeys(self.fit_functions.n_fit_fct, 0)
+
+            # plot
+            line, = self.ax.plot(x, y_fit, label="{} ({})".format(label, "total fit"))
+            self.canvas.draw()
+            self.create_data(x, y_fit, line=line, label=line.get_label())
+            return y_fit, "fit"
+        else:
+            return None, None
 
     def hydrogen_estimation(self):
         """
