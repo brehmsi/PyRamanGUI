@@ -473,7 +473,9 @@ class Dialog(QtWidgets.QMainWindow):
         parameter = [
             {
                 "fct": "",
-                "parameter": {"background": float(self.background.text())}
+                "parameter": {"background": [float(self.background.text()),
+                                             self.table.item(0, 3).text(),
+                                             self.table.item(0, 4).text()]}
             }
         ]
         parameter += self.get_parameter_dict()

@@ -668,3 +668,53 @@ class BaselineCorrectionDialog(AnalysisDialog):
     def closeEvent(self, event):
         self.clear_plot()
         event.accept()
+
+
+class DataLimit(QtWidgets.QMainWindow):
+    def __init__(self, parent):
+        super(DataLimit, self).__init__(parent=parent)
+        self.drag_buttons = []
+
+        # create widget with main layout
+        widget = QtWidgets.QWidget()
+        main_layout = QtWidgets.QVBoxLayout()
+
+        # input field for start and end wavenumber
+        start_label = QtWidgets.QLabel("start wavenumber")
+        self.start_wavenumber = QtWidgets.QLineEdit("")
+        main_layout.addWidget(start_label)
+        main_layout.addWidget(self.start_wavenumber)
+
+        end_label = QtWidgets.QLabel("end wavenumber")
+        self.end_wavenumber = QtWidgets.QLineEdit("")
+        main_layout.addWidget(end_label)
+        main_layout.addWidget(self.end_wavenumber)
+
+        # cancel and ok button
+        button_layout = QtWidgets.QHBoxLayout()
+
+        self.ok_button = QtWidgets.QPushButton("Ok")
+        self.ok_button.clicked.connect(self.finish_call)
+        button_layout.addWidget(self.ok_button)
+
+        self.cancel_button = QtWidgets.QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.cancel_call)
+        button_layout.addWidget(self.cancel_button)
+
+        # put everything together
+        main_layout.addLayout(button_layout)
+        widget.setLayout(main_layout)
+        self.setCentralWidget(widget)
+        self.setWindowModality(QtCore.Qt.ApplicationModal)
+
+    def finish_call(self):
+        return [
+            {
+                "name": "Limit data area",
+                "parameter": {"start": self.start_wavenumber.text(), "end": self.end_wavenumber.text()}
+            }
+        ]
+
+    def cancel_call(self):
+        self.close()
+

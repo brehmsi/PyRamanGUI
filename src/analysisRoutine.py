@@ -1,6 +1,6 @@
 from PyQt5 import QtWidgets, QtCore, QtGui
 import json
-import os
+
 
 class DragFrame(QtWidgets.QFrame):
     def __init__(self, label, method_dialog, parent):

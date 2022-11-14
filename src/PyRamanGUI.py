@@ -3322,6 +3322,8 @@ class PlotWindow(QMainWindow):
     def create_analysis_routine(self):
         """create own analysis routine"""
         list_of_methods = {
+            "Define data area":
+                analysisMethods.DataLimit(self),
             "Cosmic spike removal":
                 "Not yet implemented",
             "Smoothing":
@@ -3339,43 +3341,68 @@ class PlotWindow(QMainWindow):
     def get_own_routine(self, action):
         """execute own analysis routine"""
         self.select_data_set()
-        x_min, x_max = self.SelectArea()
+        result_text = "\n{}".format(action.text())
+
+        # opens file and saves content in variable 'v' with json
+        with open(action.text(), "rb") as file:
+            v = json.load(file)
+
         for n in self.selectedDatasetNumber:
             spectrum = self.data[n]["line"]
-            xs = spectrum.get_xdata()
-            ys = spectrum.get_ydata()
-            x = xs[np.where((xs > x_min) & (xs < x_max))]
-            y = ys[np.where((xs > x_min) & (xs < x_max))]
-
-            # opens file and saves content in variable 'v' with json
-            with open(action.text(), "rb") as file:
-                v = json.load(file)
-
+            x = spectrum.get_xdata()
+            y = spectrum.get_ydata()
             for key, val in v.items():
-                print(key, val)
-                y = self.apply_own_routine(key, val, x, y)
+                result_text += "{}\n".format(key)
+                x, y, result_text = self.apply_own_routine(key, val, x, y, spectrum.get_label(), result_text)
+                if y is None:
+                    break
 
-    def apply_own_routine(self, method, parameter, x, y, label):
-        if method == "Baseline correction":
+        print(result_text)
+        self.mw.new_window(None, "Textwindow", result_text, None)
+
+    def apply_own_routine(self, method, parameter, x, y, label, result_text):
+        if method == "Define data area":
+            parameter = parameter[0]
+            x_min = float(parameter["parameter"]["start"])
+            x_max = float(parameter["parameter"]["end"])
+            x_cut = x[np.where((x > x_min) & (x < x_max))]
+            y_cut = y[np.where((x > x_min) & (x < x_max))]
+            result_text += "{}\n".format(parameter["name"])
+            result_text += "{}\n".format(parameter["parameter"])
+            return x_cut, y_cut, result_text
+        elif method == "Baseline correction":
+
+            # apply baseline correction
             parameter = parameter[0]
             function = self.blc.methods[parameter["name"]]["function"]
             params = list(parameter["parameter"].values())
             yb, zb = function(x, y, *params)
+
             # plot
             line, = self.ax.plot(x, yb, label="{} ({})".format(label, "baseline corrected"))
             self.canvas.draw()
             self.create_data(x, yb, line=line, label=line.get_label())
-            return yb
+
+            # save results
+            result_text += "{}\n".format(parameter["name"])
+            result_text += "{}\n".format(parameter["parameter"])
+            return x, yb, result_text
         elif method == "Smoothing":
+            # apply smoothing
             parameter = parameter[0]
             function = analysisMethods.SmoothingMethods().methods[parameter["name"]]["function"]
             params = list(parameter["parameter"].values())
             y_smoothed = function(x, y, *params)
+
             # plot
             line, = self.ax.plot(x, y_smoothed, label="{} ({})".format(label, "smoothed"))
             self.canvas.draw()
             self.create_data(x, y_smoothed, line=line, label=line.get_label())
-            return y_smoothed, "smoothed"
+
+            # save results
+            result_text += "{}\n".format(parameter["name"])
+            result_text += "{}\n".format(parameter["parameter"])
+            return x, y_smoothed, result_text
         elif method == "Peak fitting":
             for key in self.fit_functions.n_fit_fct.keys():
                 self.fit_functions.n_fit_fct[key] = len([i["name"] for i in parameter if i["name"] == key])
@@ -3392,19 +3419,50 @@ class PlotWindow(QMainWindow):
                 popt, pcov = curve_fit(self.fit_functions.FctSumme, x, y, p0=p_start, bounds=p_bounds)
             except RuntimeError as e:
                 self.mw.show_statusbar_message(str(e), 4000)
-                return None, "fit"
+                return x, None, result_text
+            except ValueError as e:
+                self.mw.show_statusbar_message(str(e), 4000)
+                return x, None, result_text
+            # plot
+            y_fit_total = self.fit_functions.FctSumme(x, *popt)
+            line, = self.ax.plot(x, y_fit_total, label="{} ({})".format(label, "total fit"))
+
+            self.canvas.draw()
+            self.create_data(x, y_fit_total, line=line, label=line.get_label())
+
+            # Calculate Errors and R square
+            perr = np.sqrt(np.diag(pcov))
+            residuals = y - y_fit_total
+            ss_res = np.sum(residuals ** 2)
+            ss_tot = np.sum((y - np.mean(y)) ** 2)
+            r_squared = 1 - (ss_res / ss_tot)
+
+            # parameter in table
+            print_table = prettytable.PrettyTable()
+            print_table.field_names = ["Parameters", "Values", "Errors"]
+            print_table.add_rows([["background", popt[0], perr[0]], ["", "", ""]])
+            a = 1
+            for key in self.fit_functions.n_fit_fct.keys():  # iterate over Lorentz, Gauss, BWF
+                for j in range(self.fit_functions.n_fit_fct[key]):  # iterate over used fit functions per L, G or BWF
+                    print_table.add_row(["{} {}".format(key, j + 1), "", ""])
+                    params = popt[a: a + len(self.fit_functions.function_parameters[key])]
+                    y_1fit = self.fit_functions.implemented_functions[key](x, *params)
+                    area = np.trapz(y_1fit, x)
+                    self.ax.plot(x, y_1fit, label="{} (fit {} {})".format(label, key, j + 1))
+                    for parameter in self.fit_functions.function_parameters[key].keys():
+                        print_table.add_row([parameter, popt[a], perr[a]])
+                        a += 1
+                    print_table.add_rows([["area under curve", area, ""], ["", "", ""]])
+
+            # save results
+            result_text += "R^2 = {}\n".format(r_squared)
+            result_text += "{}\n".format(print_table)
 
             # set number of fit functions to 0 again
-            y_fit = self.fit_functions.FctSumme(x, *popt)
             self.fit_functions.n_fit_fct = dict.fromkeys(self.fit_functions.n_fit_fct, 0)
-
-            # plot
-            line, = self.ax.plot(x, y_fit, label="{} ({})".format(label, "total fit"))
-            self.canvas.draw()
-            self.create_data(x, y_fit, line=line, label=line.get_label())
-            return y_fit, "fit"
+            return x, y_fit_total, result_text
         else:
-            return None, None
+            return x, None, result_text
 
     def hydrogen_estimation(self):
         """
