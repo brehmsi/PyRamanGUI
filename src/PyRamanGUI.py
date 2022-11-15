@@ -10,11 +10,10 @@ import operator
 import os
 import pickle
 import prettytable
-import pybaselines
-import rampy as rp
 import re
 import scipy
 import sys
+import glob
 from matplotlib.figure import Figure
 from matplotlib.backend_bases import MouseEvent
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -26,18 +25,19 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QTableWidget, QMessageBo
                              QTreeWidgetItem, QTableWidgetItem, QPushButton, QWidget, QMenu,
                              QAction, QDialog, QFileDialog, QAbstractItemView)
 from matplotlib.backends.qt_editor import _formlayout as formlayout
-from scipy import signal, special, stats
+from scipy import signal, stats
 from scipy.optimize import curve_fit
 from sklearn import decomposition
-from pybaselines import whittaker
+
 
 # Import files
 import myfigureoptions
-import Database_Measurements
+import databaseMeasurements
+import analysisRoutine
 from BrokenAxes import brokenaxes
-import database_spectra
-from smoothing import SmoothingMethods, SmoothingDialog
-
+import databaseSpectra
+import analysisMethods
+import peakFitting
 
 # This file essentially consists of four parts:
 # 1. Main Window
@@ -524,7 +524,7 @@ class MainWindow(QMainWindow):
 
     def execute_database_measurements(self):
         title = 'Database'
-        self.db_measurements = Database_Measurements.DatabaseMeasurements()
+        self.db_measurements = databaseMeasurements.DatabaseMeasurements()
         DBM_tab = self.tabWidget.addTab(self.db_measurements, self.PyramanIcon, title)
 
     def create_sidetree_structure(self, structure):
@@ -2365,8 +2365,6 @@ class DataSetSelecter(QtWidgets.QMainWindow):
         layout = QtWidgets.QVBoxLayout()
         content_widget = QtWidgets.QWidget()
 
-
-
         if self.select_only_one is False:
             check_all = QCheckBox("Select all", content_widget)
             font = QtGui.QFont()
@@ -2425,1147 +2423,6 @@ class DataSetSelecter(QtWidgets.QMainWindow):
         self.close()
 
 
-class BaselineCorrectionMethods:
-    """Class containing all implemented methods of base line correction"""
-
-    def __init__(self):
-        # all implemented baseline correction methods
-        self.method_groups = {
-            "Whittaker":
-                [
-                    "Asymmetric Least Square",
-                    "Improved Asymmetric Least Square",
-                    "Adaptive Iteratively Reweighted Penalized Least Squares",
-                    "Asymmetrically Reweighted Penalized Least Squares",
-                    "Doubly Reweighted Penalized Least Squares",
-                    "Derivative Peak-Screening Asymmetric Least Square"
-                ],
-            "Spline":
-                ["Univariate Spline", "GCV Spline"],
-            "Polynomial":
-                ["Polynomial", "Polynomial (without regions)"],
-            "Miscellaneous":
-                ["Rubberband", "Rolling Ball"]
-        }
-        self.methods = {
-            "Rubberband":
-                {"function": self.rubberband, "parameter": {}},
-            "Rolling Ball":
-                {"function": self.rolling_ball, "parameter": {"half window": 5}},
-            "Polynomial":
-                {"function": self.polynomial, "parameter": {"order": 3, "roi": [[150, 160], [3800, 4000]]}},
-            "Polynomial (without regions)":
-                {"function": self.polynomial_02, "parameter": {"order": 3}},
-            "Univariate Spline":
-                {"function": self.unispline, "parameter": {"s": 1e0, "roi": [[150, 160], [3800, 4000]]}},
-            "GCV Spline":
-                {"function": self.gcvspline, "parameter": {"s": 0.1, "roi": [[150, 160], [3800, 4000]]}},
-            "Asymmetric Least Square":
-                {"function": self.ALS, "parameter": {"p": 0.001, "lambda": 10000000}},
-            "Improved Asymmetric Least Square":
-                {"function": self.imALS, "parameter": {"p": 0.001, "lambda": 100000}},
-            "Adaptive Iteratively Reweighted Penalized Least Squares":
-                {"function": self.airPLS, "parameter": {"lambda": 10000000}},
-            "Asymmetrically Reweighted Penalized Least Squares":
-                {"function": self.arPLS, "parameter": {"lambda": 10000000}},
-            "Doubly Reweighted Penalized Least Squares":
-                {"function": self.drPLS, "parameter": {"lambda": 1000000, "eta": 0.5}},
-            "Derivative Peak-Screening Asymmetric Least Square":
-                {"function": self.derpsALS, "parameter": {"lambda": 1000000, "p": 0.01}}
-        }
-
-        # contains current method, for baseline dialog; start method is ASL
-        self.current_method = "Asymmetric Least Square"
-        self.current_group = "Whittaker"
-
-    def rubberband(self, x, y):
-        """
-        Rubberband Baseline Correction
-        source: https://dsp.stackexchange.com/questions/2725/how-to-perform-a-rubberband-correction-on-spectroscopic-data
-        """
-        # Find the convex hull
-        v = scipy.spatial.ConvexHull(np.array(list(zip(x, y)))).vertices
-        # Rotate convex hull vertices until they start from the lowest one
-        v = np.roll(v, -v.argmin())
-        # Leave only the ascending part
-        v = v[:v.argmax()]
-
-        # Create baseline using linear interpolation between vertices
-        z = np.interp(x, x[v], y[v])
-        y = y - z
-        # y - background-corrected Intensity-values, z - background
-        return y, z
-
-    def rolling_ball(self, x, y, half_window):
-        baseline, _ = pybaselines.morphological.rolling_ball(y, half_window=int(half_window))
-        y_corr = y - baseline
-        return y_corr, baseline
-
-    def polynomial(self, x, y, p_order, roi):
-        y, z = rp.baseline(x, y, np.array(roi), "poly", polynomial_order=p_order)
-        y = y.flatten()
-        z = z.flatten()
-        return y, z
-
-    def polynomial_02(self, x, y, p_order):
-        baseline, _ = pybaselines.polynomial.poly(y, x_data=x, poly_order=int(p_order))
-        y_corr = y - baseline
-        return y_corr, baseline
-
-    def unispline(self, x, y, s, roi):
-        """
-        @param x: x data
-        @param y: y data
-        @param s: Positive smoothing factor used to choose the number of knots.
-        Number of knots will be increased until the smoothing condition is satisfied:
-        @param roi: region of interest
-        @return: baseline corrected y data and baseline z
-        """
-        try:
-            y, z = rp.baseline(x, y, np.array(roi), "unispline", s=s)
-        except ValueError as e:
-            print(e)
-            return None
-        y = y.flatten()
-        z = z.flatten()
-        return y, z
-
-    def gcvspline(self, x, y, s, roi):
-        """
-        @param x: x data
-        @param y: y data
-        @param s: Positive smoothing factor used to choose the number of knots.
-        Number of knots will be increased until the smoothing condition is satisfied:
-        @param roi: region of interest
-        @return: baseline corrected y data and baseline z
-        """
-        try:
-            y, z = rp.baseline(x, y, np.array(roi), 'gcvspline', s=s)
-        except UnboundLocalError:
-            print('ERROR: Install gcvspline to use this mode (needs a working FORTRAN compiler).')
-            return None
-        y = y.flatten()
-        z = z.flatten()
-        return y, z
-
-    def ALS(self, x, y, p, lam):
-        """
-        baseline correction with Asymmetric Least Squares smoothing
-        based on: P. H. C. Eilers and H. F. M. Boelens. Baseline correction with asymmetric least squares smoothing.
-        Leiden University Medical Centre Report , 1(1):5, 2005. from Eilers and Boelens
-        also look at: https://stackoverflow.com/questions/29156532/python-baseline-correction-library
-        """
-        baseline, _ = whittaker.asls(y, lam=lam, p=p)
-        y_corr = y - baseline
-        return y_corr, baseline
-
-    def airPLS(self, x, y, lam):
-        """
-        adaptive  iteratively  reweighted  penalized  least  squares
-        based on: Zhi-Min  Zhang,  Shan  Chen,  and  Yi-Zeng Liang.
-        Baseline correction using adaptive iteratively reweighted penalized least squares.
-        Analyst, 135(5):1138–1146, 2010.
-        """
-        baseline, params = whittaker.airpls(y, lam=lam)
-        y_corr = y - baseline
-        return y_corr, baseline
-
-    def arPLS(self, x, y, lam):
-        """
-        (automatic) Baseline correction using asymmetrically reweighted penalized least squares smoothing.
-        Baek et al. 2015, Analyst 140: 250-257;
-        """
-        baseline, params = whittaker.arpls(y, lam=lam)
-        y_corr = y - baseline
-        return y_corr, baseline
-
-    def drPLS(self, x, y, lam, eta):
-        """(automatic) Baseline correction method based on doubly reweighted penalized least squares.
-        Xu et al., Applied Optics 58(14):3913-3920."""
-        baseline, params = whittaker.drpls(y, lam=lam, eta=eta)
-        y_corr = y - baseline
-        return y_corr, baseline
-
-    def imALS(self, x, y, p, lam):
-        """
-        He, Shixuan, et al. "Baseline correction for Raman spectra using an improved asymmetric least squares method."
-        Analytical Methods 6.12 (2014): 4402-4407.
-        """
-        baseline, params = whittaker.iasls(y, lam=lam, p=p)
-        y_corr = y - baseline
-        return y_corr, baseline
-
-    def derpsALS(self, x, y, lam, p, k=None):
-        """
-        Korepanov, Vitaly I. "Asymmetric least‐squares baseline algorithm with peak screening for automatic processing
-        of the Raman spectra." Journal of Raman Spectroscopy 51.10 (2020): 2061-2065.
-        @param x:
-        @param y:
-        @param lam:
-        @param p:
-        @param k:
-        @return:
-        """
-        baseline, params = whittaker.derpsalsa(y, lam=lam, p=p, k=k)
-        y_corr = y - baseline
-        return y_corr, baseline
-
-
-class BaselineCorrectionsDialog(QMainWindow):
-    def __init__(self, parent, blc_methods):
-        super(BaselineCorrectionsDialog, self).__init__(parent=parent)
-        # contains parent: class PlotWindow
-        self.pw = parent
-
-        # get axis and figure of PlotWindow
-        self.ax = self.pw.ax
-        self.fig = self.pw.fig
-
-        self.blcm = blc_methods
-        self.methods = self.blcm.methods
-        self.method_groups = self.blcm.method_groups
-
-        self.spectrum = None
-        self.x = None
-        self.y = None
-        # list containing vertical spans (matplotlib.patches.Polygon) to color regions of interests
-        self.roi_spans = []
-
-        self.parameter_editor = {}
-        self.parameter_label = {}
-
-    def get_baseline(self, x, y, spectrum):
-        self.x = x
-        self.y = y
-        self.spectrum = spectrum
-
-        self.plot_baseline()
-        self.create_dialog()
-        self.apply_call()
-
-    def create_dialog(self):
-        # layouts
-        main_layout = QtWidgets.QVBoxLayout()
-        mthd_prmtr_layout = QtWidgets.QHBoxLayout()
-        self.parameter_layout = QtWidgets.QGridLayout()
-
-        method_box = self.create_method_box()
-        self.fill_parameter_layout()
-        parameter_box = QtWidgets.QGroupBox("Parameter")
-        button_layout = self.create_buttons()
-
-        # set layouts
-        parameter_box.setLayout(self.parameter_layout)
-        mthd_prmtr_layout.addWidget(method_box)
-        mthd_prmtr_layout.addWidget(parameter_box)
-        main_layout.addLayout(mthd_prmtr_layout)
-        main_layout.addLayout(button_layout)
-        widget = QtWidgets.QWidget()
-        widget.setLayout(main_layout)
-        self.setCentralWidget(widget)
-        self.setWindowTitle("Baseline")
-        self.setWindowModality(Qt.ApplicationModal)
-        self.show()
-
-    def create_method_box(self):
-        method_layout = QtWidgets.QVBoxLayout()
-        method_box = QtWidgets.QGroupBox("Methods")
-
-        # combo box for method category
-        method_combo_widget = QtWidgets.QComboBox()
-        for key in self.method_groups.keys():
-            method_combo_widget.addItem(key)
-        method_combo_widget.currentTextChanged.connect(self.method_group_changed)
-        method_layout.addWidget(method_combo_widget)
-
-        # combo box for method
-        self.combo_widget_methods = QtWidgets.QComboBox()
-        for me in self.method_groups[self.blcm.current_group]:
-            self.combo_widget_methods.addItem(me)
-        self.combo_widget_methods.currentTextChanged.connect(self.method_change)
-        method_layout.addWidget(self.combo_widget_methods)
-
-        method_box.setLayout(method_layout)
-
-        return method_box
-
-    def method_group_changed(self, text):
-        self.blcm.current_group = text
-        self.combo_widget_methods.clear()
-        for me in self.method_groups[self.blcm.current_group]:
-            self.combo_widget_methods.addItem(me)
-        self.method_change(self.method_groups[self.blcm.current_group][0])
-
-    def method_change(self, text):
-        if text is not None and text != "":
-            self.blcm.current_method = text
-        elif text == "":
-            return
-
-        # clear layout
-        self.clear_layout(self.parameter_layout)
-
-        self.parameter_editor = {}
-        self.parameter_label = {}
-
-        # create new layout
-        self.fill_parameter_layout()
-        self.update()
-
-    def fill_parameter_layout(self):
-        idx = 0
-        for key, val in self.methods[self.blcm.current_method]["parameter"].items():
-            if key == "roi":
-                self.add_roi_editors(val, idx)
-                continue
-            self.parameter_label[key] = QtWidgets.QLabel(key)
-            self.parameter_editor[key] = QtWidgets.QLineEdit()
-            self.parameter_layout.addWidget(self.parameter_editor[key], idx, 0)
-            self.parameter_layout.addWidget(self.parameter_label[key], idx, 1)
-            self.parameter_editor[key].setText(str(val))
-            self.methods[self.blcm.current_method]["parameter"][key] = float(self.parameter_editor[key].text())
-            idx += 1
-
-    def add_roi_editors(self, roi, idx):
-        roi_editors = []
-        roi_layout_v = QtWidgets.QVBoxLayout()
-        button_layout_v = QtWidgets.QVBoxLayout()
-        button_layout_h = QtWidgets.QHBoxLayout()
-        self.parameter_label["roi"] = QtWidgets.QLabel("regions of interest")
-        button_add = QtWidgets.QPushButton("+")
-        button_remove = QtWidgets.QPushButton("-")
-        button_layout_h.addWidget(button_add)
-        button_layout_h.addWidget(button_remove)
-        button_layout_v.addWidget(self.parameter_label["roi"])
-        button_layout_v.addLayout(button_layout_h)
-        button_add.clicked.connect(self.add_roi)
-        button_remove.clicked.connect(self.del_roi)
-        self.parameter_layout.addLayout(button_layout_v, idx, 1)
-        for i, r in enumerate(roi):
-            roi_layout_h = QtWidgets.QHBoxLayout()
-            editor1 = QtWidgets.QLineEdit()
-            editor1.setText(str(r[0]))
-            roi_layout_h.addWidget(editor1)
-            editor2 = QtWidgets.QLineEdit()
-            editor2.setText(str(r[1]))
-            roi_layout_h.addWidget(editor2)
-            roi_layout_v.addLayout(roi_layout_h)
-            roi_editors.append([editor1, editor2])
-            self.methods[self.blcm.current_method]["parameter"]["roi"][i] = [float(editor1.text()),
-                                                                             float(editor2.text())]
-        self.parameter_layout.addLayout(roi_layout_v, idx, 0)
-        self.parameter_editor["roi"] = roi_editors
-
-    def add_roi(self):
-        try:
-            last_roi = self.methods[self.blcm.current_method]["parameter"]["roi"][-1][1]
-        except IndexError:
-            last_roi = 140
-        self.methods[self.blcm.current_method]["parameter"]["roi"].append([last_roi + 10, last_roi + 40])
-        self.method_change(None)
-
-    def del_roi(self):
-        try:
-            del self.methods[self.blcm.current_method]["parameter"]["roi"][-1]
-        except IndexError:
-            pass
-        self.method_change(None)
-
-    def sort_roi(self, roi_list):
-        return sorted(roi_list, key=lambda x: x[0])
-
-    def create_buttons(self):
-        # buttons for ok, close and apply
-        button_layout = QtWidgets.QHBoxLayout()
-
-        self.finishbutton = QPushButton('Ok')
-        self.finishbutton.setCheckable(True)
-        self.finishbutton.setToolTip('Are you happy with the start parameters? '
-                                     '\n Close the dialog window and save the baseline!')
-        self.finishbutton.clicked.connect(self.finish_call)
-        button_layout.addWidget(self.finishbutton)
-
-        self.closebutton = QPushButton('Close')
-        self.closebutton.setCheckable(True)
-        self.closebutton.setToolTip('Closes the dialog window and baseline is not saved.')
-        self.closebutton.clicked.connect(self.close)
-        button_layout.addWidget(self.closebutton)
-
-        applybutton = QPushButton('Apply')
-        applybutton.setToolTip('Do you want to try the fit parameters? \n Lets do it!')
-        applybutton.clicked.connect(self.apply_call)
-        button_layout.addWidget(applybutton)
-
-        return button_layout
-
-    def plot_baseline(self):
-        params = self.methods[self.blcm.current_method]["parameter"].values()
-        return_value = self.methods[self.blcm.current_method]["function"](self.x, self.y, *params)
-        if return_value is None:
-            return
-        else:
-            yb, zb = return_value
-        self.base_line, = self.ax.plot(self.x, zb, "c--", label="baseline ({})".format(self.spectrum.get_label()))
-        self.blcSpektrum, = self.ax.plot(self.x, yb, "c-",
-                                         label="baseline-corrected ({})".format(self.spectrum.get_label()))
-        self.fig.canvas.draw()
-
-    def clear_layout(self, layout):
-        for i in reversed(range(layout.count())):
-            widget = layout.itemAt(i).widget()
-            if widget is None:
-                self.clear_layout(layout.itemAt(i))
-            else:
-                widget.setParent(None)
-
-    def clear_plot(self):
-        try:
-            self.blcSpektrum.remove()
-        except ValueError:
-            return
-        self.base_line.remove()
-        for rs in self.roi_spans:
-            rs.remove()
-        self.roi_spans = []
-        self.fig.canvas.draw()
-
-    def finish_call(self):
-        params = self.methods[self.blcm.current_method]["parameter"].values()
-        name = self.spectrum.get_label()
-        for key, val in self.parameter_editor.items():
-            if key == "roi":
-                for i, roi_pe in enumerate(val):
-                    roi_start = float(roi_pe[0].text())
-                    roi_end = float(roi_pe[1].text())
-                    self.methods[self.blcm.current_method]["parameter"]["roi"][i] = [roi_start, roi_end]
-                self.methods[self.blcm.current_method]["parameter"]["roi"] = self.sort_roi(
-                    self.methods[self.blcm.current_method]["parameter"]["roi"])
-                continue
-            self.methods[self.blcm.current_method]["parameter"][key] = float(val.text())
-        return_value = self.methods[self.blcm.current_method]["function"](self.x, self.y, *params)
-        if return_value is None:
-            self.close()
-            return
-        else:
-            yb, zb = return_value
-
-        # Plot
-        label_spct = "{} (baseline-corrected)".format(name)
-        spct_corr, = self.ax.plot(self.x, yb, "c-", label=label_spct)
-        self.pw.data.append(self.pw.create_data(self.x, yb, line=spct_corr, label=label_spct, style="-"))
-        baseline, = self.ax.plot(self.x, zb, "c--", label="baseline ({})".format(name))
-        self.pw.data.append(self.pw.create_data(
-            self.x, zb, line=baseline, label="baseline ({})".format(name), style="-"))
-        self.fig.canvas.draw()
-        self.close()
-
-        # Save baseline corrected data
-        # (fileBaseName, fileExtension) = os.path.splitext(name)
-        # startFileDirName = os.path.dirname(self.pw.selectedData[0]["filename"])
-        # startFileBaseName = startFileDirName + "/" + fileBaseName
-        # startFileName = startFileBaseName + "_bgc.txt"
-        # save_data = [self.x, yb]
-        # save_data = np.transpose(save_data)
-        # self.pw.save_to_file("Save background-corrected data in file", startFileName, save_data)
-
-    def apply_call(self):
-        params = self.methods[self.blcm.current_method]["parameter"].values()
-        name = self.spectrum.get_label()
-        self.clear_plot()
-        for key, val in self.parameter_editor.items():
-            if key == "roi":
-                for i, roi_pe in enumerate(val):
-                    roi_start = float(roi_pe[0].text())
-                    roi_end = float(roi_pe[1].text())
-                    self.methods[self.blcm.current_method]["parameter"]["roi"][i] = [roi_start, roi_end]
-                    self.roi_spans.append(self.ax.axvspan(roi_start, roi_end, alpha=0.5, color="yellow"))
-                self.methods[self.blcm.current_method]["parameter"]["roi"] = self.sort_roi(
-                    self.methods[self.blcm.current_method]["parameter"]["roi"])
-                continue
-            try:
-                self.methods[self.blcm.current_method]["parameter"][key] = float(val.text())
-            except ValueError as e:
-                self.pw.mw.show_statusbar_message(e, 4000)
-                return
-        return_value = self.methods[self.blcm.current_method]["function"](self.x, self.y, *params)
-        if return_value is None:
-            self.close()
-            return
-        else:
-            yb, zb = return_value
-        self.base_line, = self.ax.plot(self.x, zb, "c--", label="baseline ({})".format(name))
-        self.blcSpektrum, = self.ax.plot(self.x, yb, "c-", label="baseline-corrected ({})".format(name))
-        self.fig.canvas.draw()
-
-    def closeEvent(self, event):
-        self.clear_plot()
-        event.accept()
-
-
-class FitFunctions:
-    """
-    Fit functions
-    """
-
-    def __init__(self):
-        # number of fit functions
-        self.n_fit_fct = {"Lorentz": 0,
-                          "Gauss": 0,
-                          "Breit-Wigner-Fano": 0,
-                          "Pseudo Voigt": 0,
-                          "Voigt": 0}
-
-        self.function_parameters = {
-            "Linear": {"slope": [1, -np.inf, np.inf],
-                       "intercept": [0, -np.inf, np.inf]},
-            "Lorentz": {"position": [520, 0, np.inf],
-                        "intensity": [100, 0, np.inf],
-                        "FWHM": [15, 0, np.inf]},
-            "Gauss": {"position": [520, 0, np.inf],
-                      "intensity": [100, 0, np.inf],
-                      "FWHM": [15, 0, np.inf]},
-            "Voigt": {"position": [520, 0, np.inf],
-                      "intensity": [100, 0, np.inf],
-                      "FWHM (Gauss)": [15, 0, np.inf],
-                      "FWHM (Lorentz)": [15, 0, np.inf]},
-            "Pseudo Voigt": {"position": [520, 0, np.inf],
-                             "intensity": [100, 0, np.inf],
-                             "FWHM (Gauss)": [15, 0, np.inf],
-                             "FWHM (Lorentz)": [15, 0, np.inf],
-                             "nu": [0.5, 0, 1]},
-            "Breit-Wigner-Fano": {"position": [520, 0, np.inf],
-                                  "intensity": [100, 0, np.inf],
-                                  "FWHM": [15, 0, np.inf],
-                                  "BWF coupling coefficient": [-10, -np.inf, np.inf]}
-        }
-
-        self.implemented_functions = {
-            "Linear": self.LinearFct,
-            "Lorentz": self.LorentzFct,
-            "Gauss": self.GaussianFct,
-            "Voigt": self.VoigtFct,
-            "Pseudo Voigt": self.PseudoVoigt,
-            "Breit-Wigner-Fano": self.BreitWignerFct,
-        }
-
-    def LinearFct(self, x, a, b):
-        """ linear Function """
-        return a * x + b
-
-    def LorentzFct(self, x, xc, h, b):
-        """ definition of Lorentzian for fit process """
-        return h / (1 + (2 * (x - xc) / b) ** 2)
-
-    def GaussianFct(self, x, xc, h, b):
-        """ definition of Gaussian for fit process """
-        return h * np.exp(-4 * math.log(2) * ((x - xc) / b) * ((x - xc) / b))
-
-    def BreitWignerFct(self, x, xc, h, b, Q):
-        """definition of Breit-Wigner-Fano fucntion for fit process
-
-        (look e.g. "Interpretation of Raman spectra of disordered and amorphous carbon" von Ferrari und Robertson)
-        Q is BWF coupling coefficient
-        For Q^-1->0: the Lorentzian line is recovered
-        """
-        return h * (1 + 2 * (x - xc) / (Q * b)) ** 2 / (1 + (2 * (x - xc) / b) ** 2)
-
-    def PseudoVoigt(self, x, xc, h, f_G, f_L, nu):
-        """line profile pseudo function (linear combination of Lorentzian and Gaussian)"""
-        return nu * self.LorentzFct(x, xc, h, f_L) + (1 - nu) * self.GaussianFct(x, xc, h, f_G)
-
-    def VoigtFct(self, x, xc, h, f_G, f_L):
-        sigma = 1 / np.sqrt(8 * np.log(2)) * f_G
-        gamma = 1 / 2 * f_L
-        norm_factor = 5.24334
-        return norm_factor * h * sigma * special.voigt_profile(x - xc, sigma, gamma)
-
-    def FctSumme(self, x, *p):
-        """
-        Summing up the fit functions
-        @param x: x data
-        @param p: fitparameter
-        @return: fitted y data
-        """
-        y_sum = np.full(len(x), p[0])
-        n_para = 1
-        for key, val in self.n_fit_fct.items():
-            for i in range(val):
-                start = n_para
-                end = start + len(self.function_parameters[key])
-                params = p[start: end]
-                y_fct = self.implemented_functions[key](x, *params)
-                n_para = end
-                y_sum += y_fct
-        return y_sum
-
-
-class FitOptionsDialog(QMainWindow):
-    closeSignal = QtCore.pyqtSignal()  # Signal in case Fit-parameter window is closed
-
-    def __init__(self, parent, x, y, spect):
-        """
-        Options Dialog for fit process
-
-        Parameters
-        ----------
-        parent: PlotWindow object
-        x: x data / Raman shift
-        y: y data / Raman intensity
-        spect: Line2D
-        """
-        super(FitOptionsDialog, self).__init__(parent=parent)
-        self.parent = parent
-        self.x = x
-        self.y = y
-        self.spectrum = spect
-
-        # get canvas, axes and figure object of parent
-        self.canvas = self.parent.canvas
-        self.ax = self.parent.ax
-        self.fig = self.parent.fig
-
-        # define variables
-        # plotted function
-        self.plotted_functions = []
-        # list of vertical headers
-        self.vheaders = ["0"]
-
-        self.used_functions = []
-        self.fit_functions = FitFunctions()
-
-        # create actual window
-        self.create_dialog()
-        self.create_menubar()
-
-    def create_dialog(self):
-        self.layout = QtWidgets.QVBoxLayout()
-
-        button_layout_01 = QtWidgets.QHBoxLayout()
-        button_layout_02 = QtWidgets.QHBoxLayout()
-
-        # Button to add Fit function
-        add_button = QPushButton("Add Function")
-        add_button.clicked.connect(lambda: self.add_function(
-            "Lorentz", None))
-        button_layout_01.addWidget(add_button)
-
-        # Button to remove fit function
-        remove_button = QPushButton("Remove Function")
-        remove_button.clicked.connect(self.remove_function)
-        button_layout_01.addWidget(remove_button)
-
-        # Fit Button => accept start values for fit
-        fit_button = QPushButton("Fit")
-        fit_button.clicked.connect(self.fit)
-        button_layout_02.addWidget(fit_button)
-
-        # Apply
-        apply_button = QPushButton("Apply")
-        apply_button.clicked.connect(self.apply)
-        button_layout_02.addWidget(apply_button)
-
-        self.layout.addLayout(button_layout_01)
-        self.layout.addLayout(button_layout_02)
-
-        # create table
-        self.table = QtWidgets.QTableWidget(1, 5)
-        self.table.itemChanged.connect(self.value_changed)
-
-        # set items in each cell
-        for r in range(self.table.rowCount()):
-            for c in range(self.table.columnCount()):
-                cell = QtWidgets.QTableWidgetItem("")
-                self.table.setItem(r, c, cell)
-
-        # set headers
-        self.table.setHorizontalHeaderLabels(["Fit Function", "Parameter", "Value", "Lower Bound", "Upper Bound"])
-        self.table.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
-        self.table.setVerticalHeaderLabels(self.vheaders)
-
-        # background
-        self.table.item(0, 0).setFlags(Qt.NoItemFlags)  # no interaction with this cell
-        self.table.item(0, 1).setText("background")
-        self.table.item(0, 1).setFlags(Qt.NoItemFlags)
-        self.background = self.table.item(0, 2)
-        self.background.setText(str(0.0))
-
-        # bounds
-        self.table.item(0, 3).setText(str(-np.inf))
-        self.table.item(0, 4).setText(str(np.inf))
-
-        self.layout.addWidget(self.table)
-
-        widget = QtWidgets.QWidget()
-        widget.setLayout(self.layout)
-        self.setCentralWidget(widget)
-        self.setWindowTitle("Fit Functions")
-        self.setWindowModality(Qt.ApplicationModal)
-
-    def create_menubar(self):
-        menu_bar = self.menuBar()
-        file_menu = menu_bar.addMenu("File")
-        file_menu.addAction("Save Fit Parameter", self.save_fit_parameter)
-        file_menu.addAction("Load Fit Parameter", self.load_fit_parameter)
-
-        edit_menu = menu_bar.addMenu("Edit")
-        edit_menu.addAction("Clear table", self.clear_table)
-        edit_menu.addAction("Sort fit functions by wavenumber", self.sort_fit_functions)
-
-    def add_function(self, fct_name, fct_value):
-        """
-        add fit function to table
-        """
-
-        self.used_functions.append({})
-
-        # get parameters of function
-        if fct_value is None:
-            parameters = self.fit_functions.function_parameters[fct_name]
-        else:
-            parameters = fct_value
-        add_rows = len(parameters)
-
-        self.table.setRowCount(self.table.rowCount() + add_rows)
-        self.vheaders.extend([str(len(self.used_functions))] * add_rows)
-        self.table.setVerticalHeaderLabels(self.vheaders)
-
-        rows = self.table.rowCount()
-
-        # set items in new cell
-        for r in range(rows - add_rows, rows):
-            for c in range(self.table.columnCount()):
-                cell = QtWidgets.QTableWidgetItem('')
-                self.table.setItem(r, c, cell)
-
-        # add Combobox to select fit function
-        cbox = QtWidgets.QComboBox(self)
-        for key in self.fit_functions.n_fit_fct.keys():
-            cbox.addItem(key)
-        cbox.setCurrentText(fct_name)
-        n_fct = len(self.used_functions)
-        cbox.currentTextChanged.connect(lambda: self.fct_change(cbox.currentText(), n_fct - 1))
-        self.table.setCellWidget(rows - add_rows, 0, cbox)
-        self.used_functions[-1]["fct"] = cbox
-
-        # configure cells
-        self.table.item(rows - 2, 0).setFlags(Qt.NoItemFlags)  # no interaction with these cells
-        self.table.item(rows - 1, 0).setFlags(Qt.NoItemFlags)
-        self.used_functions[-1]["parameter"] = {}
-        for i, (key, val) in enumerate(parameters.items()):
-            self.table.item(rows - add_rows + i, 1).setText(key)
-            self.table.item(rows - add_rows + i, 1).setFlags(Qt.NoItemFlags)
-            self.table.item(rows - add_rows + i, 2).setText(str(val[0]))  # starting value
-            self.table.item(rows - add_rows + i, 3).setText(str(val[1]))  # lower bound
-            self.table.item(rows - add_rows + i, 4).setText(str(val[2]))  # upper bound
-            self.used_functions[-1]["parameter"][key] = {
-                "value": self.table.item(rows - add_rows + i, 2),
-                "lower boundaries": self.table.item(rows - add_rows + i, 3),
-                "upper boundaries": self.table.item(rows - add_rows + i, 4),
-            }
-
-    def remove_function(self):
-        last_key = len(self.used_functions)
-        row_indices = [i for i, x in enumerate(self.vheaders) if x == str(last_key)]
-        if last_key != 0:
-            for j in reversed(row_indices):
-                del self.vheaders[j]
-                self.table.removeRow(j)
-            del self.used_functions[last_key - 1]
-
-    def fct_change(self, fct_name, n):
-        old_parameters = self.used_functions[n]["parameter"].keys()
-        new_parameters = self.fit_functions.function_parameters[fct_name].keys()
-
-        for del_para in list(set(old_parameters) - set(new_parameters)):
-            # get index of row
-            row_index = self.vheaders.index(str(n + 1)) + len(new_parameters)
-            for item in self.table.findItems(del_para, QtCore.Qt.MatchExactly):
-                try:
-                    end = self.vheaders.index(str(n + 2))
-                except ValueError:
-                    end = len(self.vheaders) + 1
-                if self.vheaders.index(str(n + 1)) <= self.table.row(item) < end:
-                    row_index = self.table.row(item)
-                else:
-                    continue
-            # delete row and dictionary entry
-            del self.vheaders[row_index]
-            self.table.removeRow(row_index)
-            del self.used_functions[n]["parameter"][del_para]
-
-        row_index = self.vheaders.index(str(n + 1)) + len(old_parameters)
-        for new_para in [element for element in new_parameters if element not in old_parameters]:
-            self.table.insertRow(row_index)
-            self.vheaders.insert(row_index, str(n + 1))
-            self.table.setVerticalHeaderLabels(self.vheaders)
-
-            # set items in new cell
-            for c in range(self.table.columnCount()):
-                cell = QTableWidgetItem("")
-                self.table.setItem(row_index, c, cell)
-            self.table.item(row_index, 1).setText(new_para)
-            self.table.item(row_index, 1).setFlags(Qt.NoItemFlags)
-            self.table.item(row_index, 2).setText(str(self.fit_functions.function_parameters[fct_name][new_para][0]))
-
-            # boundaries
-            self.table.item(row_index, 3).setText(str(self.fit_functions.function_parameters[fct_name][new_para][1]))
-            self.table.item(row_index, 4).setText(str(self.fit_functions.function_parameters[fct_name][new_para][2]))
-
-            # update dictionary
-            self.used_functions[n]["parameter"][new_para] = {
-                "value": self.table.item(row_index, 2),
-                "lower boundaries": self.table.item(row_index, 3),
-                "upper boundaries": self.table.item(row_index, 4)
-            }
-            row_index += 1
-
-    def value_changed(self, item):
-        if item is None or self.table.item(item.row(), 3) is None or self.table.item(item.row(), 4) is None:
-            return
-        elif item.text() == '' or self.table.item(item.row(), 3).text() == '' or \
-                self.table.item(item.row(), 4).text() == '':
-            return
-        else:
-            pass
-        # check that lower bound is strictly less than upper bound
-        if item.column() == 3:
-            if float(item.text()) > float(self.table.item(item.row(), 4).text()):
-                self.parent.mw.show_statusbar_message('Lower bounds have to be strictly less than upper bounds', 4000,
-                                                      error_sound=True)
-                # add: replace item with old previous item
-        elif item.column() == 4:  # check that upper bound is strictly higher than lower bound
-            if float(item.text()) < float(self.table.item(item.row(), 3).text()):
-                self.parent.mw.show_statusbar_message('Upper bounds have to be strictly higher than lower bounds', 4000,
-                                                      error_sound=True)
-                # add: replace item with old previous item
-
-    def save_fit_parameter(self, file_name=None):
-        """Save fit parameter in txt file"""
-
-        # Get fit_parameter in printable form
-        print_table, r_squared = self.print_fitparameter()
-        save_data = print_table.get_string()
-
-        # Get file name
-        if file_name is None:
-            file_name = QFileDialog.getSaveFileName(self, "Save fit parameter in file",
-                                                    os.path.dirname(self.parent.mw.pHomeRmn),
-                                                    "All Files (*);;Text Files (*.txt)")
-            if file_name[0] != '':
-                file_name = file_name[0]
-                if file_name[-4:] == ".txt":
-                    pass
-                else:
-                    file_name = str(file_name) + ".txt"
-            else:
-                return
-
-        file = open(file_name, "w+")
-        file.write(save_data)
-        file.close()
-
-    def load_fit_parameter(self, file_name=None):
-        if file_name is None:
-            load_filename = QtWidgets.QFileDialog.getOpenFileName(self, "Load fit parameter")
-            if load_filename[0] != '':
-                file_name = load_filename[0]
-            else:
-                return
-
-        try:
-            table_content = np.genfromtxt(file_name, dtype="str", delimiter="|", skip_header=3, skip_footer=1,
-                                          usecols=(1, 2, 3), autostrip=True)
-        except ValueError as e:
-            print("File not readable")
-            print(e)
-            return
-
-        # set Background
-        if table_content[0][0] == "background":
-            self.table.item(0, 2).setText(str(table_content[0][1]))  # starting parameter
-        else:
-            print("File not readable")
-            return
-
-        # delete background from table content
-        table_content = np.delete(table_content, 0, axis=0)
-
-        fct_value = {}
-        row = 0
-        fct_name = None
-        while row < len(table_content):
-            if all(tr == "" for tr in table_content[row]):
-                if fct_value:
-                    self.add_function(fct_name, fct_value)
-                if row == len(table_content) - 1:
-                    break
-                fct_name = table_content[row + 1][0][:-2]
-                row += 2
-                fct_value = {}
-            else:
-                if table_content[row][0] == "area under curve":
-                    pass
-                else:
-                    if table_content[row][0] == "BWF coupling coefficient":
-                        lower_boundary = -np.inf
-                    else:
-                        lower_boundary = 0
-                    upper_boundary = np.inf
-                    fct_value[table_content[row][0]] = [table_content[row][1], lower_boundary, upper_boundary]
-                row += 1
-
-    def sort_fit_functions(self):
-        parameter = []
-        for ufct in self.used_functions:
-            name_fct = ufct["fct"].currentText()
-            parameter.append({
-                "fct": name_fct,
-                "parameter": {}
-            })
-            for key, val in ufct["parameter"].items():
-                parameter[-1]["parameter"][key] = [float(val["value"].text()),
-                                                   float(val["lower boundaries"].text()),
-                                                   float(val["upper boundaries"].text())]
-        parameter.sort(key=self.take_position_value)
-        self.clear_table()
-        for p in parameter:
-            self.add_function(p["fct"], p["parameter"])
-
-    def take_position_value(self, element):
-        """function for sorting purposes"""
-        return element["parameter"]["position"][0]
-
-    def clear_table(self):
-        while len(self.vheaders) > 1:
-            self.remove_function()
-        self.reset_n_fit_fct()
-
-    def apply(self):
-        self.clear_plot()
-        p_start, boundaries = self.get_fit_parameter()
-        self.plot_functions(p_start)
-
-    def fit(self):
-        self.reset_n_fit_fct()
-        self.clear_plot()
-        p_start, boundaries = self.get_fit_parameter()
-        try:
-            popt, pcov = curve_fit(self.fit_functions.FctSumme, self.x, self.y, p0=p_start, bounds=boundaries)
-        except RuntimeError as e:
-            self.parent.mw.show_statusbar_message(str(e), 4000)
-            return
-        except ValueError as e:
-            self.parent.mw.show_statusbar_message(str(e), 4000)
-            return
-
-        self.plot_functions(popt, store_line=True)
-        self.set_fit_parameter(popt)
-        print_table, r_squared = self.print_fitparameter(popt=popt, pcov=pcov)
-        print('\n {}'.format(self.spectrum.get_label()))
-        print(r'R^2={:.4f}'.format(r_squared))
-        print(print_table)
-
-    def set_fit_parameter(self, parameter):
-        self.background.setText(str(parameter[0]))
-
-        for i in range(1, len(parameter)):
-            self.table.item(i, 2).setText(str(parameter[i]))
-
-    def get_fit_parameter(self):
-        self.reset_n_fit_fct()
-
-        # Background
-        p_start = [float(self.background.text())]
-        bg_low = self.table.item(0, 3).text()
-        bg_up = self.table.item(0, 4).text()
-        if bg_low == "":
-            bg_low = -np.inf
-        else:
-            bg_low = float(bg_low)
-        if bg_up == "":
-            bg_up = np.inf
-        else:
-            bg_up = float(bg_up)
-        boundaries = [[bg_low], [bg_up]]
-
-        parameter = {_key: [] for _key in self.fit_functions.n_fit_fct.keys()}
-
-        lower_boundaries = {_key: [] for _key in self.fit_functions.n_fit_fct.keys()}
-        upper_boundaries = {_key: [] for _key in self.fit_functions.n_fit_fct.keys()}
-
-        for ufct in self.used_functions:
-            name_fct = ufct["fct"].currentText()
-            for key, val in ufct["parameter"].items():
-                parameter[name_fct].append(float(val["value"].text()))  # Parameter
-                if val["lower boundaries"].text() == '':
-                    lower_boundaries[name_fct].append(-np.inf)
-                else:
-                    lower_boundaries[name_fct].append(float(val["lower boundaries"].text()))
-                if val["upper boundaries"].text() == '':
-                    upper_boundaries[name_fct].append(np.inf)
-                else:
-                    upper_boundaries[name_fct].append(float(val["upper boundaries"].text()))
-
-            self.fit_functions.n_fit_fct[name_fct] += 1
-
-        for p in parameter.values():
-            p_start.extend(p)
-
-        for lb, ub in zip(lower_boundaries.values(), upper_boundaries.values()):
-            boundaries[0].extend(lb)
-            boundaries[1].extend(ub)
-
-        return p_start, boundaries
-
-    def plot_functions(self, param, store_line=False):
-        x1 = np.linspace(min(self.x), max(self.x), int((max(self.x) - min(self.x)) * 5))
-        y_fit = self.fit_functions.FctSumme(x1, *param)
-        line, = self.ax.plot(x1, y_fit, "-r")
-        self.plotted_functions.append(line)
-        if store_line is True:
-            label = "{} (fit)".format(self.spectrum.get_label())
-            line.set_label(label)
-            self.parent.data.append(self.parent.create_data(x1, y_fit, line=line, label=label, style="-"))
-        n_param = 1
-        for key in self.fit_functions.n_fit_fct.keys():
-            for i in range(self.fit_functions.n_fit_fct[key]):
-                start = n_param
-                end = start + len(self.fit_functions.function_parameters[key])
-                params = param[start: end]
-                y_fit = self.fit_functions.implemented_functions[key](x1, *params)
-                line, = self.ax.plot(x1, y_fit, "--g")
-                self.plotted_functions.append(line)
-                n_param = end
-                if store_line is True:
-                    label = "{} {}".format(key, i)
-                    line.set_label(label)
-                    self.parent.data.append(self.parent.create_data(x1, y_fit, line=line, label=label, style="-"))
-
-        self.canvas.draw()
-
-    def clear_plot(self):
-        for pf in self.plotted_functions:
-            try:
-                pf.remove()
-            except ValueError as e:
-                print("Line couldn't be removed: {}".format(e))
-                continue
-        self.plotted_functions = []
-        self.canvas.draw()
-
-    def print_fitparameter(self, popt=None, pcov=None):
-        """bring fit parameter in printable form"""
-
-        # Get data from table
-        if popt is None:
-            popt = []
-            for r in range(self.table.rowCount()):
-                popt.append(float(self.table.item(r, 2).text()))
-
-        # Calculate Errors and R square
-        if pcov is not None:
-            perr = np.sqrt(np.diag(pcov))
-            residuals = self.y - self.fit_functions.FctSumme(self.x, *popt)
-            ss_res = np.sum(residuals ** 2)
-            ss_tot = np.sum((self.y - np.mean(self.y)) ** 2)
-            r_squared = 1 - (ss_res / ss_tot)
-        else:
-            r_squared = None
-            perr = [""] * len(popt)
-
-        print_table = prettytable.PrettyTable()
-        print_table.field_names = ["Parameters", "Values", "Errors"]
-        print_table.add_rows([["background", popt[0], perr[0]], ["", "", ""]])
-        a = 1
-        for key in self.fit_functions.n_fit_fct.keys():  # iterate over Lorentz, Gauss, BWF
-            for j in range(self.fit_functions.n_fit_fct[key]):  # iterate over used fit functions per L, G or BWF
-                print_table.add_row(["{} {}".format(key, j + 1), "", ""])
-                params = popt[a: a + len(self.fit_functions.function_parameters[key])]
-                area = np.trapz(self.fit_functions.implemented_functions[key](self.x, *params), self.x)
-                for parameter in self.fit_functions.function_parameters[key].keys():
-                    print_table.add_row([parameter, popt[a], perr[a]])
-                    a += 1
-                print_table.add_rows([["area under curve", area, ""], ["", "", ""]])
-
-        return print_table, r_squared
-
-    def reset_n_fit_fct(self):
-        self.fit_functions.n_fit_fct = dict.fromkeys(self.fit_functions.n_fit_fct, 0)
-
-    def closeEvent(self, event):
-        self.save_fit_parameter("fit_parameter_cache.txt")
-
-        self.reset_n_fit_fct()
-        self.closeSignal.emit()
-        event.accept
-
-
-class AnalysisRoutineBuilder(QtWidgets.QTableWidget):
-    """
-    https://stackoverflow.com/questions/34533878/drag-and-dropping-rows-between-two-separate-qtablewidgets
-    """
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        self.setDragEnabled(True)
-        self.setAcceptDrops(True)
-        self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        self.setDragDropOverwriteMode(False)
-        self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-        self.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
-
-        self.last_drop_row = None
-
-    # Override this method to get the correct row index for insertion
-    def dropMimeData(self, row, col, mimeData, action):
-        self.last_drop_row = row
-        return True
-
-    def dropEvent(self, event):
-        # The QTableWidget from which selected rows will be moved
-        sender = event.source()
-
-        # Default dropEvent method fires dropMimeData with appropriate parameters (we're interested in the row index).
-        super().dropEvent(event)
-        # Now we know where to insert selected row(s)
-        dropRow = self.last_drop_row
-
-        selectedRows = sender.getselectedRowsFast()
-
-        # Allocate space for transfer
-        for _ in selectedRows:
-            self.insertRow(dropRow)
-
-        # if sender == receiver (self), after creating new empty rows selected rows might change their locations
-        sel_rows_offsets = [0 if self != sender or srow < dropRow else len(selectedRows) for srow in selectedRows]
-        selectedRows = [row + offset for row, offset in zip(selectedRows, sel_rows_offsets)]
-
-        # copy content of selected rows into empty ones
-        for i, srow in enumerate(selectedRows):
-            for j in range(self.columnCount()):
-                cell_widget = sender.cellWidget(srow, j)
-                item = sender.item(srow, j)
-                if item:
-                    source = QtWidgets.QTableWidgetItem(item)
-                    self.setItem(dropRow + i, j, source)
-                elif cell_widget:
-                    self.setCellWidget(dropRow + i, j, cell_widget)
-
-        # delete selected rows
-        for srow in reversed(selectedRows):
-            sender.removeRow(srow)
-
-        event.accept()
-
-    def getselectedRowsFast(self):
-        selectedRows = []
-        for item in self.selectedItems():
-            if item.row() not in selectedRows:
-                selectedRows.append(item.row())
-        selectedRows.sort()
-        return selectedRows
-
-
 class MyCustomToolbar(NavigationToolbar2QT):
     signal_remove_line = QtCore.pyqtSignal(object)
     signal_axis_break = QtCore.pyqtSignal(list, list)
@@ -3619,8 +2476,8 @@ class PlotWindow(QMainWindow):
         self.data = plot_data
         self.mw = parent
         self.vertical_line = None
-        self.fit_functions = FitFunctions()
-        self.blc = BaselineCorrectionMethods()  # class for everything related to Baseline corrections
+        self.fit_functions = peakFitting.FitFunctions()
+        self.blc = analysisMethods.BaselineCorrectionMethods()  # class for everything related to Baseline corrections
         self.inserted_text = []  # Storage for text inserted in the plot
         self.drawn_line = []  # Storage for lines and arrows drawn in the plot
         self.peak_positions = {}  # dict to store Line2D object marking peak positions
@@ -3859,15 +2716,20 @@ class PlotWindow(QMainWindow):
 
         analysisFit.addAction("Fit Dialog", self.open_fit_dialog)
 
-        analysisRoutine = analysisMenu.addMenu('&Analysis routines')
-        analysisRoutine.addAction('D und G Bande', self.fit_D_G)
-        analysisRoutine.addAction('Fit Sulfur oxyanion spectrum', self.fit_sulfuroxyanion)
-        analysisRoutine.addAction('Get m/I(G) (Hydrogen content)', self.hydrogen_estimation)
-        analysisRoutine.addAction('Norm to water peak', self.norm_to_water)
-        analysisRoutine.addAction("Create own routine", self.analysis_routine)
+        analysis_routine_menu = analysisMenu.addMenu("&Analysis routines")
+        analysis_routine_menu.addAction("D und G band", self.fit_D_G)
+        analysis_routine_menu.addAction("Fit Sulfur oxyanion spectrum", self.fit_sulfuroxyanion)
+        analysis_routine_menu.addAction("Get m/I(G) (Hydrogen content)", self.hydrogen_estimation)
+        analysis_routine_menu.addAction("Norm to water peak", self.norm_to_water)
+        analysis_routine_menu.addAction("Create own routine", self.create_analysis_routine)
+        own_routine_menu = analysis_routine_menu.addMenu("&Apply own routine")
+        files = glob.glob("analysis_routines/*.txt")
+        for f in files:
+            own_routine_menu.addAction(f)
+        own_routine_menu.triggered[QAction].connect(self.get_own_routine)
 
         # 3.2 Linear regression
-        analysisMenu.addAction('Linear regression', self.linear_regression)
+        analysisMenu.addAction("Linear regression", self.linear_regression)
 
         # 3.3 Analysis baseline correction
         analysisMenu.addAction('Baseline Corrections', self.baseline)
@@ -3882,7 +2744,7 @@ class PlotWindow(QMainWindow):
         analysisMenu.addAction('Get Area below Curve', self.detemine_area)
 
         # 4. menu: spectra data base
-        databaseMenu = menubar.addAction('&Data base peak positions', self.open_peakdatabase)
+        menubar.addAction('&Data base peak positions', self.open_peakdatabase)
 
         self.show()
 
@@ -4292,7 +3154,6 @@ class PlotWindow(QMainWindow):
         self.select_data_set()
         if self.selectedDatasetNumber:
             x_min, x_max = self.SelectArea()
-
         else:
             return
 
@@ -4302,7 +3163,7 @@ class PlotWindow(QMainWindow):
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
-            fit_dialog = FitOptionsDialog(self, x, y, self.data[n]["line"])
+            fit_dialog = peakFitting.FitOptionsDialog(self, x, y, self.data[n]["line"])
             fit_dialog.setMinimumWidth(600)
             if os.path.isfile("fit_parameter_cache.txt"):
                 fit_dialog.load_fit_parameter(file_name="fit_parameter_cache.txt")
@@ -4390,34 +3251,34 @@ class PlotWindow(QMainWindow):
             x = xs[np.where((xs > x_min) & (xs < x_max))]
             y = ys[np.where((xs > x_min) & (xs < x_max))]
 
-            baseline_dialog = BaselineCorrectionsDialog(self, self.blc)
-            baseline_dialog.get_baseline(x, y, spct)
+            baseline_dialog = analysisMethods.BaselineCorrectionDialog(self, x, y, spct, self.blc)
+            baseline_dialog.show()
 
             # wait until QMainWindow is closes
             loop = QtCore.QEventLoop()
-            baseline_dialog.closebutton.clicked.connect(loop.quit)
-            baseline_dialog.finishbutton.clicked.connect(loop.quit)
+            baseline_dialog.close_button.clicked.connect(loop.quit)
+            baseline_dialog.ok_button.clicked.connect(loop.quit)
             loop.exec_()
-            if baseline_dialog.closebutton.isChecked():
+            if baseline_dialog.close_button.isChecked():
                 break
 
     def smoothing(self):
         self.select_data_set()
-        smoothing_methods = SmoothingMethods()
+        smoothing_methods = analysisMethods.SmoothingMethods()
         for n in self.selectedDatasetNumber:
             spct = self.data[n]["line"]
             x = spct.get_xdata()
             y = spct.get_ydata()
 
-            smooth_dialog = SmoothingDialog(self, smoothing_methods)
-            smooth_dialog.get_smoothed_spectrum(x, y, spct)
+            smooth_dialog = analysisMethods.SmoothingDialog(self, x, y, spct, smoothing_methods)
+            smooth_dialog.show()
 
-            # wait until QMainWindow is closes
+            # wait until SmoothingDialog is closed
             loop = QtCore.QEventLoop()
-            smooth_dialog.closebutton.clicked.connect(loop.quit)
-            smooth_dialog.finishbutton.clicked.connect(loop.quit)
+            smooth_dialog.close_button.clicked.connect(loop.quit)
+            smooth_dialog.ok_button.clicked.connect(loop.quit)
             loop.exec_()
-            if smooth_dialog.closebutton.isChecked():
+            if smooth_dialog.close_button.isChecked():
                 break
 
     def linear_regression(self):
@@ -4459,46 +3320,150 @@ class PlotWindow(QMainWindow):
             print(r'R^2={:.4f}'.format(r_squared))
             print(print_table)
 
-    def analysis_routine(self):
-        """create own analysis routine consisting background correction and peak fitting"""
-        self.widget_list = []   # for some reason we need that list, otherwise the widget doesn't show in an own window
-        widget = QtWidgets.QWidget()
-        layout = QtWidgets.QHBoxLayout()
-        widget.setLayout(layout)
-        widget.setWindowTitle("Create own analysis routine")
+    def create_analysis_routine(self):
+        """create own analysis routine"""
+        list_of_methods = {
+            "Define data area":
+                analysisMethods.DataLimit(self),
+            "Cosmic spike removal":
+                "Not yet implemented",
+            "Smoothing":
+                analysisMethods.AnalysisDialog(self, analysisMethods.SmoothingMethods(), add_apply_button=False),
+            "Baseline correction":
+                analysisMethods.AnalysisDialog(self, self.blc, add_apply_button=False),
+            "Peak fitting":
+                peakFitting.Dialog(self),
+            "Other":
+                "Not yet implemented"
+        }
+        ab = analysisRoutine.MainWindow(self, list_of_methods)
+        ab.show()
 
-        # first table: available building blocks
-        tw1 = AnalysisRoutineBuilder()
-        tw1.setColumnCount(2)
-        tw1.setHorizontalHeaderLabels(["Analysis Building Blocks", "Methods"])
-        layout.addWidget(tw1)
+    def get_own_routine(self, action):
+        """execute own analysis routine"""
+        self.select_data_set()
+        result_text = "\n{}".format(action.text())
 
-        # second table: created analysis routine
-        tw2 = AnalysisRoutineBuilder()
-        tw2.setColumnCount(2)
-        tw2.setHorizontalHeaderLabels(["Analysis Blocks", "Methods"])
-        layout.addWidget(tw2)
+        # opens file and saves content in variable 'v' with json
+        with open(action.text(), "rb") as file:
+            v = json.load(file)
 
-        blc_methods = self.blc.methods.keys()   # list with implemented baseline correction methods
+        for n in self.selectedDatasetNumber:
+            spectrum = self.data[n]["line"]
+            x = spectrum.get_xdata()
+            y = spectrum.get_ydata()
+            for key, val in v.items():
+                result_text += "{}\n".format(key)
+                x, y, result_text = self.apply_own_routine(key, val, x, y, spectrum.get_label(), result_text)
+                if y is None:
+                    break
 
-        items = [
-            ("cosmic spike removal", []),
-            ("smoothing", []),
-            ("baseline correction", blc_methods),
-            ("peak fitting", []),
-            ("Other", [])
-        ]
+        print(result_text)
+        self.mw.new_window(None, "Textwindow", result_text, None)
 
-        for i, (box, method) in enumerate(items):
-            c = QtWidgets.QTableWidgetItem(box)
-            tw1.insertRow(tw1.rowCount())
-            tw1.setItem(i, 0, c)
-            combo_box = QtWidgets.QComboBox(widget)
-            for m in method:
-                combo_box.addItem(m)
-            tw1.setCellWidget(i, 1, combo_box)
-        self.widget_list.append(widget)
-        widget.show()
+    def apply_own_routine(self, method, parameter, x, y, label, result_text):
+        if method == "Define data area":
+            parameter = parameter[0]
+            x_min = float(parameter["parameter"]["start"])
+            x_max = float(parameter["parameter"]["end"])
+            x_cut = x[np.where((x > x_min) & (x < x_max))]
+            y_cut = y[np.where((x > x_min) & (x < x_max))]
+            result_text += "{}\n".format(parameter["name"])
+            result_text += "{}\n".format(parameter["parameter"])
+            return x_cut, y_cut, result_text
+        elif method == "Baseline correction":
+
+            # apply baseline correction
+            parameter = parameter[0]
+            function = self.blc.methods[parameter["name"]]["function"]
+            params = list(parameter["parameter"].values())
+            yb, zb = function(x, y, *params)
+
+            # plot
+            line, = self.ax.plot(x, yb, label="{} ({})".format(label, "baseline corrected"))
+            self.canvas.draw()
+            self.create_data(x, yb, line=line, label=line.get_label())
+
+            # save results
+            result_text += "{}\n".format(parameter["name"])
+            result_text += "{}\n".format(parameter["parameter"])
+            return x, yb, result_text
+        elif method == "Smoothing":
+            # apply smoothing
+            parameter = parameter[0]
+            function = analysisMethods.SmoothingMethods().methods[parameter["name"]]["function"]
+            params = list(parameter["parameter"].values())
+            y_smoothed = function(x, y, *params)
+
+            # plot
+            line, = self.ax.plot(x, y_smoothed, label="{} ({})".format(label, "smoothed"))
+            self.canvas.draw()
+            self.create_data(x, y_smoothed, line=line, label=line.get_label())
+
+            # save results
+            result_text += "{}\n".format(parameter["name"])
+            result_text += "{}\n".format(parameter["parameter"])
+            return x, y_smoothed, result_text
+        elif method == "Peak fitting":
+            for key in self.fit_functions.n_fit_fct.keys():
+                self.fit_functions.n_fit_fct[key] = len([i["name"] for i in parameter if i["name"] == key])
+            p_start = []
+            p_bounds = [[], []]
+            for p in parameter:
+                # fit starting parameter
+                p_start.extend([i[0] for i in p["parameter"].values()])
+                # lower bound
+                p_bounds[0].extend([i[1] for i in p["parameter"].values()])
+                # upper bound
+                p_bounds[1].extend([i[2] for i in p["parameter"].values()])
+            try:
+                popt, pcov = curve_fit(self.fit_functions.FctSumme, x, y, p0=p_start, bounds=p_bounds)
+            except RuntimeError as e:
+                self.mw.show_statusbar_message(str(e), 4000)
+                return x, None, result_text
+            except ValueError as e:
+                self.mw.show_statusbar_message(str(e), 4000)
+                return x, None, result_text
+            # plot
+            y_fit_total = self.fit_functions.FctSumme(x, *popt)
+            line, = self.ax.plot(x, y_fit_total, label="{} ({})".format(label, "total fit"))
+
+            self.canvas.draw()
+            self.create_data(x, y_fit_total, line=line, label=line.get_label())
+
+            # Calculate Errors and R square
+            perr = np.sqrt(np.diag(pcov))
+            residuals = y - y_fit_total
+            ss_res = np.sum(residuals ** 2)
+            ss_tot = np.sum((y - np.mean(y)) ** 2)
+            r_squared = 1 - (ss_res / ss_tot)
+
+            # parameter in table
+            print_table = prettytable.PrettyTable()
+            print_table.field_names = ["Parameters", "Values", "Errors"]
+            print_table.add_rows([["background", popt[0], perr[0]], ["", "", ""]])
+            a = 1
+            for key in self.fit_functions.n_fit_fct.keys():  # iterate over Lorentz, Gauss, BWF
+                for j in range(self.fit_functions.n_fit_fct[key]):  # iterate over used fit functions per L, G or BWF
+                    print_table.add_row(["{} {}".format(key, j + 1), "", ""])
+                    params = popt[a: a + len(self.fit_functions.function_parameters[key])]
+                    y_1fit = self.fit_functions.implemented_functions[key](x, *params)
+                    area = np.trapz(y_1fit, x)
+                    self.ax.plot(x, y_1fit, label="{} (fit {} {})".format(label, key, j + 1))
+                    for parameter in self.fit_functions.function_parameters[key].keys():
+                        print_table.add_row([parameter, popt[a], perr[a]])
+                        a += 1
+                    print_table.add_rows([["area under curve", area, ""], ["", "", ""]])
+
+            # save results
+            result_text += "R^2 = {}\n".format(r_squared)
+            result_text += "{}\n".format(print_table)
+
+            # set number of fit functions to 0 again
+            self.fit_functions.n_fit_fct = dict.fromkeys(self.fit_functions.n_fit_fct, 0)
+            return x, y_fit_total, result_text
+        else:
+            return x, None, result_text
 
     def hydrogen_estimation(self):
         """
@@ -4914,7 +3879,7 @@ class PlotWindow(QMainWindow):
         self.fit_functions.n_fit_fct['Lorentz'] = 0
 
     def open_peakdatabase(self):
-        peak_database_dialog = database_spectra.DatabasePeakPosition()
+        peak_database_dialog = databaseSpectra.DatabasePeakPosition()
         peak_database_dialog.setMinimumWidth(600)
         peak_database_dialog.show()
         # wait until QMainWindow is closes

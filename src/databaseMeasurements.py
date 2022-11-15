@@ -16,7 +16,7 @@ class DatabaseMeasurements(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.path_of_database = os.path.join(os.path.dirname(__file__), 'Sampledatabase.db')
+        self.path_of_database = os.path.join(os.path.dirname(__file__), 'sampleDatabase.db')
         self.date = str(date.today())
         self.sample = ''
         self.materialclass = ''
