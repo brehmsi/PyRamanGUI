@@ -1,5 +1,6 @@
 from PyQt5 import QtWidgets, QtCore, QtGui
 import json
+import os
 
 
 class DragFrame(QtWidgets.QFrame):
@@ -180,6 +181,13 @@ class MainWindow(QtWidgets.QMainWindow):
         save_dict = {}
         for f in frames:
             save_dict[f.main_label.text()] = f.label_list
+
+        # create directory
+        try:
+            os.makedirs("analysis_routines")
+        except FileExistsError:
+            # directory already exists
+            pass
 
         # save in file
         with open("analysis_routines/{}.txt".format(name), "w", encoding="utf-8") as f:

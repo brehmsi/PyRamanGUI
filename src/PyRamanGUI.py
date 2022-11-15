@@ -989,6 +989,9 @@ class TextWindow(QMainWindow):
         self.text = text
         self.mw = mainwindow
 
+        self.menubar = None
+        self.textfield = None
+
         self.create_textwidget()
         self.create_menubar()
 
@@ -996,6 +999,8 @@ class TextWindow(QMainWindow):
         self.textfield = QtWidgets.QPlainTextEdit()
         self.textfield.setPlainText(self.text)
         self.textfield.createStandardContextMenu()
+        # set tab size to 4 spaces
+        self.textfield.setTabStopDistance(QtGui.QFontMetricsF(self.textfield.font()).horizontalAdvance(' ') * 4)
         self.textfield.setUndoRedoEnabled(True)
         self.textfield.setShortcutEnabled(True)
         self.setCentralWidget(self.textfield)
@@ -3441,7 +3446,7 @@ class PlotWindow(QMainWindow):
             # parameter in table
             print_table = prettytable.PrettyTable()
             print_table.field_names = ["Parameters", "Values", "Errors"]
-            print_table.add_rows([["background", popt[0], perr[0]], ["", "", ""]])
+            print_table.add_rows([["background", round(popt[0], 5), round(perr[0], 5)], ["", "", ""]])
             a = 1
             for key in self.fit_functions.n_fit_fct.keys():  # iterate over Lorentz, Gauss, BWF
                 for j in range(self.fit_functions.n_fit_fct[key]):  # iterate over used fit functions per L, G or BWF
@@ -3451,9 +3456,9 @@ class PlotWindow(QMainWindow):
                     area = np.trapz(y_1fit, x)
                     self.ax.plot(x, y_1fit, label="{} (fit {} {})".format(label, key, j + 1))
                     for parameter in self.fit_functions.function_parameters[key].keys():
-                        print_table.add_row([parameter, popt[a], perr[a]])
+                        print_table.add_row([parameter, round(popt[a], 5), round(perr[a], 5)])
                         a += 1
-                    print_table.add_rows([["area under curve", area, ""], ["", "", ""]])
+                    print_table.add_rows([["area under curve", round(area, 5), ""], ["", "", ""]])
 
             # save results
             result_text += "R^2 = {}\n".format(r_squared)
