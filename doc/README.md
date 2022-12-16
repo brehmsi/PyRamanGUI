@@ -18,11 +18,11 @@ The GUI consists of three main parts, which are framed in the
 following picture; a menu bar at the top, a side tree at the 
 left, and a workspace containing the open windows.
 
-<img src="pics/Example_MainWindow.png" alt="Main Window" width="400"/>
+<img src="pics/Example_Mainwindow.png" alt="Main window" width="400"/>
 
 #### Workspace
 The workspace contains the windows. There are three different kinds of windows,
-[Spreadsheet <img src="pics/Icon_spreadsheet.png" alt="Icon of Spreadsheet" height="15"/>](#Spreadsheet),
+[Spreadsheet <img src="pics/Icon_spreadsheet.png" alt="Icon of Spreadsheet" height="15"/>](#Spreadsheet), 
 [Plotwindow <img src="pics/Icon_plotwindow.png" alt="Icon of Plotwindow" height="15"/>](#Plotwindow),
 [Textwindow <img src="pics/Icon_textwindow.png" alt="Icon of Textwindow" height="15"/>](#Text Window).
 They are explained in more detail in later sections.
