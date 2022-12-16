@@ -62,7 +62,7 @@ The data can be plotted over the drop-down menu or the menu bar at the top.
 For the x values, the closest column on the left side of the selected column is used.
 
 
-##  Plot Window <img src="pics/Icon_plotwindow.png" alt="Icon of Plotwindow" height="20"/>
+##  Plot Window <img alt="Icon of Plotwindow" height="20" src="pics/Icon_plotwindow.png"/>
 <img src="pics/Example_PlotWindow.PNG" width="200"/>
 
 The plot window is the most complex of the three windows.
