@@ -11,30 +11,37 @@ The source code is written in Python, the GUI is based on PyQt5.
 
 
 ## General Structure 
+
+### Main window 
 The structure of the PyRaman GUI is remotely based on OriginLab. 
-The GUI consists of three main parts framed in red in the
+The GUI consists of three main parts, which are framed in the
 following picture; a menu bar at the top, a side tree at the 
 left, and a workspace containing the open windows.
 
-<img src="pics/Example_MainWindow.PNG" alt="Main Window" width="400"/>
+<img src="pics/Example_MainWindow.png" alt="Main Window" width="400"/>
 
+#### Workspace
+The workspace contains the windows. There are three different kinds of windows,
+[Spreadsheet <img src="pics/Icon_spreadsheet.png" alt="Icon of Spreadsheet" height="15"/>](#Spreadsheet),
+[Plotwindow <img src="pics/Icon_plotwindow.png" alt="Icon of Plotwindow" height="15"/>](#Plotwindow),
+[Textwindow <img src="pics/Icon_textwindow.png" alt="Icon of Textwindow" height="15"/>](#Text Window).
+They are explained in more detail in later sections.
+
+#### Side bar
+The side bar contains the project structure. 
 The windows are organized in folders, so the workspace only
 shows the windows of the selected folder. You can switch between 
 folders by double-clicking at another folder at the side tree or by 
 changing the tab of the workspace.
-There are three different kinds of windows,
-[Spreadsheet <img src="pics/Icon_spreadsheet.png" alt="Icon of Spreadsheet" height="15"/>](#Spreadsheet),
-[Plotwindow <img src="pics/Icon_plotwindow.png" alt="Icon of Plotwindow" height="15"/>](#Plotwindow),
-[Textwindow <img src="pics/Icon_textwindow.png" alt="Icon of Textwindow" height="15"/>](#Text Window).
-They are explained in more detail in the following sections.
 
-### Menu Bar of the Main Window
+#### Menu bar
+The menu bar of the main window contains the items "File", "Edit" and "Tools".
 
+## Tutorial 
 #### Open and Save a PyRaman Project
 A PyRaman project can be saved and reloaded via the menu item "File".
 All files end on .rmn.
 A project can also be saved with the shortcut "CTRL+S".
-
 
 <img src="pics/Open_Save_Project.PNG" width="200"/>
 

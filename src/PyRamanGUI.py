@@ -221,13 +221,13 @@ class MainWindow(QMainWindow):
         """
         menu = self.menuBar()
         File = menu.addMenu("File")
+        File.addAction("Open Project", self.open)
+        File.addAction("Save Project As ...", lambda: self.save("Save As"))
+        File.addAction("Save Project", lambda: self.save("Save"))
         FileNew = File.addMenu("New")
         FileNew.addAction("Spreadsheet", lambda: self.new_window(None, "Spreadsheet", None, None))
         FileNew.addAction("Textwindow", lambda: self.new_window(None, "Textwindow", "", None))
         FileNew.addAction("Folder", lambda: self.new_Folder(None))
-        File.addAction("Open Project", self.open)
-        File.addAction("Save Project As ...", lambda: self.save("Save As"))
-        File.addAction("Save Project", lambda: self.save("Save"))
 
         medit = menu.addMenu("Edit")
         medit.addAction("Cascade")
