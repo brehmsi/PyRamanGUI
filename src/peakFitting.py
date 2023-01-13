@@ -105,7 +105,7 @@ class FitFunctions:
 
 
 class Dialog(QtWidgets.QMainWindow):
-    closeSignal = QtCore.pyqtSignal()  # Signal in case Fit-parameter window is closed
+    closeSignal = QtCore.pyqtSignal()  # Signal in case dialog is closed
 
     def __init__(self, parent, add_fit_button=False):
         """
@@ -505,7 +505,7 @@ class Dialog(QtWidgets.QMainWindow):
 
 
 class FitOptionsDialog(Dialog):
-    closeSignal = QtCore.pyqtSignal()  # Signal in case Fit-parameter window is closed
+    closeSignal = QtCore.pyqtSignal()  # Signal in case dialog is closed
 
     def __init__(self, parent, x, y, spectrum):
         """

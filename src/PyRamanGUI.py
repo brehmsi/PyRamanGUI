@@ -1071,6 +1071,177 @@ class TextWindow(QMainWindow):
 # 3. Spreadsheet
 ########################################################################################################################
 
+class DataImportDialog(QMainWindow):
+    closeSignal = QtCore.pyqtSignal()
+
+    def __init__(self, parent, data):
+        """
+        options dialog for spreadsheet data import
+
+        Parameters
+        ----------
+        parent: spreadsheet window object
+        """
+        super(DataImportDialog, self).__init__(parent=parent)
+        self.parent = parent
+        self.data = data
+        self.cols = len(self.data)
+        self.cols_before = self.cols
+        self.rows = max([len(d["data"]) for d in self.data])
+        self.file_names = None
+        self.delimiters = {
+            "Tab/Space": None,      # default is any whitespace
+            "Space": " ",
+            "Tab": "    ",
+            "Comma": ",",
+            "Semicolon": ";"
+        }
+
+        self.main_layout = None
+        self.box_add_or_replace = None
+        self.box_delimiter = None
+        self.label_filename = None
+        self.ok_button = None
+        self.cancel_button = None
+
+        # create actual window
+        self.create_dialog()
+
+    def create_dialog(self):
+        dialog_layout = QtWidgets.QGridLayout()
+
+        n_rows = 0
+
+        # In case there already is data in the spreadsheet, ask if replace or added
+        if any(d["filename"] is not None for d in self.data):
+            label_add_or_replace = QtWidgets.QLabel("Add data to existing data? Or replace existing data")
+            dialog_layout.addWidget(label_add_or_replace, n_rows, 0)
+            self.box_add_or_replace = QtWidgets.QComboBox()
+            self.box_add_or_replace.addItem("Add")
+            self.box_add_or_replace.addItem("Replace")
+            dialog_layout.addWidget(self.box_add_or_replace, n_rows, 1)
+            n_rows += 1
+
+        # get file name(s)
+        self.label_filename = QtWidgets.QLabel("File name(s)")
+        dialog_layout.addWidget(self.label_filename, n_rows, 0)
+        button_filename = QtWidgets.QPushButton()
+        icon = button_filename.style().standardIcon(getattr(QtWidgets.QStyle, "SP_FileDialogStart"))
+        button_filename.setIcon(icon)
+        button_filename.clicked.connect(self.get_file_name)
+        dialog_layout.addWidget(button_filename, n_rows, 1)
+        n_rows += 1
+
+        # get delimiter
+        label_delimiter = QtWidgets.QLabel("Delimiter")
+        dialog_layout.addWidget(label_delimiter, n_rows, 0)
+        self.box_delimiter = QtWidgets.QComboBox()
+        for d in self.delimiters.keys():
+            self.box_delimiter.addItem(d)
+        dialog_layout.addWidget(self.box_delimiter, n_rows, 1)
+        n_rows += 1
+
+        # cancel and ok button
+        button_layout = QtWidgets.QHBoxLayout()
+
+        self.ok_button = QtWidgets.QPushButton("Ok")
+        self.ok_button.clicked.connect(self.apply_ok)
+        button_layout.addWidget(self.ok_button)
+
+        self.cancel_button = QtWidgets.QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.apply_cancel)
+        button_layout.addWidget(self.cancel_button)
+
+        # put main layout together
+        self.main_layout = QtWidgets.QVBoxLayout()
+        self.main_layout.addLayout(dialog_layout)
+        self.main_layout.addLayout(button_layout)
+
+        # create place holder widget
+        widget = QtWidgets.QWidget()
+        widget.setLayout(self.main_layout)
+        self.setCentralWidget(widget)
+
+        self.setWindowTitle("Data import")
+        self.setWindowModality(QtCore.Qt.ApplicationModal)
+
+    def add_or_replace(self):
+        if self.box_add_or_replace is None or self.box_add_or_replace.currentText() == "Replace":
+            self.data = []
+            self.cols = 0
+            self.rows = 0
+
+    def get_file_name(self):
+        # file dialog to get file name
+        dialog = QFileDialog(self)
+        dialog.setFileMode(QFileDialog.ExistingFiles)
+        dialog.setNameFilter("Data Files (*.txt *.asc *.dat *.csv)")
+        dialog.setViewMode(QFileDialog.List)
+        dialog.setDirectory(self.parent.pHomeTxt)
+        if dialog.exec_():
+            self.file_names = dialog.selectedFiles()
+            text = ""
+            for f in self.file_names:
+                text += "{}\n".format(f)
+            self.label_filename.setText(text)
+
+    def get_delimiter(self):
+        return self.delimiters.get(self.box_delimiter.currentText(), " ")
+
+    def load_data(self):
+        # load new data
+        loaded_data = []
+        n_lines = []
+        delimiter = self.get_delimiter()
+        for j in range(len(self.file_names)):
+            try:
+                loaded_data.append(np.genfromtxt(self.file_names[j], delimiter=delimiter))
+            except Exception as e:
+                self.parent.mw.show_statusbar_message("The file couldn't be imported", 4000)
+                print('{} \nThe file could not be imported, maybe the columns have different lengths'.format(e))
+                return
+
+            try:
+                loaded_data[j] = np.transpose(loaded_data[j])
+            except IndexError as e:
+                print("The data format is not readable for PyRamanGui\n", e)
+                return
+
+            if isinstance(loaded_data[j][0], float):
+                loaded_data[j] = [loaded_data[j], np.ones(len(loaded_data[j])) * np.nan]
+
+            n_lines.append(len(loaded_data[j]))
+
+        # set header
+        for k in range(len(self.file_names)):
+            for j in range(n_lines[k]):
+                if j == 0:
+                    col_type = "X"
+                else:
+                    col_type = "Y"
+                short_name = str(os.path.splitext(os.path.basename(self.file_names[k]))[0])
+                self.data.append(self.parent.create_data(loaded_data[k][j], shortname=short_name,
+                                                         type=col_type, filename=self.file_names[k]))
+            self.cols = self.cols + n_lines[k]
+
+    def apply_cancel(self):
+        self.closeSignal.emit()
+        self.close()
+
+    def apply_ok(self):
+        """ if ok was clicked"""
+        # check if file was selected
+        if self.file_names is None:
+            self.parent.mw.show_statusbar_message("You have to select a file for import", 4000)
+            return
+
+        self.add_or_replace()
+        self.cols_before = self.cols
+        self.load_data()
+        self.closeSignal.emit()
+        self.close()
+
+
 class FormulaInterpreter:
     """
     class to analyse formulas typed in the formula field of the Spreadsheet header
@@ -1571,20 +1742,20 @@ class SpreadSheetWindow(QMainWindow):
         """
         save data from spreadsheet in txt-file
         """
-        SaveFileName = QtWidgets.QFileDialog.getSaveFileName(self, 'Save File', self.pHomeTxt)
 
-        if SaveFileName[0] != '':
-            SaveFileName = SaveFileName[0]
+        # get file name
+        file_name = QtWidgets.QFileDialog.getSaveFileName(self, 'Save File', self.pHomeTxt)
+        if file_name[0] != '':
+            file_name = file_name[0]
         else:
             return
 
+        # get data
         save_data = [self.data[0]["data"]]
-        header = self.data[0]["shortname"]
         for c in range(1, self.cols):
             save_data.append(self.data[c]["data"])
-            header = '{}%{}'.format(header, self.data[c]["shortname"])
-        header = '{} '.format(header)
 
+        # check if all columns have same length to avoid problems with numpy savetxt
         n = len(self.data[0]["data"])
         if all(len(x) == n for x in save_data):
             pass
@@ -1592,131 +1763,47 @@ class SpreadSheetWindow(QMainWindow):
             self.mw.show_statusbar_message('The columns have different lengths!', 4000)
             return
 
-        save_data = np.transpose(save_data)
+        # save data
+        if file_name[-4:] != '.txt':
+            file_name = '{}.txt'.format(file_name)
 
-        if SaveFileName[-4:] != '.txt':
-            SaveFileName = '{}.txt'.format(SaveFileName)
+        self.pHomeTxt = file_name
 
-        self.pHomeTxt = SaveFileName
-
-        np.savetxt(SaveFileName, save_data, fmt='%.5f', header=header)
+        np.savetxt(file_name, np.transpose(save_data), fmt='%.5f')
 
     def load_file(self):
         """
-        function to load data from a txt file into the spreadsheet
+        function to load data from a file into the spreadsheet
         """
 
-        # In case there already is data in the spreadsheet, ask if replace or added
-        if any(d['filename'] is not None for d in self.data):
-            FrageErsetzen = QtWidgets.QMessageBox()
-            FrageErsetzen.setIcon(QMessageBox.Question)
-            FrageErsetzen.setWindowTitle('Replace or Add?')
-            FrageErsetzen.setText('There is already loaded data. Shall it be replaced?')
-            buttonY = FrageErsetzen.addButton(QMessageBox.Yes)
-            buttonY.setText('Replace')
-            buttonN = FrageErsetzen.addButton(QMessageBox.No)
-            buttonN.setText('Add')
-            buttonC = FrageErsetzen.addButton(QMessageBox.Cancel)
-            buttonC.setText('Cancel')
-            returnValue = FrageErsetzen.exec_()
-            if returnValue == QMessageBox.Yes:  # Replace
-                self.data = []
-                self.cols = 0
-                self.rows = 0
-            elif returnValue == QMessageBox.No:  # Add
-                pass
-            else:  # Cancel
-                return
-        else:
-            self.data = []
-            self.cols = 0
-            self.rows = 0
+        di = DataImportDialog(self, self.data)
+        di.show()
 
-        cols_before = self.cols
-        dialog = QFileDialog(self)
-        dialog.setFileMode(QFileDialog.ExistingFiles)
-        dialog.setNameFilter("Data Files (*.txt *.asc *.dat)")
-        dialog.setViewMode(QFileDialog.List)
-        dialog.setDirectory(self.pHomeTxt)
-        if dialog.exec_():
-            newFiles = dialog.selectedFiles()
-        else:
-            return
+        loop = QtCore.QEventLoop()
+        di.closeSignal.connect(loop.quit)
+        loop.exec_()
 
-        n_newFiles = len(newFiles)
-        load_data = []
-        lines = []
-        FileName = []
-        header = []
-        for j in range(n_newFiles):
-            # read first line to get header
-            with open(newFiles[j]) as f:
-                try:
-                    firstline = f.readline()
-                except UnicodeDecodeError as e:
-                    print(e, newFiles[j])
-                    n_newFiles -= 1
-                    continue
-            # check if file has a header (starts with #)
-            if firstline[0] == '#':
-                firstline = firstline[1:-2]  # remove '#' at beginning and '\n' at end
-                firstline = firstline.split('%')  # headers of different columns are seperated by '%'
-                header.append(firstline)
-            else:
-                header.append(None)
+        self.data = di.data
+        cols_before = di.cols_before
 
-            try:
-                load_data.append(np.loadtxt(newFiles[j]))
-                # load_data.append(np.genfromtxt(newFiles[j], missing_values='', filling_values=''))
-            except Exception as e:
-                self.mw.show_statusbar_message("The file couldn't be imported", 4000)
-                print('{} \nThe file could not be imported, maybe the columns have different lengths'.format(e))
-                return
-
-            try:
-                load_data[j] = np.transpose(load_data[j])
-            except IndexError as e:
-                print("The data format is not readabel for PyRamanGui\n", e)
-                return
-
-            if isinstance(load_data[j][0], float):
-                load_data[j] = [load_data[j], np.ones(len(load_data[j])) * np.nan]
-
-            lines.append(len(load_data[j]))
-            FileName.append(os.path.splitext(os.path.basename(newFiles[j]))[0])
-        for k in range(n_newFiles):
-            for j in range(lines[k]):
-                if j == 0:
-                    col_type = 'X'
-                else:
-                    col_type = 'Y'
-
-                if header[k] is None or len(header[k]) <= j:  # if header is None, use Filename as header
-                    shortname = str(FileName[k])
-                else:
-                    shortname = header[k][j]
-                self.data.append(self.create_data(load_data[k][j], shortname=shortname,
-                                                  type=col_type, filename=newFiles[k]))
-            self.cols = self.cols + lines[k]
-
+        self.cols = len(self.data)
         self.rows = max([len(d["data"]) for d in self.data])
-
         self.data_table.setColumnCount(self.cols)
         self.data_table.setRowCount(self.rows)
         self.header_table.setColumnCount(self.cols)
-        self.header_table.setRowCount(5)
 
         # set header
         headers = ['{} ({})'.format(d["shortname"], d["type"]) for d in self.data]
         self.header_table.setHorizontalHeaderLabels(headers)
         self.create_header_items(cols_before, self.cols)
 
+        # set data
         for c in range(cols_before, self.cols):
             for r in range(len(self.data[c]["data"])):
                 newcell = QTableWidgetItem(str(self.data[c]["data"][r]))
                 self.data_table.setItem(r, c, newcell)
 
-        self.pHomeTxt = FileName[0]
+        # self.pHomeTxt = FileName[0]
 
     def update_data(self, item):
         """ if content of spreadsheet cell is changed, data stored in variable self.data is also changed """

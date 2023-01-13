@@ -39,10 +39,6 @@ Install [Anaconda](https://www.anaconda.com/products/distribution).
 
 Open the Anaconda Command Prompt (CMD.exe Prompt)
 
-Change the directory with the command
-```
- cd\
-```
 Run as administrator
 ```
 pip install --user matplotlib==3.5.3 numpy==1.12.1 prettytable==3.3.0 pybaselines==0.8.0 pyqt5==5.15.7 pyside2 rampy==0.4.9 scipy==1.4.1 scikit-learn==1.0.2 
