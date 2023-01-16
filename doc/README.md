@@ -71,7 +71,7 @@ left, and a workspace containing the open windows.
 #### Workspace
 The workspace contains the windows. There are three different kinds of windows,
 [Spreadsheet <img src="pics/Icon_spreadsheet.png" alt="Icon of Spreadsheet" height="15"/>](#spreadsheet), 
-[Plotwindow <img src="pics/Icon_plotwindow.png" alt="Icon of Plotwindow" height="15"/>](#plotwindow),
+[Plotwindow <img src="pics/Icon_plotwindow.png" alt="Icon of Plotwindow" height="15"/>](#plot-window),
 [Textwindow <img src="pics/Icon_textwindow.png" alt="Icon of Textwindow" height="15"/>](#text-window).
 They are explained in more detail in later sections.
 
