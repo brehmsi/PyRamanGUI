@@ -1175,7 +1175,7 @@ class DataImportDialog(QMainWindow):
         # file dialog to get file name
         dialog = QFileDialog(self)
         dialog.setFileMode(QFileDialog.ExistingFiles)
-        dialog.setNameFilter("Data Files (*.txt *.asc *.dat *.csv)")
+        dialog.setNameFilter("Data Files (*.txt *.asc *.csv)")
         dialog.setViewMode(QFileDialog.List)
         dialog.setDirectory(self.parent.pHomeTxt)
         if dialog.exec_():
