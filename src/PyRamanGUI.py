@@ -204,7 +204,7 @@ class MainWindow(QMainWindow):
         self.treeWidget.itemDoubleClicked.connect(self.activate_window)
         self.treeWidget.itemClicked.connect(self.tree_window_options)
         self.treeWidget.itemDropped.connect(self.change_folder)
-        self.new_Folder(None)
+        self.create_new_folder(None)
 
         self.mainWidget.addWidget(self.treeWidget)
         self.mainWidget.addWidget(self.tabWidget)
@@ -227,7 +227,7 @@ class MainWindow(QMainWindow):
         FileNew = File.addMenu("New")
         FileNew.addAction("Spreadsheet", lambda: self.new_window(None, "Spreadsheet", None, None))
         FileNew.addAction("Textwindow", lambda: self.new_window(None, "Textwindow", "", None))
-        FileNew.addAction("Folder", lambda: self.new_Folder(None))
+        FileNew.addAction("Folder", lambda: self.create_new_folder(None))
 
         medit = menu.addMenu("Edit")
         medit.addAction("Cascade")
@@ -264,11 +264,11 @@ class MainWindow(QMainWindow):
         @return: None
         """
         # get file name
-        fileName = QtWidgets.QFileDialog.getOpenFileName(self, "Load",
-                                                         self.pHomeRmn, "All Files (*);;Raman Files (*.rmn)")
+        file_name = QtWidgets.QFileDialog.getOpenFileName(self, "Load",
+                                                          self.pHomeRmn, "All Files (*);;Raman Files (*.rmn)")
 
-        if fileName[0] != "":  # if fileName is not empty save in pHomeRmn
-            self.pHomeRmn = fileName[0]
+        if file_name[0] != "":  # if fileName is not empty save in pHomeRmn
+            self.pHomeRmn = file_name[0]
         else:
             self.close()
             return
@@ -280,10 +280,10 @@ class MainWindow(QMainWindow):
         self.treeWidget.clear()
         self.tabWidget.clear()
         self.folder = {}
-        for foldername, foldercontent in v.items():
-            self.new_Folder(foldername)
-            for key, val in foldercontent.items():
-                self.new_window(foldername, val[0], val[1], key)
+        for folder_name, folder_content in v.items():
+            self.create_new_folder(folder_name)
+            for key, val in folder_content.items():
+                self.new_window(folder_name, val[0], val[1], key)
 
     def save(self, q):
         """
@@ -530,7 +530,7 @@ class MainWindow(QMainWindow):
     def create_sidetree_structure(self, structure):
         self.treeWidget.clear()
         for key, val in structure.items():
-            self.new_Folder(key)
+            self.create_new_folder(key)
 
     def activate_window(self, item):
         text = item.text(0)
@@ -600,7 +600,7 @@ class MainWindow(QMainWindow):
                 ac = tree_item_menu.exec_(self.treeWidget.mapToGlobal(event.pos()))
                 # Rename
                 if ac == ActNewFolder:
-                    self.new_Folder(None)
+                    self.create_new_folder(None)
                 elif ac == ActNewSpreadsheet:
                     self.new_window(None, 'Spreadsheet', None, None)
                 elif ac == ActNewText:
@@ -826,79 +826,80 @@ class MainWindow(QMainWindow):
             ax.annotate(t["text"], t["position"], picker=True, fontsize=t["font size"], color=t["color"])
         return fig
 
-    def new_window(self, foldername, windowtype, windowcontent, title):
-        if foldername is None:
-            foldername = self.tabWidget.tabText(self.tabWidget.currentIndex())
-            if foldername == "Database":
+    def new_window(self, folder_name, window_type, window_content, title):
+        if folder_name is None:
+            folder_name = self.tabWidget.tabText(self.tabWidget.currentIndex())
+            if folder_name == "Database":
                 self.show_statusbar_message("Please open window in other folder", 4000)
                 return
 
+        # if new window has no title, create one
         if title is None:
             i = 1
             while i <= 100:
-                title = windowtype + " " + str(i)
-                if title in self.window[windowtype].keys():
+                title = window_type + " " + str(i)
+                if title in self.window[window_type].keys():
                     i += 1
                 else:
                     break
 
-        if windowtype == "Spreadsheet":
-            if windowcontent is not None:
-                for i in range(len(windowcontent)):
-                    windowcontent[i]["data"] = np.array(windowcontent[i]["data"])
+        if window_type == "Spreadsheet":
+            if window_content is not None:
+                for i in range(len(window_content)):
+                    window_content[i]["data"] = np.array(window_content[i]["data"])
 
             windowtypeInt = 1
-            self.window[windowtype][title] = SpreadSheetWindow(windowcontent, parent=self)
-            newSS = self.window[windowtype][title]
-            newSS.new_pw_signal.connect(lambda: self.new_window(None, "Plotwindow", [newSS.plot_data, None], None))
-            newSS.add_pw_signal.connect(lambda pw_name: self.add_Plot(pw_name, newSS.plot_data))
+            self.window[window_type][title] = SpreadSheetWindow(window_content, parent=self)
+            new_spreadsheet = self.window[window_type][title]
+            new_spreadsheet.new_pw_signal.connect(lambda: self.new_window(
+                None, "Plotwindow", [new_spreadsheet.plot_data, None], None))
+            new_spreadsheet.add_pw_signal.connect(lambda pw_name: self.add_Plot(pw_name, new_spreadsheet.plot_data))
             icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Icon_spreadsheet.png")
-        elif windowtype == "Plotwindow":
+        elif window_type == "Plotwindow":
             windowtypeInt = 2
-            plotData, fig = windowcontent
+            plot_data, fig = window_content
 
             if isinstance(fig, dict):
-                fig = self.create_figure(fig, plotData)
-
-            if not plotData:
+                fig = self.create_figure(fig, plot_data)
+            if not plot_data:
                 self.show_statusbar_message("Please select the columns you want to plot!", 4000)
                 return
 
             if fig is not None:
                 # necessary to avoid weird error:
-                # (ValueError: figure size must be positive finite not [ 4.58 -0.09])
                 fig.set_size_inches(10, 10)
 
             # make plotData list to numpy array, since its easier to work with
-            for pd in plotData:
+            for pd in plot_data:
                 pd["x"] = np.array(pd["x"])
                 pd["y"] = np.array(pd["y"])
 
+            self.window[window_type][title] = PlotWindow(plot_data, fig, self)
 
-            self.window[windowtype][title] = PlotWindow(plotData, fig, self)
             self.update_spreadsheet_menubar()
             icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Icon_plotwindow.png")
-        elif windowtype == "Textwindow":
+        elif window_type == "Textwindow":
             windowtypeInt = 3
-            txt = windowcontent
-            self.window[windowtype][title] = TextWindow(self, txt)
+            txt = window_content
+            self.window[window_type][title] = TextWindow(self, txt)
             icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Icon_textwindow.png")
         else:
             return
 
-        self.windowWidget[windowtype][title] = self.folder[foldername][1].addSubWindow(self.window[windowtype][title])
-        self.window[windowtype][title].setWindowTitle(title)
-        self.window[windowtype][title].show()
+        self.windowWidget[window_type][title] = self.folder[folder_name][1].addSubWindow(
+            self.window[window_type][title])
+        self.window[window_type][title].setWindowTitle(title)
+        self.window[window_type][title].show()
 
         item = QTreeWidgetItem([title], type=windowtypeInt)
         item.setIcon(0, icon)
         item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable | Qt.ItemIsDragEnabled |
                       Qt.ItemIsUserCheckable)
 
-        self.folder[foldername][0].addChild(item)
-        self.window[windowtype][title].closeWindowSignal.connect(self.close_window)
+        self.folder[folder_name][0].addChild(item)
+        self.window[window_type][title].closeWindowSignal.connect(self.close_window)
 
-    def new_Folder(self, title):
+    def create_new_folder(self, title):
         if title is None:
             i = 1
             while i <= 100:
@@ -994,6 +995,7 @@ class TextWindow(QMainWindow):
 
         self.create_textwidget()
         self.create_menubar()
+        self.show()
 
     def create_textwidget(self):
         self.textfield = QtWidgets.QPlainTextEdit()
@@ -1014,11 +1016,6 @@ class TextWindow(QMainWindow):
         fileMenu = self.menubar.addMenu("&File")
         fileMenu.addAction("Save Text", self.file_save)
         fileMenu.addAction("Load Text", self.load_file)
-
-        # 2. Menu item: Edit
-        # editMenu = self.menubar.addMenu('&Edit')
-
-        self.show()
 
     def text_change(self):
         self.text = self.textfield.toPlainText()
@@ -1428,6 +1425,8 @@ class SpreadSheetWindow(QMainWindow):
         self.create_col_header()
         self.create_row_header()
 
+        self.show()
+
     def create_data(self, data_content, shortname="A", type="Y", filename=None):
         data_dict = {"data": data_content,
                      "shortname": shortname,
@@ -1489,8 +1488,6 @@ class SpreadSheetWindow(QMainWindow):
         analysis_menu = self.menubar.addMenu("&Analysis")
         analysis_menu.addAction("Principal component analysis", self.pca_nmf)
         analysis_menu.addAction("Non-negative matrix factorization", self.pca_nmf)
-
-        self.show()
 
     def update_menubar(self):
         self.menubar.clear()
@@ -2451,6 +2448,7 @@ class DataSetSelecter(QtWidgets.QMainWindow):
         self.selectedDatasetNumber = []
         self.CheckDataset = []
         self.create_dialog()
+        self.show()
 
     def create_dialog(self):
         scroll_area = QtWidgets.QScrollArea()
@@ -2487,7 +2485,6 @@ class DataSetSelecter(QtWidgets.QMainWindow):
         self.setCentralWidget(scroll_area)
 
         self.setWindowTitle("Select Dataset")
-        self.show()
 
     @pyqtSlot(int)
     def onStateChange(self, state):
@@ -2579,7 +2576,7 @@ class PlotWindow(QMainWindow):
         self.create_statusbar()
         self.create_menubar()
         self.create_sidetoolbar()
-
+        self.show()
         # self.cid1 = self.fig.canvas.mpl_connect('button_press_event', self.mousePressEvent)
         # self.cid2 = self.fig.canvas.mpl_connect('key_press_event', self.keyPressEvent)
         self.cid3 = self.fig.canvas.mpl_connect('pick_event', self.pickEvent)
@@ -2838,12 +2835,9 @@ class PlotWindow(QMainWindow):
         # 4. menu: spectra data base
         menubar.addAction('&Data base peak positions', self.open_peakdatabase)
 
-        self.show()
-
     def create_statusbar(self):
         self.statusBar = QtWidgets.QStatusBar()
         self.setStatusBar(self.statusBar)
-        self.show()
 
     def create_sidetoolbar(self):
         toolbar = QtWidgets.QToolBar("Vertical Sidebar", self)
@@ -2880,8 +2874,6 @@ class PlotWindow(QMainWindow):
         TextAct.setStatusTip('Insert Text')
         TextAct.triggered.connect(self.insert_text)
         toolbar.addAction(TextAct)
-
-        self.show()
 
     def create_data(self, x, y, yerr=None, line=None, style="-", label="_newline", filename=None, sstitle=None):
         data_dict = {"x": x,
