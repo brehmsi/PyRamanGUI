@@ -11,3 +11,5 @@ venv/
 *.toc
 *.gz
 database_peakpositions.db
+sampleDatabase.db
+analysis_routines/
