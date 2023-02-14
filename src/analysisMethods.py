@@ -247,7 +247,11 @@ class SmoothingMethods:
 
     def savgol(self, x, y, window_length=5, polyorder=2):
         window_length = self.check_window_length(x, window_length)
-        y_smooth = rp.smooth(x, y, method="savgol", window_length=window_length, polyorder=int(polyorder))
+        try:
+            y_smooth = rp.smooth(x, y, method="savgol", window_length=window_length, polyorder=int(polyorder))
+        except ValueError as e:
+            y_smooth = None
+            print(e)
         return y_smooth
 
     def window_smoothing(self, x, y, window_length=5, method="flat"):

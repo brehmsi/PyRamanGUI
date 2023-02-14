@@ -3,11 +3,9 @@ import platform
 import sqlite3
 import subprocess
 from PyQt5 import QtGui, QtCore, QtWidgets
-from PyQt5.QtCore import Qt, pyqtSlot
-from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QSizePolicy, QMessageBox,
-                             QPushButton, QLineEdit, QPushButton, QWidget)
-from PyQt5.QtWidgets import *
-from PyQt5.QtGui import *
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QMessageBox, QLineEdit, QPushButton, QWidget, QTreeWidget,
+                             QTreeWidgetItem, QDockWidget, QListWidget, QLabel)
 from datetime import date
 
 
@@ -19,10 +17,16 @@ class DatabaseMeasurements(QMainWindow):
         self.path_of_database = os.path.join(os.path.dirname(__file__), 'sampleDatabase.db')
         self.date = str(date.today())
         self.sample = ''
-        self.materialclass = ''
+        self.material_class = ''
         self.wavelength = ''
         self.donor = ''
         self.loc = ''  # memory location
+
+        self.header_list = None
+        self.entry_list = None
+        self.searchbar = None
+        self.search_checklist = None
+        self.ew = None
 
         self.setWindowTitle('Data base Raman measurements')
         self.entries()
@@ -38,66 +42,67 @@ class DatabaseMeasurements(QMainWindow):
             conn = sqlite3.connect(self.path_of_database)
             c = conn.cursor()
             c.execute(
-                '''CREATE TABLE stocks (ID int, Date text, Sample text, Material text, Wavelength text, Donor text, Location text)''')
+                '''CREATE TABLE stocks (ID int, Date text, Sample text, Material text, Wavelength text, Donor text, 
+                Location text)''')
         c.execute('SELECT * FROM stocks')
-        allentries = c.fetchall()  # get all entries stored in databank
-        self.headerList = list(map(lambda x: x[0], c.description))  # get header stored in databank as description
+        all_entries = c.fetchall()  # get all entries stored in databank
+        self.header_list = list(map(lambda x: x[0], c.description))  # get header stored in databank as description
         conn.close()
 
-        ### Build a QTreeWidget to display databank ###
+        # Build a QTreeWidget to display databank
         twi = []  # List of TreeWidgetItems
-        for j in allentries:
+        for j in all_entries:
             zs = list(map(str, j))
             twi.append(QTreeWidgetItem(zs))
         w = QWidget()
-        self.entryList = QTreeWidget(w)
-        self.entryList.setColumnCount(len(self.headerList))
-        self.entryList.setHeaderLabels(self.headerList)  # ID only for programming reason
-        self.entryList.hideColumn(0)  # Hide column with ID
-        self.entryList.setSortingEnabled(True)
-        self.entryList.setSelectionMode(QTreeWidget.ExtendedSelection)
+        self.entry_list = QTreeWidget(w)
+        self.entry_list.setColumnCount(len(self.header_list))
+        self.entry_list.setHeaderLabels(self.header_list)  # ID only for programming reason
+        self.entry_list.hideColumn(0)  # Hide column with ID
+        self.entry_list.setSortingEnabled(True)
+        self.entry_list.setSelectionMode(QTreeWidget.ExtendedSelection)
         for j in twi:
-            self.entryList.addTopLevelItem(j)
-        self.entryList.itemDoubleClicked.connect(self.onItemClicked)
-        self.setCentralWidget(self.entryList)
+            self.entry_list.addTopLevelItem(j)
+        self.entry_list.itemDoubleClicked.connect(self.on_item_clicked)
+        self.setCentralWidget(self.entry_list)
 
     def create_menubar(self):
         # create a menubar
         menubar = self.menuBar()
-        menubar.addAction('New Entry', self.open_EntryWindow)
-        menubar.addAction('Edit Entry', self.open_EntryWindow)
+        menubar.addAction('New Entry', self.open_entry_window)
+        menubar.addAction('Edit Entry', self.open_entry_window)
         menubar.addAction('Delete Entry', self.delete_entry)
         menubar.addAction('Undo', self.undo)
 
     def create_searchbar(self):
         # create a searchbar
-        dockWidget = QDockWidget('Searchbar', self)
+        dock_widget = QDockWidget('Searchbar', self)
         layout = QVBoxLayout()
         self.searchbar = QLineEdit()
         layout.addWidget(self.searchbar)
-        self.addDockWidget(Qt.RightDockWidgetArea, dockWidget)
+        self.addDockWidget(Qt.RightDockWidgetArea, dock_widget)
         self.searchbar.textChanged.connect(self.search)
 
         self.search_checklist = QListWidget()
         i = 0
-        for j in self.headerList:
+        for j in self.header_list:
             self.search_checklist.insertItem(i, j)
             i = i + 1
 
         self.search_checklist.item(0).setHidden(True)
         layout.addWidget(self.search_checklist)
 
-        emptywidget = QtWidgets.QWidget()
-        dockWidget.setWidget(emptywidget)
-        emptywidget.setLayout(layout)
+        empty_widget = QtWidgets.QWidget()
+        dock_widget.setWidget(empty_widget)
+        empty_widget.setLayout(layout)
 
-    def open_EntryWindow(self):
+    def open_entry_window(self):
         # opens a new window to insert a new databank entry
-        sel = self.entryList.selectedItems()  # check if a databank entry is selected
-        if sel != []:  # and sets selected entry as default for new entry
+        sel = self.entry_list.selectedItems()  # check if a databank entry is selected
+        if sel:  # and sets selected entry as default for new entry
             self.date = sel[0].text(1)
             self.sample = sel[0].text(2)
-            self.materialclass = sel[0].text(3)
+            self.material_class = sel[0].text(3)
             self.wavelength = sel[0].text(4)
             self.donor = sel[0].text(5)
             self.loc = sel[0].text(6)
@@ -121,13 +126,13 @@ class DatabaseMeasurements(QMainWindow):
         c = conn.cursor()
         c.execute('SELECT * FROM stocks')
         a = c.fetchall()
-        if a == []:
+        if not a:
             id_new = 0
         else:
             id_new = max([j[0] for j in a]) + 1
         c.execute(
-            " INSERT INTO stocks (ID, Date, Sample, Material, Wavelength, Donor, Location) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (id_new, ew.date, ew.sample, ew.materialclass, ew.wavelength, ew.donor, ew.loc))
+            " INSERT INTO stocks (ID, Date, Sample, Material, Wavelength, Donor, Location) VALUES "
+            "(?, ?, ?, ?, ?, ?, ?)", (id_new, ew.date, ew.sample, ew.material_class, ew.wavelength, ew.donor, ew.loc))
         conn.commit()
         conn.close()
         self.entries()
@@ -135,16 +140,17 @@ class DatabaseMeasurements(QMainWindow):
     def change_entry(self):
         # change entry of the database into entry of the entry window
         ew = self.ew
-        idtochange = []
-        for j in self.entryList.selectedItems():
-            idtochange.append(j.text(0))
+        id_change = []
+        for j in self.entry_list.selectedItems():
+            id_change.append(j.text(0))
 
         conn = sqlite3.connect(self.path_of_database)
         c = conn.cursor()
-        sqlite_update_query = 'UPDATE stocks set Date=?, Sample=?, Material=?, Wavelength=?, Donor=?, Location=?  where ID = ?'
-        for j in idtochange:
-            columnValues = (ew.date, ew.sample, ew.materialclass, ew.wavelength, ew.donor, ew.loc, j)
-            c.execute(sqlite_update_query, columnValues)
+        sqlite_update_query = 'UPDATE stocks set Date=?, Sample=?, Material=?, Wavelength=?, Donor=?, Location=? ' \
+                              ' where ID = ?'
+        for j in id_change:
+            column_values = (ew.date, ew.sample, ew.material_class, ew.wavelength, ew.donor, ew.loc, j)
+            c.execute(sqlite_update_query, column_values)
         conn.commit()
         conn.close()
         self.ew.close()
@@ -152,13 +158,13 @@ class DatabaseMeasurements(QMainWindow):
 
     def delete_entry(self):
         # deletes entry of the databank
-        idtodelete = []
-        for j in self.entryList.selectedItems():
-            idtodelete.append(j.text(0))
+        id_delete = []
+        for j in self.entry_list.selectedItems():
+            id_delete.append(j.text(0))
 
         conn = sqlite3.connect(self.path_of_database)
         c = conn.cursor()
-        for j in idtodelete:
+        for j in id_delete:
             c.execute('DELETE FROM stocks WHERE ID = ?', (j,))
         conn.commit()
         conn.close()
@@ -166,7 +172,7 @@ class DatabaseMeasurements(QMainWindow):
         self.entries()
 
     @QtCore.pyqtSlot(QtWidgets.QTreeWidgetItem, int)
-    def onItemClicked(self, item, col):
+    def on_item_clicked(self, item, col):
         # opens file folder of clicked path
         if col == 6:
             path = item.text(col)
@@ -187,13 +193,13 @@ class DatabaseMeasurements(QMainWindow):
         # search function
         black = QtGui.QBrush()  # define black color
         red = QtGui.QBrush()  # define red color
-        redC = QtGui.QColor()
-        redC.setRgb(255, 0, 0, alpha=255)
-        red.setColor(redC)
+        red_color = QtGui.QColor()
+        red_color.setRgb(255, 0, 0, alpha=255)
+        red.setColor(red_color)
 
         col = self.search_checklist.currentRow()  # get Column to search in
 
-        root = self.entryList.invisibleRootItem()  # loop over all items and set color black
+        root = self.entry_list.invisibleRootItem()  # loop over all items and set color black
         child_count = root.childCount()
         for i in range(child_count):
             item = root.child(i)
@@ -202,12 +208,12 @@ class DatabaseMeasurements(QMainWindow):
         if text == '':
             return
         else:
-            for j in self.entryList.findItems(text, QtCore.Qt.MatchContains, column=col):
+            for j in self.entry_list.findItems(text, QtCore.Qt.MatchContains, column=col):
                 j.setForeground(col, red)
 
     def undo(self):
         # undo function
-        print('Noch nicht eingerichtet!')
+        print("This function doesn't work yet!")
 
     # rollback()
 
@@ -224,18 +230,18 @@ class EntryWindow(QMainWindow):
     """ entry window """
     entryUpdateSignal = QtCore.pyqtSignal()
 
-    def __init__(self, MW, parent=None):
+    def __init__(self, mw, parent=None):
         super(EntryWindow, self).__init__(parent)
-        self.mw = MW
-        self.date = MW.date
-        self.sample = MW.sample
-        self.materialclass = MW.materialclass
-        self.wavelength = MW.wavelength
-        self.donor = MW.donor
-        self.loc = MW.loc
+        self.mw = mw
+        self.date = mw.date
+        self.sample = mw.sample
+        self.material_class = mw.material_class
+        self.wavelength = mw.wavelength
+        self.donor = mw.donor
+        self.loc = mw.loc
 
         self.setGeometry(400, 400, 200, 200)
-        self.setWindowTitle('Datenbank-Eintrag')
+        self.setWindowTitle('Database entry')
         wid = QtWidgets.QWidget(self)
         self.setCentralWidget(wid)
         self.layout = QtWidgets.QGridLayout()
@@ -254,12 +260,12 @@ class EntryWindow(QMainWindow):
         self.SampleWidget.setText(self.sample)
         self.layout.addWidget(self.SampleWidget, 2, 1)
 
-        self.label_materialclass = QLabel('Material Class:')
-        self.layout.addWidget(self.label_materialclass, 3, 0)
-        self.MaterialcalssWidget = QLineEdit(self)
-        self.MaterialcalssWidget.resize(280, 40)
-        self.MaterialcalssWidget.setText(self.materialclass)
-        self.layout.addWidget(self.MaterialcalssWidget, 3, 1)
+        self.label_material_class = QLabel('Material Class:')
+        self.layout.addWidget(self.label_material_class, 3, 0)
+        self.material_class_widget = QLineEdit(self)
+        self.material_class_widget.resize(280, 40)
+        self.material_class_widget.setText(self.material_class)
+        self.layout.addWidget(self.material_class_widget, 3, 1)
 
         self.label_wavelength = QLabel('Wavelength:')
         self.layout.addWidget(self.label_wavelength, 4, 0)
@@ -287,8 +293,8 @@ class EntryWindow(QMainWindow):
         self.layout.addWidget(self.buttonNewEntry, 7, 0)
         self.buttonNewEntry.clicked.connect(self.new_entry)
 
-        self.buttonCancel = QPushButton('Cancle', self)
-        self.buttonCancel.setToolTip("Abort! Abort!")
+        self.buttonCancel = QPushButton('Cancel', self)
+        self.buttonCancel.setToolTip("Cancel")
         self.layout.addWidget(self.buttonCancel, 7, 1)
         self.buttonCancel.clicked.connect(self.cancel)
 
@@ -297,7 +303,7 @@ class EntryWindow(QMainWindow):
     def new_entry(self):
         self.date = str(self.DateWidget.text())
         self.sample = self.SampleWidget.text()
-        self.materialclass = self.MaterialcalssWidget.text()
+        self.material_class = self.material_class_widget.text()
         self.wavelength = self.WavelengthWidget.text()
         self.donor = self.DonorWidget.text()
         self.loc = self.LocWidget.text()
