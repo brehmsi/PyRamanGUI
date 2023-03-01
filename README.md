@@ -14,23 +14,24 @@ A tutorial on how to use PyRamanGUI can be found here [Tutorial](doc/README.md)
 
 # Requirements
 PyRamanGUI requires:
-  - [python](https://www.python.org/downloads/) >= 3.6
+  - [python](https://www.python.org/downloads/) >= 3.10
   
 The following python packages have to be installed:
-  - matplotlib (3.5.3)
-  - numpy (1.12.3)
-  - prettytable (3.3.0)
-  - pybaselines (0.8.0)
-  - PyQt5 (5.15.7)
+  - matplotlib (3.7.0)
+  - numpy (1.24.2)
+  - prettytable (3.6.0)
+  - pybaselines (1.0.0)
+  - PyQt5 (5.15.9)
+  - PySide2 (5.15.2.1)
   - rampy (0.4.9)
-  - scipy (1.10.0)
-  - sklearn (1.0.2)
+  - scipy (1.10.1)
+  - sklearn (1.2.1)
 
 It may also work with other versions, but it has been tested only with these.
 
 On **Linux** (Ubuntu, Debian) a package can be installed with following command:
 ```
-pip install matplotlib==3.5.3 numpy==1.12.1 prettytable==3.3.0 pybaselines==0.8.0 pyqt5==5.15.7 pyside2 rampy==0.4.9 scipy==1.10.0 scikit-learn==1.0.2 
+pip install matplotlib==3.7.0 numpy==1.24.2 prettytable==3.6.0 pybaselines==1.0.0 pyqt5==5.15.9 pyside2==5.15.2.1 rampy==0.4.9 scipy==1.10.1 scikit-learn==1.2.1 
 ```
 
 
@@ -41,7 +42,7 @@ Open the Anaconda Command Prompt (CMD.exe Prompt)
 
 Run as administrator
 ```
-pip install --user matplotlib==3.5.3 numpy==1.12.1 prettytable==3.3.0 pybaselines==0.8.0 pyqt5==5.15.7 pyside2 rampy==0.4.9 scipy==1.10.0 scikit-learn==1.0.2 
+pip install --user matplotlib==3.7.0 numpy==1.24.2 prettytable==3.6.0 pybaselines==1.0.0 pyqt5==5.15.9 pyside2==5.15.2.1 rampy==0.4.9 scipy==1.10.1 scikit-learn==1.2.1 
 ```
 
 # Installation
