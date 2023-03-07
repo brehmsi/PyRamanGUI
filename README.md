@@ -68,6 +68,11 @@ python3 PyRamanGUI.py
 
 Download the PyRamanGUI directory. To run PyRamanGUI, go in the directory src and double-click the 'WindowsRun.bat' file
 
+Alternative: Open the Anaconda Command Prompt and run 
+```
+python my/path/src/PyRamanGUI.py
+```
+
 # License
 This project is licensed under the Apache License 2.0   
 See [LICENSE](LICENSE) for details.

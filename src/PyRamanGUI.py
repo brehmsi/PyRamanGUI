@@ -3426,7 +3426,7 @@ class PlotWindow(QMainWindow):
     def get_own_routine(self, action):
         """execute own analysis routine"""
         self.select_data_set()
-        result_text = "\n{}".format(action.text())
+        result_text = "{}\n\n".format(action.text())
 
         # opens file and saves content in variable 'v' with json
         with open(action.text(), "rb") as file:
@@ -3436,9 +3436,11 @@ class PlotWindow(QMainWindow):
             spectrum = self.data[n]["line"]
             x = spectrum.get_xdata()
             y = spectrum.get_ydata()
+            label = spectrum.get_label()
+            result_text += "\n{}\n".format(label)
             for key, val in v.items():
                 result_text += "{}\n".format(key)
-                x, y, result_text = self.apply_own_routine(key, val, x, y, spectrum.get_label(), result_text)
+                x, y, result_text = self.apply_own_routine(key, val, x, y, label, result_text)
                 if y is None:
                     break
 
