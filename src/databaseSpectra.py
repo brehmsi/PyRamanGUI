@@ -23,12 +23,10 @@ class DatabasePeakPosition(QtWidgets.QMainWindow):
 
     def entries(self):
         """ Connection to databank and create table if not existing """
-        if os.path.exists(self.path_of_database):
-            conn = sqlite3.connect(self.path_of_database)
-            c = conn.cursor()
-        else:
-            conn = sqlite3.connect(self.path_of_database)
-            c = conn.cursor()
+        conn = sqlite3.connect(self.path_of_database)
+        c = conn.cursor()
+        # create database if not already exist
+        if not os.path.exists(self.path_of_database):
             c.execute('''CREATE TABLE stocks (ID int, material text, comments text, peak_positions text, reference text, 
             doi text)''')
         c.execute('SELECT * FROM stocks')

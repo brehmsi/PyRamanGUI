@@ -3984,7 +3984,7 @@ class PlotWindow(QMainWindow):
         self.canvas.draw()
 
     def draw_peak_positions(self, peak_positions, id, n_materials):
-        colors = list(mcolors.BASE_COLORS)
+        colors = list(mcolors.TABLEAU_COLORS)
         pp_list = []
         for pp in peak_positions:
             v_line = self.ax.axvline(x=pp, color=colors[n_materials])
