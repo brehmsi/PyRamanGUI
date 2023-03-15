@@ -1,14 +1,13 @@
-# PyRamanGUI - A general purpose Raman evaluation tool 
+# PyRamanGUI - A general purpose Raman analysis tool 
   - Author: Simon Brehm (Email: simon.brehm@physik.tu-freiberg.de) 
   - Coding language: Python 
 
 # Description
 Provides a general purpose tool for Raman spectra evaluation
-  - structure similar to Origin 
-  - use of spreadsheets and plotting windows
+  - constructed as graphical user interface (GUI)
+  - use of spreadsheets, plots, and text windows
   - projects can be saved and loaded
-  - general-purpose background fitting procedure
-  - increased reproducibility of fitting processes 
+  - offeres a variety of analysis methods like peak fitting, baseline correction, smoothing or cosmic spike removal
   
 A tutorial on how to use PyRamanGUI can be found here [Tutorial](doc/README.md)
 
