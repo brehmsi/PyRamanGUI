@@ -7,7 +7,7 @@ from pybaselines import whittaker
 
 
 class BaselineCorrectionMethods:
-    """Class containing all implemented methods of base line correction"""
+    """Class containing all implemented methods of baseline correction"""
 
     def __init__(self):
         # all implemented baseline correction methods

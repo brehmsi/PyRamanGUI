@@ -8,6 +8,7 @@ import matplotlib.patches as mpatches
 import numpy as np
 import operator
 import os
+import pandas as pd
 import pickle
 import prettytable
 import re
@@ -15,7 +16,6 @@ import scipy
 import sys
 import glob
 from matplotlib.figure import Figure
-from matplotlib.backend_bases import MouseEvent
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 import matplotlib.backends.qt_editor.figureoptions as figureoptions
 from PyQt5 import QtGui, QtWidgets, QtCore
@@ -50,6 +50,32 @@ import peakFitting
 ########################################################################################################################
 
 
+class RamanTreeWidgetItem(QtWidgets.QTreeWidgetItem):
+    """
+        A reimplementation of the PyQt QTreeWidgetItem.
+    """
+    def __init__(self, parent=None):
+        """
+        Parameters
+        ----------
+        parent : class, optional
+            (default is None)
+        """
+        super(RamanTreeWidgetItem, self).__init__(parent)
+
+    def mouseMoveEvent(self, event):
+        """mouse move event with implemented drag functionality (https://doc.qt.io/qtforpython/overviews/dnd.html)"""
+        if event.buttons() == QtCore.Qt.LeftButton:
+            drag = QtGui.QDrag(self)
+            mime = QtCore.QMimeData()
+            drag.setMimeData(mime)
+
+            pixmap = QtGui.QPixmap(self.size())
+            self.render(pixmap)
+            drag.setPixmap(pixmap)
+            drag.exec_(QtCore.Qt.CopyAction)
+
+
 class RamanTreeWidget(QtWidgets.QTreeWidget):
     """
     A reimplementation of the PyQt QTreeWidget.
@@ -65,7 +91,7 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
     itemDropped : pyqtSignal
         signal emitted by dropping QTreeWidgetItem
     dragged_item : QTreeWidgetItem
-        QTreeWidgetItem, which was selected by a mouseclick
+        item, which was selected by a mouseclick
 
     Methods
     -------
@@ -247,7 +273,6 @@ class MainWindow(QMainWindow):
         key = event.key()
         if key == (Qt.Key_Control and Qt.Key_S):
             self.save("Save")
-            self.show_statusbar_message("The project was saved", 2000)
         else:
             super(MainWindow, self).keyPressEvent(event)
 
@@ -295,16 +320,17 @@ class MainWindow(QMainWindow):
 
         """
 
-        # Ask for directory, if none is deposite or 'Save Project As' was pressed
+        # Ask for directory, if none is deposit or 'Save Project As' was pressed
         if self.pHomeRmn is None or q == "Save As":
-            fileName = QtWidgets.QFileDialog.getSaveFileName(
+            file_name = QtWidgets.QFileDialog.getSaveFileName(
                 self, "Save as", self.pHomeRmn, "All Files (*);;Raman Files (*.rmn)")
 
-            if fileName[0] != "":
-                self.pHomeRmn = fileName[0]
+            if file_name[0] != "":
+                self.pHomeRmn = file_name[0]
             else:
                 return
 
+        # get data, which should be saved
         save_dict_json = {}
         save_dict = {}
         for key, val in self.folder.items():
@@ -333,6 +359,8 @@ class MainWindow(QMainWindow):
         # save with json
         with open(os.path.splitext(self.pHomeRmn)[0] + ".jrmn", "w", encoding="utf-8") as f:
             json.dump(save_dict_json, f, ensure_ascii=False)
+
+        self.show_statusbar_message("The project was saved", 2000)
 
     def get_save_data_plotwindow(self, window):
         """Get all data and parameter from plot window and store it in dictionary, which will be saved with json"""
@@ -3420,6 +3448,7 @@ class PlotWindow(QMainWindow):
             "Other":
                 "Not yet implemented"
         }
+
         ab = analysisRoutine.MainWindow(self, list_of_methods)
         ab.show()
 
@@ -3427,10 +3456,17 @@ class PlotWindow(QMainWindow):
         """execute own analysis routine"""
         self.select_data_set()
         result_text = "{}\n\n".format(action.text())
+        output_list = []
+        label_list = []
+        parameter_list = []
 
         # opens file and saves content in variable 'v' with json
         with open(action.text(), "rb") as file:
-            v = json.load(file)
+            analysis_routine = json.load(file)
+
+        input_routine, output_routine = analysis_routine["input"], analysis_routine["output"]
+        if len(input_routine) != len(output_routine):
+            print("Something is wrong with the length of the input and output of the analysis routine")
 
         for n in self.selectedDatasetNumber:
             spectrum = self.data[n]["line"]
@@ -3438,11 +3474,33 @@ class PlotWindow(QMainWindow):
             y = spectrum.get_ydata()
             label = spectrum.get_label()
             result_text += "\n{}\n".format(label)
-            for key, val in v.items():
-                result_text += "{}\n".format(key)
-                x, y, result_text = self.apply_own_routine(key, val, x, y, label, result_text)
+            for i, o in zip(input_routine, output_routine):
+
+                result_text += "{}\n".format(i["method"])
+                x, y, result_text, output = self.apply_own_routine(i["method"], i["info"], x, y, label, result_text)
                 if y is None:
                     break
+                if output is None:
+                    continue
+                else:
+                    if o["method"] == "Peak fitting":
+                        label_list.append(label)
+                        buffer_list = []
+                        parameter_list = []
+                        idx_fct = 0
+                        for op, iop in zip(output, o["info"]):
+
+                            for opk in iop["parameter"]:
+                                buffer_list.append(op[opk])
+                                parameter_list.append("{} {} ({})".format(opk, idx_fct, iop["function"]))
+                            idx_fct += 1
+                        output_list.append(buffer_list)
+
+        output_dict = {}
+        for p, o in zip(parameter_list, np.transpose(output_list)):
+            output_dict[p] = o
+        output_dataframe = pd.DataFrame(data=output_dict, index=label_list)
+        output_dataframe.to_excel("output.xlsx")
 
         print(result_text)
         self.mw.new_window(None, "Textwindow", result_text, None)
@@ -3456,7 +3514,9 @@ class PlotWindow(QMainWindow):
             y_cut = y[np.where((x > x_min) & (x < x_max))]
             result_text += "{}\n".format(parameter["name"])
             result_text += "{}\n".format(parameter["parameter"])
-            return x_cut, y_cut, result_text
+            x = x_cut
+            y = y_cut
+            output = None
         elif method == "Baseline correction":
 
             # apply baseline correction
@@ -3473,7 +3533,8 @@ class PlotWindow(QMainWindow):
             # save results
             result_text += "{}\n".format(parameter["name"])
             result_text += "{}\n".format(parameter["parameter"])
-            return x, yb, result_text
+            y = yb
+            output = None
         elif method == "Smoothing":
             # apply smoothing
             parameter = parameter[0]
@@ -3489,11 +3550,13 @@ class PlotWindow(QMainWindow):
             # save results
             result_text += "{}\n".format(parameter["name"])
             result_text += "{}\n".format(parameter["parameter"])
-            return x, y_smoothed, result_text
+            y = y_smoothed
+            output = None
         elif method == "Peak fitting":
             for key in self.fit_functions.n_fit_fct.keys():
                 self.fit_functions.n_fit_fct[key] = len([i["name"] for i in parameter if i["name"] == key])
             p_start = []
+            output_parameter = []
             p_bounds = [[], []]
             for p in parameter:
                 # fit starting parameter
@@ -3510,6 +3573,17 @@ class PlotWindow(QMainWindow):
             except ValueError as e:
                 self.mw.show_statusbar_message(str(e), 4000)
                 return x, None, result_text
+
+            # create output list
+            output = []
+            idx = 0
+            for p in parameter:
+                d = {"function": p["name"]}
+                for key in p["parameter"].keys():
+                    d[key] = popt[idx]
+                    idx += 1
+                output.append(d)
+
             # plot
             y_fit_total = self.fit_functions.FctSumme(x, *popt)
             line, = self.ax.plot(x, y_fit_total, label="{} ({})".format(label, "total fit"))
@@ -3547,9 +3621,12 @@ class PlotWindow(QMainWindow):
 
             # set number of fit functions to 0 again
             self.fit_functions.n_fit_fct = dict.fromkeys(self.fit_functions.n_fit_fct, 0)
-            return x, y_fit_total, result_text
+            y = y_fit_total
         else:
-            return x, None, result_text
+            y = None
+            output = None
+
+        return x, y, result_text, output
 
     def hydrogen_estimation(self):
         """

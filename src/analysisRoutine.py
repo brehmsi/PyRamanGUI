@@ -1,12 +1,15 @@
 from PyQt5 import QtWidgets, QtCore, QtGui
+from PyQt5.QtCore import Qt
 import json
 import os
 
 
 class DragFrame(QtWidgets.QFrame):
-    def __init__(self, label, method_dialog, parent):
+    def __init__(self, label, method_dialog, parent, deletable=True):
         super().__init__(parent)
         self.method_dialog = method_dialog
+        self.deletable = deletable
+
         self.setLineWidth(1)
         self.setFrameStyle(1)
         self.setLayout(QtWidgets.QVBoxLayout())
@@ -54,9 +57,9 @@ class DragFrame(QtWidgets.QFrame):
 
         self.method_label.setText(new_label)
 
-    def mouseMoveEvent(self, e):
-
-        if e.buttons() == QtCore.Qt.LeftButton:
+    def mouseMoveEvent(self, event):
+        """mouse move event with implemented drag functionality (https://doc.qt.io/qtforpython/overviews/dnd.html)"""
+        if event.buttons() == Qt.LeftButton:
             drag = QtGui.QDrag(self)
             mime = QtCore.QMimeData()
             drag.setMimeData(mime)
@@ -64,59 +67,166 @@ class DragFrame(QtWidgets.QFrame):
             pixmap = QtGui.QPixmap(self.size())
             self.render(pixmap)
             drag.setPixmap(pixmap)
+            drag.exec_(Qt.CopyAction)
 
-            drag.exec_(QtCore.Qt.MoveAction)
+            if drag.target() is None:
+                if self.deletable:
+                    self.parent().remove_frame(self)
 
 
-class DropGroupBox(QtWidgets.QGroupBox):
+class GroupBox(QtWidgets.QGroupBox):
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.setAcceptDrops(True)
-        self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self.setStyleSheet('background-color: white')
 
-        self.stretchy = None
+        layout = QtWidgets.QHBoxLayout()
+        self.setLayout(layout)
+        # set minimum height of group boxes
+        minimum_height = 210
+        self.setMinimumHeight(minimum_height)
+
+
+class DropGroupBox(GroupBox):
+
+    def __init__(self, parent, accept_drops=True):
+        super().__init__(parent)
+        self.setAcceptDrops(accept_drops)
+        self.frames = []
 
     def dragEnterEvent(self, event):
-        # keep the default behaviour
-        super(DropGroupBox, self).dragEnterEvent(event)
-        event.accept()
+        event.acceptProposedAction()
 
     def dropEvent(self, event):
+        src = event.source()
 
-        sender = event.source()
+        frame = DragFrame(src.main_label.text(), src.method_dialog, self)
+        self.layout().insertWidget(len(self.frames), frame)
+        self.frames.append(frame)
+        event.acceptProposedAction()
 
-        # keep the default behaviour
-        super(DropGroupBox, self).dropEvent(event)
+    def remove_frame(self, frame):
+        self.frames.remove(frame)
+        self.layout().removeWidget(frame)
+        frame.setParent(None)
 
-        self.layout().addWidget(sender)
-
-        # work around to have stretch at end of groupbox
-        if self.stretchy:
-            self.layout().removeItem(self.stretchy)
-        self.stretchy = QtWidgets.QSpacerItem(
-            10, 10, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
-        self.layout().addItem(self.stretchy)
-
-        event.accept()
-
-    def getDragFrames(self):
+    def get_frames(self):
         """get all DragFrames"""
-        widget_list = []
-        for i in range(self.layout().count()):
-            item = self.layout().itemAt(i)
-            # not spacers
-            if not isinstance(item, QtWidgets.QSpacerItem):
-                widget_list.append(item.widget())
-        return widget_list
+        return self.frames
+
+
+class OutputDialog(QtWidgets.QMainWindow):
+
+    def __init__(self, parent, input_info):
+        super(OutputDialog, self).__init__(parent=parent)
+
+        self.input_info = input_info
+
+        list_of_methods = {
+            "Define data area": self.define_area,
+            "Cosmic spike removal": self.spike_removal,
+            "Smoothing": self.smoothing,
+            "Baseline correction": self.baseline_correction,
+            "Peak fitting": self.fit,
+            "Other": self.other
+        }
+
+        self.output_info = []
+        self.bold_font = QtGui.QFont()
+        self.bold_font.setBold(True)
+
+        # create widget with main layout
+        widget = QtWidgets.QWidget()
+        self.main_layout = QtWidgets.QVBoxLayout()
+        widget.setLayout(self.main_layout)
+        self.setCentralWidget(widget)
+
+        label = QtWidgets.QLabel("Which output do you want?")
+        self.main_layout.addWidget(label)
+
+        for i in self.input_info:
+            self.output_info.append({"method": i["method"]})
+            if i["info"] is None:
+                self.output_info[-1]["info"] = None
+            else:
+                self.output_info[-1]["info"] = list_of_methods[i["method"]](i["info"])
+
+        ok_button = QtWidgets.QPushButton("ok")
+        ok_button.clicked.connect(self.ok_call)
+        self.main_layout.addWidget(ok_button)
+
+    def fit(self, parameter):
+        fit_layout = QtWidgets.QVBoxLayout()
+
+        label = QtWidgets.QLabel("Fit Parameter")
+        label.setFont(self.bold_font)
+        fit_layout.addWidget(label)
+        output_fit_into = []
+        for functions in parameter:
+            label = QtWidgets.QLabel(functions["name"])
+            fit_layout.addWidget(label)
+            # dictionary with function type and fit parameter
+            output_fit_into.append({
+                "function": functions["name"],
+                "parameter": QtWidgets.QListWidget()
+            })
+            output_fit_into[-1]["parameter"].setSelectionMode(QtWidgets.QAbstractItemView.MultiSelection)
+            for p in functions["parameter"].keys():
+                output_fit_into[-1]["parameter"].addItem(p)
+            fit_layout.addWidget(output_fit_into[-1]["parameter"])
+        self.main_layout.addLayout(fit_layout)
+
+        return output_fit_into
+
+    def baseline_correction(self, parameter):
+        label = QtWidgets.QLabel("Baseline correction")
+        label.setFont(self.bold_font)
+        self.main_layout.addWidget(label)
+
+    def define_area(self, parameter):
+        label = QtWidgets.QLabel("Define data area")
+        label.setFont(self.bold_font)
+        self.main_layout.addWidget(label)
+
+    def spike_removal(self, parameter):
+        label = QtWidgets.QLabel("Cosmic spike removal")
+        label.setFont(self.bold_font)
+        self.main_layout.addWidget(label)
+
+    def smoothing(self, parameter):
+        label = QtWidgets.QLabel("Smoothing")
+        label.setFont(self.bold_font)
+        self.main_layout.addWidget(label)
+
+    def other(self, parameter):
+        label = QtWidgets.QLabel("Other")
+        label.setFont(self.bold_font)
+        self.main_layout.addWidget(label)
+
+    def get_output_info(self):
+        for i in self.output_info:
+            if i["method"] == "Peak fitting":
+                if i["info"] is not None:
+                    for j in i["info"]:
+                        selected_items = j["parameter"].selectedItems()
+                        j["parameter"] = [s.text() for s in selected_items]
+
+        return self.output_info
+
+    def ok_call(self):
+        self.output_info = self.get_output_info()
+        self.parent().output_box.layout().addWidget(QtWidgets.QLabel("{}".format(self.output_info)))
+        self.close()
 
 
 class MainWindow(QtWidgets.QMainWindow):
 
     def __init__(self, parent, list_of_methods):
         super(MainWindow, self).__init__(parent=parent)
-        self.drag_buttons = []
+
+        self.list_of_methods = list_of_methods
+        self.output_dialog = None
 
         # create widget with main layout
         widget = QtWidgets.QWidget()
@@ -126,34 +236,33 @@ class MainWindow(QtWidgets.QMainWindow):
         self.routine_name = QtWidgets.QLineEdit("Enter routine name")
 
         # upper group box with draggable frames
-        self.group_box1 = DropGroupBox("Available Methods")
-        layout1 = QtWidgets.QHBoxLayout()
-        for key, val in list_of_methods.items():
-            button = DragFrame(key, val, self.group_box1)
-            self.drag_buttons.append(button)
-            layout1.addWidget(button)
-        self.group_box1.stretchy = QtWidgets.QSpacerItem(
-            10, 10, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
-        layout1.addItem(self.group_box1.stretchy)
-        self.group_box1.setLayout(layout1)
+        self.group_box1 = DropGroupBox("Available Methods", accept_drops=False)
+        for key, val in self.list_of_methods.items():
+            frame = DragFrame(key, val, self.group_box1, deletable=False)
+            self.group_box1.layout().addWidget(frame)
+        self.group_box1.layout().addStretch()
 
         # lower group box
         self.group_box2 = DropGroupBox("Used Methods")
-        layout2 = QtWidgets.QHBoxLayout()
-        self.group_box2.setLayout(layout2)
+        self.group_box2.layout().addStretch()
 
-        # set minimum height of group boxes
-        minimum_height = 210
-        self.group_box1.setMinimumHeight(minimum_height)
-        self.group_box2.setMinimumHeight(minimum_height)
+        # box for output control
+        self.output_box = GroupBox("Output")
 
-        # cancel and ok button
+        # layout for buttons
         button_layout = QtWidgets.QHBoxLayout()
 
+        # ok button
         self.ok_button = QtWidgets.QPushButton("Ok")
         self.ok_button.clicked.connect(self.ok_call)
         button_layout.addWidget(self.ok_button)
 
+        # output button
+        self.output_button = QtWidgets.QPushButton("Output")
+        self.output_button.clicked.connect(self.get_output)
+        button_layout.addWidget(self.output_button)
+
+        # cancel button
         self.cancel_button = QtWidgets.QPushButton("Cancel")
         self.cancel_button.clicked.connect(self.cancel_call)
         button_layout.addWidget(self.cancel_button)
@@ -162,12 +271,26 @@ class MainWindow(QtWidgets.QMainWindow):
         main_layout.addWidget(self.routine_name)
         main_layout.addWidget(self.group_box1)
         main_layout.addWidget(self.group_box2)
+        main_layout.addWidget(self.output_box)
         main_layout.addLayout(button_layout)
         widget.setLayout(main_layout)
         self.setCentralWidget(widget)
         self.setWindowModality(QtCore.Qt.ApplicationModal)
 
+    def get_input_list(self):
+        """ get used methods and their content """
+        frames = self.group_box2.get_frames()
+        input_list = []
+        for f in frames:
+            input_list.append({
+                "method": f.main_label.text(),
+                "info": f.label_list
+            })
+
+        return input_list
+
     def ok_call(self):
+        """finish routine creating"""
         # get name of routine
         name = self.routine_name.text()
         if name == "Enter routine name" or name == "":
@@ -176,11 +299,10 @@ class MainWindow(QtWidgets.QMainWindow):
             message_box.exec_()
             return
 
-        # get content of routine
-        frames = self.group_box2.getDragFrames()
-        save_dict = {}
-        for f in frames:
-            save_dict[f.main_label.text()] = f.label_list
+        input_list = self.get_input_list()
+        output_list = self.get_output_list()
+
+        save_dict = {"input": input_list, "output": output_list}
 
         # create directory
         try:
@@ -194,6 +316,18 @@ class MainWindow(QtWidgets.QMainWindow):
             json.dump(save_dict, f, ensure_ascii=False)
 
         self.close()
+
+    def get_output_list(self):
+        if self.output_dialog is not None:
+            output_list = self.output_dialog.output_info
+        else:
+            output_list = None
+        return output_list
+
+    def get_output(self):
+        output = self.get_input_list()
+        self.output_dialog = OutputDialog(self, output)
+        self.output_dialog.show()
 
     def cancel_call(self):
         self.close()
