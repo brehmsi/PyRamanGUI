@@ -1985,9 +1985,16 @@ class SpreadSheetWindow(QMainWindow):
         # check that x and y have same length to avoid problems later:
         # append Spreadsheet instance
         for pd in self.plot_data:
-            # delete all values, which are nan
+
             if len(pd["x"]) == len(pd["y"]):
-                x_bool = np.logical_not(np.isnan(pd["x"]))
+                # delete all nan values and make sure all values are floats
+                try:
+                    x_bool = np.logical_not(np.isnan(pd["x"]))
+                except TypeError as e:
+                    print(e)
+                    self.mw.show_statusbar_message('It seems their is a strange data typ in one X column.', 4000)
+                    return
+
                 if all(x_bool) is False:
                     pd["x"] = pd["x"][x_bool]
                     pd["y"] = pd["y"][x_bool]
@@ -1995,7 +2002,13 @@ class SpreadSheetWindow(QMainWindow):
                     if pd["yerr"] is not None:
                         pd["yerr"] = pd["yerr"][x_bool]
 
-                y_bool = np.logical_not(np.isnan(pd["y"]))
+                try:
+                    y_bool = np.logical_not(np.isnan(pd["y"]))
+                except TypeError as e:
+                    print(e)
+                    self.mw.show_statusbar_message('It seems their is a strange data typ in one Y column.', 4000)
+                    return
+
                 if all(y_bool) is False:
                     pd["x"] = pd["x"][y_bool]
                     pd["y"] = pd["y"][y_bool]
@@ -2007,7 +2020,7 @@ class SpreadSheetWindow(QMainWindow):
             else:
                 self.mw.show_statusbar_message('X and Y have different lengths', 4000)
                 return
-        # emit signal to MainWindow to create new Plotwindow or add lines to existing plotwindow
+        # emit signal to MainWindow to create new plot window or add lines to existing plot window
         if plot_type is not None:
             self.new_pw_signal.emit()
         else:
