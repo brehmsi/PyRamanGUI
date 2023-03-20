@@ -1647,6 +1647,11 @@ class SpreadSheetWindow(QMainWindow):
         """principal component analysis with all selected y values"""
         selected_columns = sorted(set(self.headers.visualIndex(idx.column()) for idx in
                                       self.header_table.selectedIndexes()))
+
+        if not selected_columns:
+            self.mw.show_statusbar_message('Please select the columns, which should be used!', 4000)
+            return
+
         y_all = []
         # get all data
         for n in selected_columns:
