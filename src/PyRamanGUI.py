@@ -8,7 +8,6 @@ import matplotlib.patches as mpatches
 import numpy as np
 import operator
 import os
-import pandas as pd
 import pickle
 import prettytable
 import re
@@ -3070,26 +3069,28 @@ class PlotWindow(QMainWindow):
             save_data = np.transpose(save_data)
             self.save_to_file('Save data selected data in file', start_file_name, save_data)
 
-    def save_to_file(self, WindowName, startFileName, data):
-        SaveFileName = QFileDialog.getSaveFileName(self, WindowName, startFileName, "All Files (*);;Text Files (*.txt)")
-        if SaveFileName[0] != '':
-            SaveFileName = SaveFileName[0]
-            if SaveFileName[-4:] == '.txt':
+    def save_to_file(self, window_name, file_name, data, header=""):
+        file_name = QFileDialog.getSaveFileName(self, window_name, file_name, "All Files (*);;Text Files (*.txt)")
+        if file_name[0] != '':
+            file_name = file_name[0]
+            if file_name[-4:] == '.txt':
                 pass
             else:
-                SaveFileName = str(SaveFileName) + '.txt'
+                file_name = str(file_name) + '.txt'
         else:
             return
 
         try:
             if isinstance(data, (np.ndarray, np.generic)):
-                np.savetxt(SaveFileName, data, fmt='%.5f')
+                np.savetxt(file_name, data, fmt='%.5f', header=header)
+            elif isinstance(data, list):
+                np.savetxt(file_name, data, fmt="%s", header=header)
             else:
-                file = open(SaveFileName, 'w+')
+                file = open(file_name, 'w+')
                 file.write(data)
                 file.close()
         except Exception as e:
-            self.mw.show_statusbar_message(e, 3000)
+            self.mw.show_statusbar_message(str(e), 3000)
             print(e)
 
     def del_datapoint(self):
@@ -3173,7 +3174,7 @@ class PlotWindow(QMainWindow):
 
     def normalize(self, select_peak=False):
         """
-        normalize spectrum regarding to highest peak or regarding selected peak
+        normalize spectrum regarding the highest peak or regarding the selected peak
         """
         self.select_data_set()
         for n in self.selectedDatasetNumber:
@@ -3514,8 +3515,7 @@ class PlotWindow(QMainWindow):
         self.select_data_set()
         result_text = "{}\n\n".format(action.text())
         output_list = []
-        label_list = []
-        parameter_list = []
+        header = ["name"]
 
         # opens file and saves content in variable 'v' with json
         with open(action.text(), "rb") as file:
@@ -3541,26 +3541,17 @@ class PlotWindow(QMainWindow):
                     continue
                 else:
                     if o["method"] == "Peak fitting":
-                        label_list.append(label)
-                        buffer_list = []
-                        parameter_list = []
+                        buffer_list = [label]
                         idx_fct = 0
                         for op, iop in zip(output, o["info"]):
-
                             for opk in iop["parameter"]:
                                 buffer_list.append(op[opk])
-                                parameter_list.append("{} {} ({})".format(opk, idx_fct, iop["function"]))
+                                if len(header) < len(buffer_list):
+                                    header.append("{} {} ({})".format(opk, idx_fct, iop["function"]))
                             idx_fct += 1
                         output_list.append(buffer_list)
 
-        output_dict = {}
-        for p, o in zip(parameter_list, np.transpose(output_list)):
-            output_dict[p] = o
-
-        # self.save_to_file("Save", "output.txt", output_dict)
-
-        output_dataframe = pd.DataFrame(data=output_dict, index=label_list)
-        output_dataframe.to_excel("output.xlsx")
+        self.save_to_file("Save", "output.txt", output_list, header="".join(header))
 
         print(result_text)
         self.mw.new_window(None, "Textwindow", result_text, None)
