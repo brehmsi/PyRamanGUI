@@ -1125,6 +1125,8 @@ class DataImportDialog(QMainWindow):
         self.main_layout = None
         self.box_add_or_replace = None
         self.box_delimiter = None
+        self.box_skip_lines = None
+        self.box_header = None
         self.label_filename = None
         self.ok_button = None
         self.cancel_button = None
@@ -1157,6 +1159,20 @@ class DataImportDialog(QMainWindow):
         dialog_layout.addWidget(button_filename, n_rows, 1)
         n_rows += 1
 
+        # header
+        label_header = QtWidgets.QLabel("Header")
+        dialog_layout.addWidget(label_header, n_rows, 0)
+        self.box_header = QtWidgets.QCheckBox()
+        dialog_layout.addWidget(self.box_header, n_rows, 1)
+        n_rows += 1
+
+        # skip lines
+        label_skip_lines = QtWidgets.QLabel("Skip lines at beginning")
+        dialog_layout.addWidget(label_skip_lines, n_rows, 0)
+        self.box_skip_lines = QtWidgets.QSpinBox()
+        dialog_layout.addWidget(self.box_skip_lines, n_rows, 1)
+        n_rows += 1
+
         # get delimiter
         label_delimiter = QtWidgets.QLabel("Delimiter")
         dialog_layout.addWidget(label_delimiter, n_rows, 0)
@@ -1182,7 +1198,7 @@ class DataImportDialog(QMainWindow):
         self.main_layout.addLayout(dialog_layout)
         self.main_layout.addLayout(button_layout)
 
-        # create place holder widget
+        # create placeholder widget
         widget = QtWidgets.QWidget()
         widget.setLayout(self.main_layout)
         self.setCentralWidget(widget)
@@ -1213,29 +1229,50 @@ class DataImportDialog(QMainWindow):
     def get_delimiter(self):
         return self.delimiters.get(self.box_delimiter.currentText(), " ")
 
+    def get_skip_header(self):
+        return self.box_skip_lines.value()
+
+    def get_names(self):
+        if self.box_header.isChecked():
+            return True
+        else:
+            return None
+
     def load_data(self):
         # load new data
         loaded_data = []
         n_lines = []
         delimiter = self.get_delimiter()
+        skip_header = self.get_skip_header()
+        names = self.get_names()
+        header = []
         for j in range(len(self.file_names)):
             try:
-                loaded_data.append(np.genfromtxt(self.file_names[j], delimiter=delimiter))
+                dat = np.genfromtxt(self.file_names[j], delimiter=delimiter, skip_header=skip_header, names=names, dtype=float)
+                header.append(dat.dtype.names)
             except Exception as e:
                 self.parent.mw.show_statusbar_message("The file couldn't be imported", 4000)
                 print('{} \nThe file could not be imported, maybe the columns have different lengths'.format(e))
                 return
 
-            try:
-                loaded_data[j] = np.transpose(loaded_data[j])
-            except IndexError as e:
-                print("The data format is not readable for PyRamanGui\n", e)
-                return
+            # transpose data (change rows and columns
+            if names:
+                data_transpose = []
+                for dat_name in dat.dtype.names:
+                    data_transpose.append(dat[dat_name])
 
-            if isinstance(loaded_data[j][0], float):
-                loaded_data[j] = [loaded_data[j], np.ones(len(loaded_data[j])) * np.nan]
+            else:
+                try:
+                    data_transpose = np.transpose(dat)
+                except IndexError as e:
+                    print("The data format is not readable for PyRamanGui\n", e)
+                    return
 
-            n_lines.append(len(loaded_data[j]))
+            if isinstance(data_transpose[0], float):
+                data_transpose = [data_transpose, np.ones(len(data_transpose)) * np.nan]
+
+            n_lines.append(len(data_transpose))
+            loaded_data.append(data_transpose)
 
         # set header
         for k in range(len(self.file_names)):
@@ -1247,6 +1284,8 @@ class DataImportDialog(QMainWindow):
                 short_name = str(os.path.splitext(os.path.basename(self.file_names[k]))[0])
                 self.data.append(self.parent.create_data(loaded_data[k][j], shortname=short_name,
                                                          type=col_type, filename=self.file_names[k]))
+                if header[k] is not None:
+                    self.data[-1]["longname"] = header[k][j]
             self.cols = self.cols + n_lines[k]
 
     def apply_cancel(self):
@@ -1254,7 +1293,7 @@ class DataImportDialog(QMainWindow):
         self.close()
 
     def apply_ok(self):
-        """ if ok was clicked"""
+        """ ok was clicked"""
         # check if file was selected
         if self.file_names is None:
             self.parent.mw.show_statusbar_message("You have to select a file for import", 4000)
@@ -1830,8 +1869,8 @@ class SpreadSheetWindow(QMainWindow):
         # set data
         for c in range(cols_before, self.cols):
             for r in range(len(self.data[c]["data"])):
-                newcell = QTableWidgetItem(str(self.data[c]["data"][r]))
-                self.data_table.setItem(r, c, newcell)
+                new_cell = QTableWidgetItem(str(self.data[c]["data"][r]))
+                self.data_table.setItem(r, c, new_cell)
 
         # self.pHomeTxt = FileName[0]
 
@@ -3517,6 +3556,9 @@ class PlotWindow(QMainWindow):
         output_dict = {}
         for p, o in zip(parameter_list, np.transpose(output_list)):
             output_dict[p] = o
+
+        # self.save_to_file("Save", "output.txt", output_dict)
+
         output_dataframe = pd.DataFrame(data=output_dict, index=label_list)
         output_dataframe.to_excel("output.xlsx")
 
