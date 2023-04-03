@@ -815,8 +815,13 @@ class MainWindow(QMainWindow):
             d["line"] = spect
 
         if axis_option["axis break"]:
-            brokenaxes(xlims=((axis_option["x lower limit"], axis_option["x upper limit"]),
+            baxes = brokenaxes(xlims=((axis_option["x lower limit"], axis_option["x upper limit"]),
                               (axis_option["x lower limit 2"], axis_option["x upper limit 2"])), fig=fig)
+            for d in data:
+                for ol, nl in zip(baxes.old_lines, baxes.new_lines[0]):
+                    if ol == d["line"]:
+                        d["line"] = nl
+
             handles, labels = fig.axes[2].get_legend_handles_labels()
         else:
             handles, labels = ax.get_legend_handles_labels()
@@ -848,7 +853,6 @@ class MainWindow(QMainWindow):
                 arrow.set_arrowstyle(a["style"])
             arrow.set_figure(fig)
             ax.add_patch(arrow)
-
         for t in settings_dictionary["annotations"]["text"]:
             ax.annotate(t["text"], t["position"], picker=True, fontsize=t["font size"], color=t["color"])
         return fig

@@ -119,9 +119,9 @@ class BrokenAxes:
             leg_draggable = old_legend._draggable is not None
             try:
                 # dependent on matplotlib version (>= 3.6.0 _ncols else _ncol)
-                _ncol = old_legend._ncol
+                leg_ncol = old_legend._ncol
             except AttributeError:
-                _ncol = old_legend._ncols
+                leg_ncol = old_legend._ncols
             leg_fontsize = int(old_legend._fontsize)
             leg_frameon = old_legend.get_frame_on()
             leg_shadow = old_legend.shadow

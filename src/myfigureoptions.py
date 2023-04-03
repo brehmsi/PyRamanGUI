@@ -405,7 +405,8 @@ def figure_edit(axes, parent=None):
             axes[2].xaxis.set_tick_params(labelsize=ticksize)
 
             if ytickspace == 0:
-                ax.yaxis.set_ticks([])
+                axes[1].yaxis.set_ticks([])
+                axes[2].yaxis.set_ticks([])
             elif ytickspace is not None:
                 ytick_space_start = math.ceil(ylim_left / ytickspace) * ytickspace
                 axes[1].yaxis.set_ticks(np.arange(ytick_space_start, ylim_right, ytickspace))
