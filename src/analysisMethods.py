@@ -137,6 +137,7 @@ class BaselineCorrectionMethods:
         also look at: https://stackoverflow.com/questions/29156532/python-baseline-correction-library
         """
         baseline, _ = whittaker.asls(y, lam=lam, p=p)
+
         y_corr = y - baseline
         return y_corr, baseline
 

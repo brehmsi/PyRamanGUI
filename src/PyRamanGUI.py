@@ -2818,7 +2818,11 @@ class PlotWindow(QMainWindow):
         if self.ax.get_legend() is not None:
             old_legend = self.ax.get_legend()
             leg_draggable = old_legend._draggable is not None
-            leg_ncol = old_legend._ncol
+            try:
+                # dependent on matplotlib version (>= 3.6.0 _ncols else _ncol)
+                leg_ncol = old_legend._ncol
+            except AttributeError:
+                leg_ncol = old_legend._ncols
             leg_fontsize = int(old_legend._fontsize)
             leg_frameon = old_legend.get_frame_on()
             leg_shadow = old_legend.shadow
@@ -2918,7 +2922,7 @@ class PlotWindow(QMainWindow):
         analysisMenu.addAction('Find Peak', self.find_peaks)
 
         # 3.5 Get Area below curve
-        analysisMenu.addAction('Get Area below Curve', self.detemine_area)
+        analysisMenu.addAction('Get Area below Curve', self.determine_area)
 
         # 4. menu: spectra data base
         menubar.addAction('&Data base peak positions', self.open_peakdatabase)
@@ -3380,7 +3384,7 @@ class PlotWindow(QMainWindow):
         self.ax.autoscale(True)
         return x_min, x_max
 
-    def detemine_area(self):
+    def determine_area(self):
         self.select_data_set()
         area = {}
         for n in self.selectedDatasetNumber:
@@ -3508,7 +3512,7 @@ class PlotWindow(QMainWindow):
             "Peak fitting":
                 peakFitting.Dialog(self),
             "Other":
-                "Not yet implemented"
+                "Not yet implemented",
         }
 
         ab = analysisRoutine.MainWindow(self, list_of_methods)
