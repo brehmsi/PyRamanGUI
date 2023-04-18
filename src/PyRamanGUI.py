@@ -528,21 +528,26 @@ class MainWindow(QMainWindow):
                         "marker edge color": ec}
                     window_data[i]["line options"] = curvedata
 
-        # get styles for errorbars
+        # get styles for error bars
         for container in ax1.containers:
             if type(container) == matplotlib.container.ErrorbarContainer:
                 plotline, caplines, barlinecols = container
                 try:
-                    idx = [window.data.index(wd) for wd in window.data if plotline == wd["line"]]
+                    idx = 0
+                    for i, wd in enumerate(window.data):
+                        if plotline == wd["line"]:
+                            idx = i
+                            break
+                    # idx = [window.data.index(wd) for wd in window.data if plotline == wd["line"]][0]
                 except KeyError as e:
                     print(e)
                     print(window.data)
                     continue
                 error_color = mcolors.to_hex(
                     mcolors.to_rgba(caplines[0].get_markerfacecolor(), barlinecols[0].get_alpha()), keep_alpha=True)
-                window_data[idx[0]]["line options"]["error bar cap size"] = caplines[0].get_markersize()
-                window_data[idx[0]]["line options"]["error bar line width"] = caplines[0].get_markeredgewidth()
-                window_data[idx[0]]["line options"]["error bar color"] = error_color
+                window_data[idx]["line options"]["error bar cap size"] = caplines[0].get_markersize()
+                window_data[idx]["line options"]["error bar line width"] = caplines[0].get_markeredgewidth()
+                window_data[idx]["line options"]["error bar color"] = error_color
 
         figure_settings = {"general": general, "axis options": axis_options, "legend": legend}
         save_data = [window_data, {"figure settings": figure_settings, "annotations": annotations}]
@@ -1855,6 +1860,10 @@ class SpreadSheetWindow(QMainWindow):
         di.closeSignal.connect(loop.quit)
         loop.exec_()
 
+        if not di.data:
+            self.mw.show_statusbar_message("The file could not be imported! Please check the error messages!")
+            return
+
         self.data = di.data
         cols_before = di.cols_before
 
@@ -2056,9 +2065,19 @@ class SpreadSheetWindow(QMainWindow):
                     self.mw.show_statusbar_message('It seems their is a strange data typ in one Y column.', 4000)
                     return
 
+                # make y_bool to numpy array first to avoid TypeError
+                y_bool = np.array(y_bool)
+
                 if all(y_bool) is False:
-                    pd["x"] = pd["x"][y_bool]
-                    pd["y"] = pd["y"][y_bool]
+                    try:
+                        pd["x"] = pd["x"][y_bool]
+                        pd["y"] = pd["y"][y_bool]
+                    except TypeError as e:
+                        self.mw.show_statusbar_message('Something is wrong! Check for error messages!', 4000)
+                        print(e)
+                        print(y_bool)
+                        print(type(y_bool))
+                        return
                     # Error
                     if pd["yerr"] is not None:
                         pd["yerr"] = pd["yerr"][y_bool]
@@ -2698,7 +2717,7 @@ class PlotWindow(QMainWindow):
                 self.data[0]["xaxis"] = r'Raman shift / cm$^{-1}$'
 
             if self.data[0]["yaxis"] is None:
-                self.data[0]["yaxis"] = r'Intensity / cts/s'
+                self.data[0]["yaxis"] = r'Raman Intensity / Arbitr. Units'
 
             self.ax.set_xlabel(self.data[0]["xaxis"], fontsize=labelfontsize)
             self.ax.set_ylabel(self.data[0]["yaxis"], fontsize=labelfontsize)
