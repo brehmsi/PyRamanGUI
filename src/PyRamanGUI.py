@@ -1861,7 +1861,7 @@ class SpreadSheetWindow(QMainWindow):
         loop.exec_()
 
         if not di.data:
-            self.mw.show_statusbar_message("The file could not be imported! Please check the error messages!")
+            self.mw.show_statusbar_message("The file could not be imported! Please check the error messages!", 6000)
             return
 
         self.data = di.data
