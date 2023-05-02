@@ -1898,6 +1898,9 @@ class SpreadSheetWindow(QMainWindow):
             self.data[col]["data"][row] = new_cell_content
         except IndexError:  # occurs if index is out of bounds
             self.data[col]["data"] = np.append(self.data[col]["data"], new_cell_content)
+        except ValueError:
+            self.mw.show_statusbar_message("Only numbers please", 5000)
+            item.setText("")
 
     def update_header(self, item):
         """if header is changed, self.data is changed too"""
@@ -1940,7 +1943,7 @@ class SpreadSheetWindow(QMainWindow):
         if data_content is None:
             data_content = np.zeros(self.rows)
         elif len(data_content) != self.rows:
-            self.mw.show_statusbar_message("data has different length than table rows")
+            self.mw.show_statusbar_message("data has different length than table rows", 5000)
             return
 
         if short_name is None:
@@ -2048,7 +2051,7 @@ class SpreadSheetWindow(QMainWindow):
                     x_bool = np.logical_not(np.isnan(pd["x"]))
                 except TypeError as e:
                     print(e)
-                    self.mw.show_statusbar_message('It seems their is a strange data typ in one X column.', 4000)
+                    self.mw.show_statusbar_message('It seems there is a strange data typ in one X column.', 4000)
                     return
 
                 if all(x_bool) is False:
@@ -2062,11 +2065,8 @@ class SpreadSheetWindow(QMainWindow):
                     y_bool = np.logical_not(np.isnan(pd["y"]))
                 except TypeError as e:
                     print(e)
-                    self.mw.show_statusbar_message('It seems their is a strange data typ in one Y column.', 4000)
+                    self.mw.show_statusbar_message('It seems there is a strange data typ in one Y column.', 4000)
                     return
-
-                # make y_bool to numpy array first to avoid TypeError
-                y_bool = np.array(y_bool)
 
                 if all(y_bool) is False:
                     try:
@@ -2074,9 +2074,7 @@ class SpreadSheetWindow(QMainWindow):
                         pd["y"] = pd["y"][y_bool]
                     except TypeError as e:
                         self.mw.show_statusbar_message('Something is wrong! Check for error messages!', 4000)
-                        print(e)
-                        print(y_bool)
-                        print(type(y_bool))
+                        print(e, "line 2077")
                         return
                     # Error
                     if pd["yerr"] is not None:
@@ -2714,7 +2712,7 @@ class PlotWindow(QMainWindow):
                                               picker=True, pickradius=5)
             self.ax.legend(fontsize=legendfontsize)
             if self.data[0]["xaxis"] is None:
-                self.data[0]["xaxis"] = r'Raman shift / cm$^{-1}$'
+                self.data[0]["xaxis"] = r'Raman Shift / cm$^{-1}$'
 
             if self.data[0]["yaxis"] is None:
                 self.data[0]["yaxis"] = r'Raman Intensity / Arbitr. Units'
@@ -3652,16 +3650,6 @@ class PlotWindow(QMainWindow):
                 self.mw.show_statusbar_message(str(e), 4000)
                 return x, None, result_text
 
-            # create output list
-            output = []
-            idx = 0
-            for p in parameter:
-                d = {"function": p["name"]}
-                for key in p["parameter"].keys():
-                    d[key] = popt[idx]
-                    idx += 1
-                output.append(d)
-
             # plot
             y_fit_total = self.fit_functions.FctSumme(x, *popt)
             line, = self.ax.plot(x, y_fit_total, label="{} ({})".format(label, "total fit"))
@@ -3681,17 +3669,31 @@ class PlotWindow(QMainWindow):
             print_table.field_names = ["Parameters", "Values", "Errors"]
             print_table.add_rows([["background", round(popt[0], 5), round(perr[0], 5)], ["", "", ""]])
             a = 1
-            for key in self.fit_functions.n_fit_fct.keys():  # iterate over Lorentz, Gauss, BWF
+            area = {}
+            for key in self.fit_functions.n_fit_fct.keys():  # iterate over Lorentz, Gauss, BWF, ...
+                area[key] = []
                 for j in range(self.fit_functions.n_fit_fct[key]):  # iterate over used fit functions per L, G or BWF
                     print_table.add_row(["{} {}".format(key, j + 1), "", ""])
                     params = popt[a: a + len(self.fit_functions.function_parameters[key])]
-                    y_1fit = self.fit_functions.implemented_functions[key](x, *params)
-                    area = np.trapz(y_1fit, x)
+                    y_1fit = popt[0] + self.fit_functions.implemented_functions[key](x, *params)
+                    area[key].append(np.trapz(y_1fit, x))
                     self.ax.plot(x, y_1fit, label="{} (fit {} {})".format(label, key, j + 1))
-                    for parameter in self.fit_functions.function_parameters[key].keys():
-                        print_table.add_row([parameter, round(popt[a], 5), round(perr[a], 5)])
+                    for p in self.fit_functions.function_parameters[key].keys():
+                        print_table.add_row([p, round(popt[a], 5), round(perr[a], 5)])
                         a += 1
-                    print_table.add_rows([["area under curve", round(area, 5), ""], ["", "", ""]])
+                    print_table.add_rows([["area under curve", round(area[key][-1], 5), ""], ["", "", ""]])
+
+            # create output list
+            output = []
+            idx = 0
+            for p in parameter:
+                d = {"function": p["name"]}
+                for key in p["parameter"].keys():
+                    d[key] = popt[idx]
+                    idx += 1
+                if p["name"] != '':
+                    d["area"] = area[p["name"]].pop(0)
+                output.append(d)
 
             # save results
             result_text += "R^2 = {}\n".format(r_squared)
@@ -3743,7 +3745,7 @@ class PlotWindow(QMainWindow):
 
             print(self.data[n]["line"].get_label())
             if mIG > 0:
-                hydrogen_content = 21.7 + 16.6 * math.log(mIG * 10 ** 4)
+                hydrogen_content = 21.7 + 16.6 * math.log10(mIG * 10 ** 4)
                 print("Slope: {}\nhydrogen content: {}".format(mIG, hydrogen_content))
             else:
                 print('negative slope')

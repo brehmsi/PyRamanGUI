@@ -205,7 +205,7 @@ class Dialog(QtWidgets.QMainWindow):
         self.main_layout.addWidget(self.table)
         self.main_layout.addLayout(button_layout_03)
 
-        # create place holder widget
+        # create placeholder widget
         widget = QtWidgets.QWidget()
         widget.setLayout(self.main_layout)
         self.setCentralWidget(widget)

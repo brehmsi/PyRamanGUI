@@ -286,6 +286,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 "method": f.main_label.text(),
                 "info": f.label_list
             })
+            if input_list[-1]["method"] == "Peak fitting":
+                for i in input_list[-1]["info"]:
+                    if i["name"] != '':
+                        i["parameter"]["area"] = [0.0, 0.0, 0.0]
 
         return input_list
 
