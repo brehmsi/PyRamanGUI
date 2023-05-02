@@ -1130,11 +1130,19 @@ class DataImportDialog(QMainWindow):
             "Semicolon": ";"
         }
 
+        self.comments = [
+            "#",
+            "%",
+            "&",
+            None
+        ]
+
         self.main_layout = None
         self.box_add_or_replace = None
         self.box_delimiter = None
         self.box_skip_lines = None
         self.box_header = None
+        self.box_comments = None
         self.label_filename = None
         self.ok_button = None
         self.cancel_button = None
@@ -1159,6 +1167,7 @@ class DataImportDialog(QMainWindow):
 
         # get file name(s)
         self.label_filename = QtWidgets.QLabel("File name(s)")
+        self.label_filename.setToolTip("One or several filenames")
         dialog_layout.addWidget(self.label_filename, n_rows, 0)
         button_filename = QtWidgets.QPushButton()
         icon = button_filename.style().standardIcon(getattr(QtWidgets.QStyle, "SP_FileDialogStart"))
@@ -1167,22 +1176,38 @@ class DataImportDialog(QMainWindow):
         dialog_layout.addWidget(button_filename, n_rows, 1)
         n_rows += 1
 
-        # header
-        label_header = QtWidgets.QLabel("Header")
-        dialog_layout.addWidget(label_header, n_rows, 0)
-        self.box_header = QtWidgets.QCheckBox()
-        dialog_layout.addWidget(self.box_header, n_rows, 1)
-        n_rows += 1
-
         # skip lines
         label_skip_lines = QtWidgets.QLabel("Skip lines at beginning")
+        label_skip_lines.setToolTip("The number of lines to skip at the beginning of the file.")
         dialog_layout.addWidget(label_skip_lines, n_rows, 0)
         self.box_skip_lines = QtWidgets.QSpinBox()
         dialog_layout.addWidget(self.box_skip_lines, n_rows, 1)
         n_rows += 1
 
+        # header
+        label_header = QtWidgets.QLabel("Header")
+        label_header.setToolTip("If checked, the first line after the first skipped lines is used as header.")
+        dialog_layout.addWidget(label_header, n_rows, 0)
+        self.box_header = QtWidgets.QCheckBox()
+        dialog_layout.addWidget(self.box_header, n_rows, 1)
+        n_rows += 1
+
+        # comments
+        label_comments = QtWidgets.QLabel("Comments")
+        label_comments.setToolTip("The character used to indicate the start of a comment. "
+                                  "All the characters occurring on a line after a comment are discarded.")
+        dialog_layout.addWidget(label_comments, n_rows, 0)
+        self.box_comments = QtWidgets.QComboBox()
+        for d in self.comments:
+            self.box_comments.addItem(d)
+        # make only the last item editable
+        self.box_comments.currentIndexChanged.connect(self.comment_editable)
+        dialog_layout.addWidget(self.box_comments, n_rows, 1)
+        n_rows += 1
+
         # get delimiter
         label_delimiter = QtWidgets.QLabel("Delimiter")
+        label_delimiter.setToolTip("The character used to separate values.")
         dialog_layout.addWidget(label_delimiter, n_rows, 0)
         self.box_delimiter = QtWidgets.QComboBox()
         for d in self.delimiters.keys():
@@ -1214,6 +1239,12 @@ class DataImportDialog(QMainWindow):
         self.setWindowTitle("Data import")
         self.setWindowModality(QtCore.Qt.ApplicationModal)
 
+    def comment_editable(self, index):
+        if index == (self.box_comments.count()-1):
+            self.box_comments.setEditable(True)
+        else:
+            self.box_comments.setEditable(False)
+
     def add_or_replace(self):
         if self.box_add_or_replace is None or self.box_add_or_replace.currentText() == "Replace":
             self.data = []
@@ -1234,6 +1265,9 @@ class DataImportDialog(QMainWindow):
                 text += "{}\n".format(f)
             self.label_filename.setText(text)
 
+    def get_comments(self):
+        return self.box_comments.currentText()
+
     def get_delimiter(self):
         return self.delimiters.get(self.box_delimiter.currentText(), " ")
 
@@ -1253,10 +1287,16 @@ class DataImportDialog(QMainWindow):
         delimiter = self.get_delimiter()
         skip_header = self.get_skip_header()
         names = self.get_names()
+        comments = self.get_comments()
         header = []
         for j in range(len(self.file_names)):
             try:
-                dat = np.genfromtxt(self.file_names[j], delimiter=delimiter, skip_header=skip_header, names=names, dtype=float)
+                if comments is not None and comments != "":
+                    dat = np.genfromtxt(self.file_names[j], delimiter=delimiter, skip_header=skip_header, names=names,
+                                        dtype=float, comments=comments)
+                else:
+                    dat = np.genfromtxt(self.file_names[j], delimiter=delimiter, skip_header=skip_header, names=names,
+                                        dtype=float)
                 header.append(dat.dtype.names)
             except Exception as e:
                 self.parent.mw.show_statusbar_message("The file couldn't be imported", 4000)
