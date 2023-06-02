@@ -1812,21 +1812,20 @@ class SpreadSheetWindow(QMainWindow):
         self.row_headers.setSelectionMode(QAbstractItemView.SingleSelection)
 
     def row_options(self, position):
-        selected_row = self.row_headers.logicalIndexAt(position)
         header_menu = QMenu()
-        delete_row = header_menu.addAction('Delete this row')
+        delete_row = header_menu.addAction("Delete this row")
         ac = header_menu.exec_(self.data_table.mapToGlobal(position))
-        # Delete selected colums
+        # Delete selected columns
         if ac == delete_row:
             # Get the index of all selected rows in reverse order, so that last row is deleted first
-            selRow = sorted(set(index.row() for index in self.data_table.selectedIndexes()), reverse=True)
+            selected_row = sorted(set(index.row() for index in self.data_table.selectedIndexes()), reverse=True)
             for c in range(self.cols):
-                for r in selRow:
+                for r in selected_row:
                     try:
                         self.data[c]["data"] = np.delete(self.data[c]["data"], r)  # Delete data
                     except IndexError as e:
                         print(e)
-            for k in selRow:
+            for k in selected_row:
                 self.data_table.removeRow(k)  # Delete row
                 self.rows = self.rows - 1
 
@@ -1975,8 +1974,8 @@ class SpreadSheetWindow(QMainWindow):
                     self.data[col]["data"] = new_data
 
                 for r in range(len(self.data[col]["data"])):
-                    newcell = QTableWidgetItem(str(self.data[col]["data"][r]))
-                    self.data_table.setItem(r, col, newcell)
+                    new_cell = QTableWidgetItem(str(self.data[col]["data"][r]))
+                    self.data_table.setItem(r, col, new_cell)
 
     def new_col(self, data_content=None, short_name=None):
         # adds a new column at end of table
@@ -2078,7 +2077,8 @@ class SpreadSheetWindow(QMainWindow):
                         k = k - 1
 
                 if k == -1:
-                    self.mw.show_statusbar_message('At least one dataset Y has no assigned X dataset.', 4000)
+                    self.mw.show_statusbar_message("At least one dataset Y has no assigned X dataset.", 4000)
+                    self.mw.show_statusbar_message("At least one dataset Y has no assigned X dataset.", 4000)
                     return
 
         # check that x and y have same length to avoid problems later:
@@ -2087,6 +2087,11 @@ class SpreadSheetWindow(QMainWindow):
 
             if len(pd["x"]) == len(pd["y"]):
                 # delete all nan values and make sure all values are floats
+
+                pd["x"], pd["y"] = np.array(pd["x"]), np.array(pd["y"])
+                if pd["yerr"] is not None:
+                    pd["yerr"] = np.array(pd["yerr"])
+
                 try:
                     x_bool = np.logical_not(np.isnan(pd["x"]))
                 except TypeError as e:
@@ -2095,8 +2100,13 @@ class SpreadSheetWindow(QMainWindow):
                     return
 
                 if all(x_bool) is False:
-                    pd["x"] = pd["x"][x_bool]
-                    pd["y"] = pd["y"][x_bool]
+                    try:
+                        pd["x"] = pd["x"][x_bool]
+                        pd["y"] = pd["y"][x_bool]
+                    except TypeError as e:
+                        self.mw.show_statusbar_message('Something is wrong! Check for error messages!', 4000)
+                        print(e, "line 2101")
+                        return
                     # Error
                     if pd["yerr"] is not None:
                         pd["yerr"] = pd["yerr"][x_bool]
@@ -2114,7 +2124,7 @@ class SpreadSheetWindow(QMainWindow):
                         pd["y"] = pd["y"][y_bool]
                     except TypeError as e:
                         self.mw.show_statusbar_message('Something is wrong! Check for error messages!', 4000)
-                        print(e, "line 2077")
+                        print(e, "line 2122")
                         return
                     # Error
                     if pd["yerr"] is not None:
@@ -2132,7 +2142,7 @@ class SpreadSheetWindow(QMainWindow):
 
     def closeEvent(self, event):
         close = QMessageBox()
-        close.setWindowTitle('Quit')
+        close.setWindowTitle("Quit")
         close.setText("You sure?")
         close.setStandardButtons(QMessageBox.Yes | QMessageBox.Cancel)
         close = close.exec_()

@@ -592,8 +592,9 @@ class BaselineCorrectionDialog(AnalysisDialog):
             return
         else:
             yb, zb = return_value
-        self.base_line, = self.ax.plot(self.x, zb, "c--", label="baseline ({})".format(self.spectrum.get_label()))
-        self.spectrum_corr, = self.ax.plot(self.x, yb, "c-",
+        self.base_line, = self.ax.plot(self.x, zb, "k--", label="baseline ({})".format(self.spectrum.get_label()))
+        color = self.spectrum.get_color()
+        self.spectrum_corr, = self.ax.plot(self.x, yb, color=color,
                                            label="{} (baseline corrected)".format(self.spectrum.get_label()))
         self.fig.canvas.draw()
 
@@ -613,6 +614,7 @@ class BaselineCorrectionDialog(AnalysisDialog):
     def finish_call(self):
         params = self.methods[self.blcm.current_method]["parameter"].values()
         name = self.spectrum.get_label()
+        color = self.spectrum.get_color()
         for key, val in self.parameter_editor.items():
             if key == "roi":
                 for i, roi_pe in enumerate(val):
@@ -632,9 +634,9 @@ class BaselineCorrectionDialog(AnalysisDialog):
 
         # Plot
         label_spct = "{} (baseline-corrected)".format(name)
-        spct_corr, = self.ax.plot(self.x, yb, "c-", label=label_spct)
+        spct_corr, = self.ax.plot(self.x, yb, color=color, label=label_spct)
         self.pw.data.append(self.pw.create_data(self.x, yb, line=spct_corr, label=label_spct, style="-"))
-        baseline, = self.ax.plot(self.x, zb, "c--", label="baseline ({})".format(name))
+        baseline, = self.ax.plot(self.x, zb, "k--", label="baseline ({})".format(name))
         self.pw.data.append(self.pw.create_data(
             self.x, zb, line=baseline, label="baseline ({})".format(name), style="-"))
         self.fig.canvas.draw()
@@ -666,8 +668,9 @@ class BaselineCorrectionDialog(AnalysisDialog):
             return
         else:
             yb, zb = return_value
-        self.base_line, = self.ax.plot(self.x, zb, "c--", label="baseline ({})".format(name))
-        self.spectrum_corr, = self.ax.plot(self.x, yb, "c-", label="baseline-corrected ({})".format(name))
+        self.base_line, = self.ax.plot(self.x, zb, "k--", label="baseline ({})".format(name))
+        color = self.spectrum.get_color()
+        self.spectrum_corr, = self.ax.plot(self.x, yb, color=color, label="baseline-corrected ({})".format(name))
         self.fig.canvas.draw()
 
     def closeEvent(self, event):
