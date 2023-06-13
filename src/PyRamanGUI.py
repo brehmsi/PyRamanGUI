@@ -10,6 +10,7 @@ import operator
 import os
 import pickle
 import prettytable
+import rampy as rp
 import re
 import scipy
 import sys
@@ -1331,7 +1332,7 @@ class DataImportDialog(QMainWindow):
                     col_type = "Y"
                 short_name = str(os.path.splitext(os.path.basename(self.file_names[k]))[0])
                 self.data.append(self.parent.create_data(loaded_data[k][j], shortname=short_name,
-                                                         type=col_type, filename=self.file_names[k]))
+                                                         column_type=col_type, filename=self.file_names[k]))
                 if header[k] is not None:
                     self.data[-1]["longname"] = header[k][j]
             self.cols = self.cols + n_lines[k]
@@ -1502,8 +1503,8 @@ class SpreadSheetWindow(QMainWindow):
         # 'Axis Label', 'Unit', 'Comments')
 
         if data is None:
-            self.data = [self.create_data(np.full(9, np.nan), shortname="A", type="X"),
-                         self.create_data(np.full(9, np.nan), shortname="B", type="Y")]
+            self.data = [self.create_data(np.full(9, np.nan), shortname="A", column_type="X"),
+                         self.create_data(np.full(9, np.nan), shortname="B", column_type="Y")]
         else:
             self.data = data
         self.mw = parent
@@ -1542,16 +1543,17 @@ class SpreadSheetWindow(QMainWindow):
 
         self.show()
 
-    def create_data(self, data_content, shortname="A", type="Y", filename=None):
+    def create_data(self, data_content, shortname="A", column_type="Y", filename=None, long_name=None, axis_label=None,
+                    unit=None, comments=None, formula=None):
         data_dict = {"data": data_content,
                      "shortname": shortname,
-                     "type": type,
+                     "type": column_type,
                      "filename": filename,
-                     "longname": None,
-                     "axis label": None,
-                     "unit": None,
-                     "comments": None,
-                     "formula": None}
+                     "longname": long_name,
+                     "axis label": axis_label,
+                     "unit": unit,
+                     "comments": comments,
+                     "formula": formula}
         return data_dict
 
     def create_table_items(self):
@@ -1587,7 +1589,9 @@ class SpreadSheetWindow(QMainWindow):
         # 2. menu item: Edit
         editMenu = self.menubar.addMenu('&Edit')
         editMenu.addAction('New Column', self.new_col)
-        editMenu.addAction("Select all X columns", self.select_all_X)
+        editMenu.addAction("Select all X columns", lambda: self.select_all_("X"))
+        editMenu.addAction("Select all Y columns", lambda: self.select_all_("Y"))
+        editMenu.addAction("Resample", self.resample_x_axis)
 
         # 3. menu item: Plot
         plotMenu = self.menubar.addMenu('&Plot')
@@ -1725,9 +1729,45 @@ class SpreadSheetWindow(QMainWindow):
         self.data[selected_column]["data"] = np.flip(self.data[selected_column]["data"])
         self.create_table_items()
 
-    def select_all_X(self):
+    def resample_x_axis(self):
+        idx_y = sorted(set(self.headers.visualIndex(idx.column()) for idx in self.header_table.selectedIndexes()))
+        # get indices of corresponding x columns
+        idx_x = [self.get_assigned_x_column(i) for i in idx_y]
+
+        # create new array for x data
+        x_min = min(self.data[idx_x[0]]["data"])
+        x_max = max(self.data[idx_x[0]]["data"])
+        for ix in idx_x:
+            x_min = max(x_min, min(self.data[ix]["data"]))
+            x_max = min(x_max, max(self.data[ix]["data"]))
+
+        # create new arrays for y data with shared x-axis
+        x_new = np.arange(x_min, x_max, 1.0)
+        data_new = [self.create_data(x_new,
+                                     shortname=self.data[idx_x[0]]["shortname"],
+                                     column_type=self.data[idx_x[0]]["type"],
+                                     filename=self.data[idx_x[0]]["filename"],
+                                     long_name=self.data[idx_x[0]]["longname"],
+                                     axis_label=self.data[idx_x[0]]["axis label"],
+                                     unit=self.data[idx_x[0]]["unit"],
+                                     comments=self.data[idx_x[0]]["comments"],
+                                     formula=self.data[idx_x[0]]["formula"])]
+        for ix, iy in zip(idx_x, idx_y):
+            y_new = rp.resample(self.data[ix]["data"], self.data[iy]["data"], x_new)
+            data_new.append(self.create_data(y_new,
+                                             shortname=self.data[iy]["shortname"],
+                                             column_type=self.data[iy]["type"],
+                                             filename=self.data[iy]["filename"],
+                                             long_name=self.data[iy]["longname"],
+                                             axis_label=self.data[iy]["axis label"],
+                                             unit=self.data[iy]["unit"],
+                                             comments=self.data[iy]["comments"],
+                                             formula=self.data[iy]["formula"]))
+        self.mw.new_window(None, "Spreadsheet", data_new, None)
+
+    def select_all_(self, column_type):
         for c in range(self.cols):
-            if self.data[c]["type"] == "X":
+            if self.data[c]["type"] == column_type:
                 self.header_table.item(0, c).setSelected(True)
 
     def pca_nmf(self):
@@ -2002,6 +2042,24 @@ class SpreadSheetWindow(QMainWindow):
             self.header_table.setItem(r, self.cols - 1, QTableWidgetItem())
             self.header_table.item(r, self.cols - 1).setBackground(QtGui.QColor(255, 255, 200))
 
+    def get_assigned_x_column(self, idx_y):
+        # idx_y = index of selected y column
+        # idx_x = index of corresponding x column
+        if self.data[idx_y]["type"] != 'Y':
+            self.mw.show_statusbar_message('Please only select Y-columns!', 4000)
+            return
+        else:
+            idx_x = idx_y - 1
+            while idx_x >= 0:
+                if self.data[idx_x]["type"] == 'X':
+                    return idx_x
+                else:
+                    idx_x -= 1
+
+            if idx_x == -1:
+                self.mw.show_statusbar_message("At least one dataset Y has no assigned X dataset.", 4000)
+                return
+
     def get_plot_data(self, plot_all=False):
         """ get data from selected columns and prepares data for plot """
         self.plot_data = []
@@ -2077,7 +2135,6 @@ class SpreadSheetWindow(QMainWindow):
                         k = k - 1
 
                 if k == -1:
-                    self.mw.show_statusbar_message("At least one dataset Y has no assigned X dataset.", 4000)
                     self.mw.show_statusbar_message("At least one dataset Y has no assigned X dataset.", 4000)
                     return
 
