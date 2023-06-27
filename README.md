@@ -72,6 +72,10 @@ Alternative: Open the Anaconda Command Prompt and run
 python my/path/src/PyRamanGUI.py
 ```
 
+# Bug reports
+If you have any problems or want to report a bug, please don't hesitate to contact me (simon.brehm@physik.tu-freiberg.de)
+or create a new [Issue](https://gitlab.com/brehmsi/PyRamanGUI/-/issues).
+
 # License
 This project is licensed under the Apache License 2.0   
 See [LICENSE](LICENSE) for details.

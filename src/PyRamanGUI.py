@@ -219,7 +219,7 @@ class MainWindow(QMainWindow):
         Create the main window
         """
         self.setWindowIcon(self.PyramanIcon)
-        self.setWindowTitle('PyRamanGui')  # set window title
+        self.setWindowTitle("PyRamanGui")  # set window title
 
         # the user can control the size of child widgets by dragging the boundary between them
         self.mainWidget.setHandleWidth(10)
@@ -237,7 +237,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.mainWidget)
 
         self.setStatusBar(self.statusBar)
-        self.show_statusbar_message('Welcome to PyRamanGui', 3000)
+        self.show_statusbar_message("Welcome to PyRamanGui", 3000)
 
         self.create_menubar()
 
@@ -648,8 +648,12 @@ class MainWindow(QMainWindow):
         foldername = new_folder.text(0)
         windowtyp = dropped_item.type()
         windowname = dropped_item.text(0)
-        if new_folder.type() == 0 and dropped_item.type() != 0:  # dropevent in folder
-            previous_folder = dropped_item.parent().text(0)
+        if new_folder.type() == 0 and dropped_item.type() != 0:  # drop event in folder
+            try:
+                previous_folder = dropped_item.parent().text(0)
+            except AttributeError as e:
+                print("This shouldn't happen \n", e)
+                return
             self.tabWidget.setCurrentWidget(self.folder[previous_folder][1])
             wind = self.window[self.window_types[windowtyp]][windowname]
             mdi = self.folder[foldername][1]
@@ -3320,16 +3324,16 @@ class PlotWindow(QMainWindow):
             self.data[n]["line"].set_data(self.data[n]["x"], self.data[n]["y"])
             self.canvas.draw()
             # Save normalized data
-            if self.data[n]["filename"] is not None:
-                (fileBaseName, fileExtension) = os.path.splitext(self.data[n]["label"])
-                startFileDirName = os.path.dirname(self.data[n]["filename"])
-                startFileBaseName = startFileDirName + '/' + fileBaseName
-                startFileName = startFileBaseName + '_norm.txt'
-            else:
-                startFileName = None
-            save_data = [self.data[n]["x"], self.data[n]["y"]]
-            save_data = np.transpose(save_data)
-            self.save_to_file('Save normalized data in file', startFileName, save_data)
+            # if self.data[n]["filename"] is not None:
+            #    (fileBaseName, fileExtension) = os.path.splitext(self.data[n]["label"])
+            #     startFileDirName = os.path.dirname(self.data[n]["filename"])
+            #     startFileBaseName = startFileDirName + '/' + fileBaseName
+            #     startFileName = startFileBaseName + '_norm.txt'
+            # else:
+            #     startFileName = None
+            # save_data = [self.data[n]["x"], self.data[n]["y"]]
+            # save_data = np.transpose(save_data)
+            # self.save_to_file('Save normalized data in file', startFileName, save_data)
 
     def add_subtract_spectra(self):
         """
