@@ -1,10 +1,11 @@
-# PyRaman Tutorial
+PyRamanGUI Tutorial
+===================
 
-## Introduction
-PyRaman is a free and open-source tool to process Raman spectra. 
+# Introduction
+PyRamanGUI is a free and open-source tool to process Raman spectra. 
 The source code is written in Python, the GUI is based on PyQt5.
     
-# Requirements
+# Requirements and Installation
 PyRamanGUI requires:
   - [python](https://www.python.org/downloads/) >= 3.10
   
@@ -21,12 +22,27 @@ The following python packages have to be installed:
 
 It may also work with other versions, but it has been tested only with these.
 
-On **Linux** (Ubuntu, Debian) a package can be installed with following command:
+## Linux
+On **Linux** (Ubuntu, Debian) the packages can be installed with following command:
 ```
 pip install matplotlib==3.7.0 numpy==1.24.2 prettytable==3.6.0 pybaselines==1.0.0 pyqt5==5.15.9 pyside2==5.15.2.1 rampy==0.4.9 scipy==1.10.1 scikit-learn==1.2.1 
 ```
+Open a terminal and go to the directory where you want to clone the files.
+Run the following command. Git automatically creates a folder with the repository name and downloads the files there.
+```
+git clone https://gitlab.com/brehmsi/PyRamanGUI.git
+```
+Change directory to source files
+```
+cd pyramangui/src
+```
+Run PyRamanGUI
+```
+python3 PyRamanGUI.py
+```
 
 
+## Windows
 On **Windows** with Anaconda:
 Install [Anaconda](https://www.anaconda.com/products/distribution). 
 
@@ -37,26 +53,6 @@ Run as administrator
 pip install --user matplotlib==3.7.0 numpy==1.24.2 prettytable==3.6.0 pybaselines==1.0.0 pyqt5==5.15.9 pyside2==5.15.2.1 rampy==0.4.9 scipy==1.10.1 scikit-learn==1.2.1 
 ```
 
-# Installation
-## Linux
-Open a terminal and go to the directory where you want to clone the files.
-Run the following command. Git automatically creates a folder with the repository name and downloads the files there.
-```
-git clone https://gitlab.com/brehmsi/PyRamanGUI.git
-```
-
-Change directory to source files
-```
-cd pyramangui/src
-```
-
-
-Run PyRamanGUI
-```
-python3 PyRamanGUI.py
-```
-
-## Windows
 
 Download the PyRamanGUI directory. To run PyRamanGUI, go in the directory src and double-click the 'WindowsRun.bat' file
 
@@ -65,41 +61,38 @@ Alternative: Open the Anaconda Command Prompt and run
 python my/path/src/PyRamanGUI.py
 ```
 
-### Windows
+# The Interface
 
-Download the PyRamanGUI directory. To run PyRamanGUI, go in the directory src and double-click the 'WindowsRun.bat' file
-
-## General Structure 
-
-### Main window 
-The structure of the PyRaman GUI is remotely based on OriginLab. 
+## Main window 
+The structure of the PyRamanGUI is remotely based on OriginLab. 
 The GUI consists of three main parts, which are framed in the
 following picture; a menu bar at the top, a side tree at the 
-left, and a workspace containing the open windows.
+left, and a workspace containing the open subwindows.
 
 <img src="pics/Example_Mainwindow.png" alt="Main window" width="400"/>
 
-#### Workspace
+### Workspace
 The workspace contains the windows. There are three different kinds of windows,
 [Spreadsheet <img src="pics/Icon_spreadsheet.png" alt="Icon of Spreadsheet" height="15"/>](#spreadsheet), 
 [Plotwindow <img src="pics/Icon_plotwindow.png" alt="Icon of Plotwindow" height="15"/>](#plot-window),
 [Textwindow <img src="pics/Icon_textwindow.png" alt="Icon of Textwindow" height="15"/>](#text-window).
 They are explained in more detail in later sections.
 
-#### Side bar
+### Side bar
 The side bar contains the project structure. 
-The windows are organized in folders, so the workspace only
-shows the windows of the selected folder. You can switch between 
+The subwindows are organized in folders, so the workspace only
+shows the subwindows of the selected folder. You can switch between 
 folders by double-clicking at another folder at the side tree or by 
 changing the tab of the workspace.
 
-#### Menu bar
-The menu bar of the main window contains the items "File", "Edit" and "Tools".
+### Menu bar
+The menu bar of the main window contains the drop-down menus "File", "Edit" and "Tools". 
+In addition to the main window menu bar, each subwindow has its own menu bar
 
 ## Tutorial 
-#### Open and Save a PyRaman Project
-A PyRaman project can be saved and reloaded via the menu item "File".
-All files end on .rmn.
+#### Open and Save a PyRamanGUI Project
+A project can be saved and reloaded via the menu item "File". The projects are 
+saved as JSON-file, which all got the file-ending .jrmn.
 A project can also be saved with the shortcut "CTRL+S".
 
 <img src="pics/Open_Save_Project.PNG" width="200"/>
@@ -127,6 +120,10 @@ Select one or several y columns which you mean to plot.
 The data can be plotted over the drop-down menu or the menu bar at the top. 
 For the x values, the closest column on the left side of the selected column is used.
 
+## Text Window <img src="pics/Icon_textwindow.png" alt="Icon of Textwindow" height="20"/>
+<img src="pics/Example_TextWindow.PNG" width="200"/>
+
+The text window offers an opportunity to take notes and document a project.
 
 ##  Plot Window <img alt="Icon of Plotwindow" height="20" src="pics/Icon_plotwindow.png"/>
 <img src="pics/Example_PlotWindow.PNG" width="200"/>
@@ -206,7 +203,4 @@ The menu bar consists of three drop-down menus (File, Edit, Analysis) and a four
 
 
 
-## Text Window <img src="pics/Icon_textwindow.png" alt="Icon of Textwindow" height="20"/>
-<img src="pics/Example_TextWindow.PNG" width="200"/>
 
-The text window offers an opportunity to take notes and document a project.
