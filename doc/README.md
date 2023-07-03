@@ -1,7 +1,20 @@
-PyRamanGUI Tutorial
+PyRamanGUI
 ===================
 
+# Table of Content
+1. [Introduction](#introduction)
+2. [Requirements and Installation](#requirements-and-installation)
+   1. [Linux](#linux)
+   2. [Windows](#windows)
+3. [The Interface](#the-interface)
+   1. [Main Window](#main-window-)
+   2. [Spreadsheet](#spreadsheet-img-srcpicsiconspreadsheetpng-alticon-of-spreadsheet-height20)
+   3. [Text Window](#text-window-img-srcpicsicontextwindowpng-alticon-of-textwindow-height20)
+   4. [Plot Window](#plot-window-img-alticon-of-plotwindow-height20-srcpicsiconplotwindowpng)
+4. [Tutorial](#tutorial-)
+
 # Introduction
+
 PyRamanGUI is a free and open-source tool to process Raman spectra. 
 The source code is written in Python, the GUI is based on PyQt5.
     
@@ -89,20 +102,6 @@ changing the tab of the workspace.
 The menu bar of the main window contains the drop-down menus "File", "Edit" and "Tools". 
 In addition to the main window menu bar, each subwindow has its own menu bar
 
-## Tutorial 
-#### Open and Save a PyRamanGUI Project
-A project can be saved and reloaded via the menu item "File". The projects are 
-saved as JSON-file, which all got the file-ending .jrmn.
-A project can also be saved with the shortcut "CTRL+S".
-
-<img src="pics/Open_Save_Project.PNG" width="200"/>
-
-#### Open a new Window or Folder in the Project
-There are two ways to open a new folder or window. 
-The first one is to use the menu bar item "File" &rarr; "New" and the second one is to 
-right-click on the side tree. 
-The new window then opens in the opened folder.
-
 ##  Spreadsheet <img src="pics/Icon_spreadsheet.png" alt="Icon of Spreadsheet" height="20"/>
 <img src="pics/Example_Table.PNG" width="200"/>
 
@@ -170,37 +169,25 @@ The fifth symbol (upper-case T) creates a text field in the spectrum. The text
 can be changed by double-clicking and the style can be adjusted by a right mouse click
 on the inserted text.
 
-### Menu bar
-The menu bar consists of three drop-down menus (File, Edit, Analysis) and a fourth menu item (Data base peak position)
+# Tutorial 
+### Open and Save a PyRamanGUI Project
+A project can be saved and reloaded via the menu item "File". The projects are 
+saved as JSON-file, which all got the file-ending .jrmn.
+A project can also be saved with the shortcut "CTRL+S".
 
-- **File** 
-  - **save to file**: save the plotted data in .txt file
-- **Edit**
-  - **delete data point**
-  - **remove cosmic spikes**
-  - **define data area**
-  - **shift spectrum to zero line**
-  - **normalize spectrum**
-  - **add up or subtract two spectra**
-- **Analysis**
-  - **fit**
-  - **baseline correction**
-  - **smoothing**
-  -
+<img src="pics/Open_Save_Project.PNG" width="200"/>
 
-#### Baseline Correction
-- rubber band
-- polynomial
-- spline
-- asymmetric least square
-- adaptive iteratively reweighted penalized least squares
-- asymmetrically reweighted penalized least squares
--doubly reweighted penalized least squares.
+### Open a new Window or Folder in the Project
+There are two ways to open a new folder or window. 
+The first one is to use the menu bar item "File" ->; "New" and the second one is to 
+right-click on the side tree. 
+The new window then opens in the opened folder.
 
-#### Smoothing
-- Savitzky-Golay
-- Whittaker
+### Load data
+Open a spreadsheet and click "File"->"Load Data" in the menu bar. In the open data 
+import menu, you can select the path to the file to load and other basic 
+import options.
 
-
+<img src="pics/LoadData.png" width="200"/>
 
 

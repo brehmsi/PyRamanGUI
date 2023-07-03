@@ -764,6 +764,8 @@ class MainWindow(QMainWindow):
             xtick_space_start = math.ceil(axis_option["x lower limit"] / x_tick) * x_tick
             ax.xaxis.set_ticks(np.arange(xtick_space_start, axis_option["x upper limit"], x_tick))
             ax.xaxis.set_ticks(np.arange(xtick_space_start, axis_option["x upper limit"], x_tick))
+        else:
+            ax.xaxis.set_ticks([])
         ax.set_xlim(axis_option["x lower limit"], axis_option["x upper limit"])
         ax.xaxis.set_tick_params(labelsize=general["tick size"])
 
@@ -771,6 +773,8 @@ class MainWindow(QMainWindow):
             y_tick = axis_option["y tick step size"]
             ytick_space_start = math.ceil(axis_option["y lower limit"] / y_tick) * y_tick
             ax.yaxis.set_ticks(np.arange(ytick_space_start, axis_option["y upper limit"], y_tick))
+        else:
+            ax.yaxis.set_ticks([])
         ax.set_ylim(axis_option["y lower limit"], axis_option["y upper limit"])
         ax.yaxis.set_tick_params(labelsize=general["tick size"])
 
@@ -826,7 +830,7 @@ class MainWindow(QMainWindow):
 
         if axis_option["axis break"]:
             baxes = brokenaxes(xlims=((axis_option["x lower limit"], axis_option["x upper limit"]),
-                              (axis_option["x lower limit 2"], axis_option["x upper limit 2"])), fig=fig)
+                                      (axis_option["x lower limit 2"], axis_option["x upper limit 2"])), fig=fig)
             for d in data:
                 for ol, nl in zip(baxes.old_lines, baxes.new_lines[0]):
                     if ol == d["line"]:
@@ -868,6 +872,8 @@ class MainWindow(QMainWindow):
         return fig
 
     def new_window(self, folder_name, window_type, window_content, title):
+
+        # no windows open in database window
         if folder_name is None:
             folder_name = self.tabWidget.tabText(self.tabWidget.currentIndex())
             if folder_name == "Database":
@@ -884,12 +890,13 @@ class MainWindow(QMainWindow):
                 else:
                     break
 
+        # create different windows
         if window_type == "Spreadsheet":
             if window_content is not None:
                 for i in range(len(window_content)):
                     window_content[i]["data"] = np.array(window_content[i]["data"])
 
-            windowtypeInt = 1
+            window_type_int = 1
             self.window[window_type][title] = SpreadSheetWindow(window_content, parent=self)
             new_spreadsheet = self.window[window_type][title]
             new_spreadsheet.new_pw_signal.connect(lambda: self.new_window(
@@ -897,7 +904,7 @@ class MainWindow(QMainWindow):
             new_spreadsheet.add_pw_signal.connect(lambda pw_name: self.add_Plot(pw_name, new_spreadsheet.plot_data))
             icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Icon_spreadsheet.png")
         elif window_type == "Plotwindow":
-            windowtypeInt = 2
+            window_type_int = 2
             plot_data, fig = window_content
 
             if isinstance(fig, dict):
@@ -920,7 +927,7 @@ class MainWindow(QMainWindow):
             self.update_spreadsheet_menubar()
             icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Icon_plotwindow.png")
         elif window_type == "Textwindow":
-            windowtypeInt = 3
+            window_type_int = 3
             txt = window_content
             self.window[window_type][title] = TextWindow(self, txt)
             icon = QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Icon_textwindow.png")
@@ -932,7 +939,7 @@ class MainWindow(QMainWindow):
         self.window[window_type][title].setWindowTitle(title)
         self.window[window_type][title].show()
 
-        item = QTreeWidgetItem([title], type=windowtypeInt)
+        item = QTreeWidgetItem([title], type=window_type_int)
         item.setIcon(0, icon)
         item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable | Qt.ItemIsDragEnabled |
                       Qt.ItemIsUserCheckable)
@@ -3305,6 +3312,7 @@ class PlotWindow(QMainWindow):
                 y[i] = np.mean(np.array(y)[w])
 
             self.data[n]["line"].set_ydata(y)
+            self.data[n]["y"] = y
             self.data[n]["y"] = y
         self.canvas.draw()
 
