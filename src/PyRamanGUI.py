@@ -290,25 +290,45 @@ class MainWindow(QMainWindow):
         """
         # get file name
         file_name = QtWidgets.QFileDialog.getOpenFileName(self, "Load",
-                                                          self.pHomeRmn, "All Files (*);;Raman Files (*.rmn)")
+                                                          self.pHomeRmn, "All Files (*);;Raman Files (*.jrmn *.rmn)")
 
-        if file_name[0] != "":  # if fileName is not empty save in pHomeRmn
+        # check, that file_name is not empty
+        if file_name[0] != "":
             self.pHomeRmn = file_name[0]
         else:
             self.close()
+            return
+
+        _, file_extension = os.path.splitext(self.pHomeRmn)
+
+        if file_extension == ".jrmn":
+            new_extension = False
+        elif file_extension == ".rmn":
+            new_extension = True
+        else:
             return
 
         # open file and save content in variable 'v' with json
         with open(self.pHomeRmn, "rb") as file:
             v = json.load(file)
 
+        # clear everything
         self.treeWidget.clear()
         self.tabWidget.clear()
         self.folder = {}
-        for folder_name, folder_content in v.items():
-            self.create_new_folder(folder_name)
-            for key, val in folder_content.items():
-                self.new_window(folder_name, val[0], val[1], key)
+
+        # load project
+        if new_extension:
+            for folder_name, folder_content in v.items():
+                self.create_new_folder(folder_name)
+                for window_type, val in folder_content.items():
+                    for title, data in val.items():
+                        self.new_window(folder_name, window_type, data, title)
+        else:
+            for folder_name, folder_content in v.items():
+                self.create_new_folder(folder_name)
+                for key, val in folder_content.items():
+                    self.new_window(folder_name, val[0], val[1], key)
 
     def save(self, q):
         """
@@ -323,7 +343,7 @@ class MainWindow(QMainWindow):
         # Ask for directory, if none is deposit or 'Save Project As' was pressed
         if self.pHomeRmn is None or q == "Save As":
             file_name = QtWidgets.QFileDialog.getSaveFileName(
-                self, "Save as", self.pHomeRmn, "All Files (*);;Raman Files (*.rmn)")
+                self, "Save as", self.pHomeRmn, "All Files (*);;Raman Files (*.jrmn *.rmn)")
 
             if file_name[0] != "":
                 self.pHomeRmn = file_name[0]
@@ -331,34 +351,27 @@ class MainWindow(QMainWindow):
                 return
 
         # get data, which should be saved
-        save_dict_json = {}
         save_dict = {}
         for key, val in self.folder.items():
-            save_dict[key] = {}
-            save_dict_json[key] = {}
+            save_dict[key] = {"Spreadsheet": {}, "Plotwindow": {}, "Textwindow": {}}
             for j in range(val[0].childCount()):
                 win_name = val[0].child(j).text(0)
                 win_type = self.window_types[val[0].child(j).type()]
                 window = self.window[win_type][win_name]
                 window_content = None
-                window_content_json = None
                 if win_type == "Spreadsheet":
-                    window_content = window.data
-                    window_content_json = window.data.copy()
-                    for i in range(len(window_content)):
-                        window_content_json[i]["data"] = list(window_content_json[i]["data"])
+                    window_content = window.data.copy()
+                    for i in range(len(window.data)):
+                        window_content[i]["data"] = list(window_content[i]["data"])
                 elif win_type == "Plotwindow":
-                    window_content_json = self.get_save_data_plotwindow(window)
-                    window_content = [window.data, window.fig]
+                    window_content = self.get_save_data_plotwindow(window)
                 elif win_type == "Textwindow":
-                    window_content_json = window.text
                     window_content = window.text
-                save_dict[key][win_name] = [win_type, window_content]
-                save_dict_json[key][win_name] = [win_type, window_content_json]
+                save_dict[key][win_type][win_name] = window_content
 
         # save with json
-        with open(os.path.splitext(self.pHomeRmn)[0] + ".jrmn", "w", encoding="utf-8") as f:
-            json.dump(save_dict_json, f, ensure_ascii=False)
+        with open(os.path.splitext(self.pHomeRmn)[0] + ".rmn", "w", encoding="utf-8") as f:
+            json.dump(save_dict, f, ensure_ascii=False)
 
         self.show_statusbar_message("The project was saved", 2000)
 

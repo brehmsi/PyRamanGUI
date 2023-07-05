@@ -229,9 +229,29 @@ on the inserted text.
 #### Smoothing
 
 #### Peak Fitting
+There are two peak fitting options. The quick fit and via the Fit Dialog.
 
+For both first a dialog opens, which ask for the dataset, which should be fitted? \
+Then two red lines appear. By dragging them to the wanted position, the 
+fit region can be chosen. \
 
+<img src="pics/Fit_Dialog.png" width="300"/>
 
+The fitdialog consists of a menubar, four buttons:
+- Add Function: add fit function 
+- Remove Function: remove fit function 
+- Apply: Plot functions spectrum with given parameter 
+- Fit: Fit parameters to selected spectrum 
+
+and a table: \
+In the left column a fit function can be selected:
+- Lorentzian
+- Gaussian
+- Breit-Wigner-Fano
+- Voigtian
+- Pseudo-Voigtian
+The other columns are used to enter values for the fit parameters, 
+the lower and the upper boundary limit.
 
 
 
