@@ -7,11 +7,10 @@ PyRamanGUI
    1. [Linux](#linux)
    2. [Windows](#windows)
 3. [The Interface](#the-interface)
-   1. [Main Window](#main-window-)
+   1. [Main Window](#main-window)
    2. [Spreadsheet](#spreadsheet-img-srcpicsiconspreadsheetpng-alticon-of-spreadsheet-height20)
    3. [Text Window](#text-window-img-srcpicsicontextwindowpng-alticon-of-textwindow-height20)
    4. [Plot Window](#plot-window-img-alticon-of-plotwindow-height20-srcpicsiconplotwindowpng)
-4. [Tutorial](#tutorial-)
 
 # Introduction
 
@@ -76,7 +75,7 @@ python my/path/src/PyRamanGUI.py
 
 # The Interface
 
-## Main window 
+## Main window
 The structure of the PyRamanGUI is remotely based on OriginLab. 
 The GUI consists of three main parts, which are framed in the
 following picture; a menu bar at the top, a side tree at the 
@@ -102,74 +101,6 @@ changing the tab of the workspace.
 The menu bar of the main window contains the drop-down menus "File", "Edit" and "Tools". 
 In addition to the main window menu bar, each subwindow has its own menu bar
 
-##  Spreadsheet <img src="pics/Icon_spreadsheet.png" alt="Icon of Spreadsheet" height="20"/>
-<img src="pics/Example_Table.PNG" width="200"/>
-
-The spreadsheet contains the data in a table, which can either be loaded ("File"
-&rarr; "Load Data") or filled in manually.\
-A new column can be added with "Edit" &rarr; "New Column".
-\
-The header of the table consists of a column title and 5 rows 
-("Name", "Axis", "Unit", "Comments", "F(x)").
-\
-By right-clicking on the column title, a drop-down menu is opened.
-
-### Plot Spreadsheet Data
-Select one or several y columns which you mean to plot. 
-The data can be plotted over the drop-down menu or the menu bar at the top. 
-For the x values, the closest column on the left side of the selected column is used.
-
-## Text Window <img src="pics/Icon_textwindow.png" alt="Icon of Textwindow" height="20"/>
-<img src="pics/Example_TextWindow.PNG" width="200"/>
-
-The text window offers an opportunity to take notes and document a project.
-
-##  Plot Window <img alt="Icon of Plotwindow" height="20" src="pics/Icon_plotwindow.png"/>
-<img src="pics/Example_PlotWindow.PNG" width="200"/>
-
-The plot window is the most complex of the three windows.
-
-### Toolbar
-<img src="pics/PlotWindow_toolbar.PNG" width="200"/>
-
-The first five tools help with navigation:
-
-- house: restore original view
-- left arrow: undo view
-- right arrow: redo view
-- arrow cross:
-  - left click + mouse movement: move plot
-  - right click + mouse movement: scaling
-- magnifier: zoom in
-
-The slide controller button opens a 
-dialogue window to adjust the spacing at the left, right, bottom, and top of the plot.
-
-The indented arrow button opens a dialogue with the figure options, e.g., 
-for renaming the labels, changing colors, repositioning the legend.
-
-The disc button allows for saving a picture of the plot as a .png file. 
-
-
-### Sidebar
-
-<img src="pics/PlotWindow_sidebar.PNG" height="80"/> 
-
-The first symbol (mouse cursor) plots a movable vertical line in the spectrum, 
-which can be used, e.g., to compare peak positions. The vertical line disappears
-if the symbol on the sidebar is clicked again or the right mouse button is pressed.
-
-With the second and third symbol (upwards arrows), the shown spectra can be scaled 
-or shifted with respect to the y-axis.
-
-The fourth symbol (narrow arrow) allows for drawing lines and arrows in the spectrum.
-These lines and arrows can be edited later via an option dialogue, which opens with a right mouse click.
-
-The fifth symbol (upper-case T) creates a text field in the spectrum. The text
-can be changed by double-clicking and the style can be adjusted by a right mouse click
-on the inserted text.
-
-# Tutorial 
 ### Open and Save a PyRamanGUI Project
 A project can be saved and reloaded via the menu item "File". The projects are 
 saved as JSON-file, which all got the file-ending .jrmn.
@@ -183,11 +114,125 @@ The first one is to use the menu bar item "File" ->; "New" and the second one is
 right-click on the side tree. 
 The new window then opens in the opened folder.
 
-### Load data
+
+##  Spreadsheet <img src="pics/Icon_spreadsheet.png" alt="Icon of Spreadsheet" height="20"/>
+<img src="pics/Example_Table.PNG" width="200"/>
+
+The spreadsheet contains the data in a table, which can either be loaded ("File"
+&rarr; "Load Data") or filled in manually.\
+A new column can be added with "Edit" &rarr; "New Column".
+\
+The header of the table consists of a column title and 5 rows 
+("Name", "Axis", "Unit", "Comments", "F(x)").
+\
+By right-clicking on the column title, a drop-down menu is opened.
+
+### How to work with a Spreadsheet
+#### Load data
 Open a spreadsheet and click "File"->"Load Data" in the menu bar. In the open data 
 import menu, you can select the path to the file to load and other basic 
 import options.
 
 <img src="pics/LoadData.png" width="200"/>
+
+#### Plot data
+In order to plot the loaded data, there have to be at least two columns. Each column 
+can be of the type "X", "Y" or "Yerr". To plot data, select one or several column 
+with the type "Y".
+The data can be plotted over the drop-down menu or the menu bar at the top. 
+As x-values, automatically the associated columned with type "X" (the closest column 
+to the left) is selected.
+
+### Functionalities
+There are further functionalities, which can be used in the Spreadsheet. They can be 
+found over the menubar or by right-click on the column header. These functionalities 
+include:
+- Move a column one to the right, one to the left or to the end/ beginning of the 
+spreadsheet
+- Delete a column
+- Change the type of column
+- Flip a column
+- Convert units: if values in the selected column are in units of wavenumbers, 
+they can be converted to a wavelength and vice versa.
+- Resample: create a new x-axis for selected "Y" columns
+- Principal component analysis (PCA)
+- Non-negative matrix factorization (NMF)
+
+The resampling, PCA and NMF are explained later in more detail.
+
+#### Resampling new x-axis
+
+#### PCA and NMF
+
+## Text Window <img src="pics/Icon_textwindow.png" alt="Icon of Textwindow" height="20"/>
+<img src="pics/Example_TextWindow.PNG" width="200"/>
+
+The text window offers an opportunity to take notes and document a project.
+The text can be saved into a .txt file or loaded from one.
+
+##  Plot Window <img alt="Icon of Plotwindow" height="20" src="pics/Icon_plotwindow.png"/>
+<img src="pics/Example_PlotWindow.PNG" width="200"/>
+
+The plot window is the most complex of the three windows.
+
+### Toolbar
+<img src="pics/PlotWindow_toolbar.png" width="200"/>
+
+The first five tools help with navigation:
+
+- house: restore original view
+- left arrow: undo view
+- right arrow: redo view
+- arrow cross:
+  - left click + mouse movement: move plot
+  - right click + mouse movement: scaling
+- magnifier: zoom in
+
+- The slide controller button opens a dialogue window to adjust the spacing 
+at the left, right, bottom, and top of the plot.
+- The indented arrow button opens a dialogue with the figure options, e.g., 
+for renaming the labels, changing colors, repositioning the legend.
+- The disc button allows for saving a picture of the plot as an image file 
+(.png, .jpg., .eps, .pdf, ...)
+
+
+### Sidebar
+
+<img src="pics/PlotWindow_sidebar.PNG" height="80"/> 
+
+- The first symbol (mouse cursor) plots a movable vertical line in the spectrum, 
+which can be used, e.g., to compare peak positions. The vertical line disappears
+if the symbol on the sidebar is clicked again or the right mouse button is pressed.
+- With the second and third symbol (upwards arrows), the shown spectra can be scaled 
+or shifted with respect to the y-axis.
+- The fourth symbol (narrow arrow) allows for drawing lines and arrows in the spectrum.
+These lines and arrows can be edited later via an option dialogue, which opens 
+with a right mouse click.
+- The fifth symbol (upper-case T) creates a text field in the spectrum. The text
+can be changed by double-clicking and the style can be adjusted by a right mouse click
+on the inserted text.
+
+### Functionalities
+
+#### Delete single data point
+
+#### Remove cosmic spike
+
+#### Set new limits
+
+#### Normalization
+
+#### Add up or subtract two spectra
+
+#### Baseline correction
+
+#### Smoothing
+
+#### Peak Fitting
+
+
+
+
+
 
 

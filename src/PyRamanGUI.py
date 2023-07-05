@@ -2740,8 +2740,10 @@ class MyCustomToolbar(NavigationToolbar2QT):
     signal_axis_break = QtCore.pyqtSignal(list, list)
 
     toolitems = [t for t in NavigationToolbar2QT.toolitems]
+
+    # Option for later functionalities
     # Add new toolitem at last position
-    toolitems.append(("Layers", "manage layers and layer contents", "Layer", "layer_content"))
+    # toolitems.append(("Layers", "manage layers and layer contents", "Layer", "layer_content"))
 
     def __init__(self, plotCanvas):
         NavigationToolbar2QT.__init__(self, plotCanvas, parent=None)
@@ -2766,11 +2768,11 @@ class MyCustomToolbar(NavigationToolbar2QT):
         # keep the default behaviour
         super(MyCustomToolbar, self).save_figure(*args)
 
-    def _icon(self, name, *args):
-        if name == 'Layer.png':
-            return QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Layer_content.png")
-        else:
-            return super(MyCustomToolbar, self)._icon(name, *args)
+    #def _icon(self, name, *args):
+    #    if name == 'Layer.png':
+    #        return QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Layer_content.png")
+    #    else:
+    #        return super(MyCustomToolbar, self)._icon(name, *args)
 
 
 class PlotWindow(QMainWindow):
@@ -3053,8 +3055,9 @@ class PlotWindow(QMainWindow):
         # 3.3 Smoothing
         analysisMenu.addAction("Smooth spectrum", self.smoothing)
 
+        # add later
         # 3.4 Analysis find peaks
-        analysisMenu.addAction('Find Peak', self.find_peaks)
+        # analysisMenu.addAction('Find Peak', self.find_peaks)
 
         # 3.5 Get Area below curve
         analysisMenu.addAction('Get Area below Curve', self.determine_area)
