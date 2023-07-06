@@ -321,9 +321,11 @@ class MainWindow(QMainWindow):
         if new_extension:
             for folder_name, folder_content in v.items():
                 self.create_new_folder(folder_name)
-                for window_type, val in folder_content.items():
-                    for title, data in val.items():
-                        self.new_window(folder_name, window_type, data, title)
+                for window in folder_content:
+                    window_name = window[0]
+                    window_type = window[1]
+                    window_content = window[2]
+                    self.new_window(folder_name, window_type, window_content, window_name)
         else:
             for folder_name, folder_content in v.items():
                 self.create_new_folder(folder_name)
@@ -353,7 +355,7 @@ class MainWindow(QMainWindow):
         # get data, which should be saved
         save_dict = {}
         for key, val in self.folder.items():
-            save_dict[key] = {"Spreadsheet": {}, "Plotwindow": {}, "Textwindow": {}}
+            save_dict[key] = []
             for j in range(val[0].childCount()):
                 win_name = val[0].child(j).text(0)
                 win_type = self.window_types[val[0].child(j).type()]
@@ -367,7 +369,7 @@ class MainWindow(QMainWindow):
                     window_content = self.get_save_data_plotwindow(window)
                 elif win_type == "Textwindow":
                     window_content = window.text
-                save_dict[key][win_type][win_name] = window_content
+                save_dict[key].append([win_name, win_type, window_content])
 
         # save with json
         with open(os.path.splitext(self.pHomeRmn)[0] + ".rmn", "w", encoding="utf-8") as f:

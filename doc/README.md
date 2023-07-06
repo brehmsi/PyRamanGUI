@@ -250,6 +250,7 @@ In the left column a fit function can be selected:
 - Breit-Wigner-Fano
 - Voigtian
 - Pseudo-Voigtian
+
 The other columns are used to enter values for the fit parameters, 
 the lower and the upper boundary limit.
 
