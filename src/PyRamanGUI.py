@@ -189,6 +189,26 @@ class RamanTreeWidget(QtWidgets.QTreeWidget):
             item_at_drop_location.setExpanded(True)
 
 
+class RamanMdiArea(QtWidgets.QMdiArea):
+    """
+        A reimplementation of the PyQt QTreeWidgetItem.
+    """
+    def __init__(self, parent=None):
+        """
+        Parameters
+        ----------
+        parent : class, optional
+            (default is None)
+        """
+        super(RamanMdiArea, self).__init__(parent)
+
+    def paintEvent(self, event):
+        super(RamanMdiArea, self).paintEvent(event)
+        painter = QtGui.QPainter(self.viewport())
+        painter.drawPixmap(self.rect().marginsRemoved(QtCore.QMargins(100, 100, 100, 100)),
+                           QtGui.QPixmap("../doc/pics/Icon_PyRamanGUI.svg"))
+
+
 class MainWindow(QMainWindow):
     """
     Creating the main window
@@ -979,7 +999,7 @@ class MainWindow(QMainWindow):
         self.folder[title][0].setIcon(0, QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/folder.png"))
         self.treeWidget.addTopLevelItem(self.folder[title][0])
         self.treeWidget.expandItem(self.folder[title][0])
-        self.folder[title].append(QtWidgets.QMdiArea(self))  # widget for multi document interface area
+        self.folder[title].append(RamanMdiArea(self))  # widget for multi document interface area
         self.tabWidget.addTab(self.folder[title][1], self.PyramanIcon, title)
 
     def add_Plot(self, pw_name, plotData):
