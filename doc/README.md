@@ -221,46 +221,72 @@ only displayed if the plotted data has an error bar.
 - Errorbar: Style, width and color of the error bars
 
 ### Functionalities
+All the functions described in this section can be accessed from the Plot Window menu bar.
 
 #### Delete single data point
+"Edit" -> "Delete single data point" 
 
 #### Remove cosmic spike
+"Edit" -> "Remove cosmic spike" 
 
 #### Set new limits
+"Edit" -> "Define data area" 
 
 #### Normalization
+"Edit" -> "Normalize spectrum regarding ..." 
+Option: Highest peak or select a peak
 
 #### Add up or subtract two spectra
-
-#### Baseline correction
-
-#### Smoothing
+"Edit" -> "Add up or subtract two spectra"
 
 #### Peak Fitting
-There are two peak fitting options. The quick fit and via the Fit Dialog.
-
-For both first a dialog opens, which ask for the dataset, which should be fitted? \
-Then two red lines appear. By dragging them to the wanted position, the 
-fit region can be chosen. \
+There are two ways to fit peaks: Quick Fitting (for a single peak) and the Fitting Dialog. In both cases, 
+a dialog box opens asking which data set to fit. Then two red lines appear. Drag them to the desired position to select 
+the fit region. If Quick Fit was selected, the fit is plotted and the parameter appears on the command line.
+Otherwise, the Fit dialog opens.
 
 <img src="pics/Fit_Dialog.png" width="300"/>
 
-The fitdialog consists of a menubar, four buttons:
+The fit dialog consists of a menubar,
+- File: 
+  - Save the fit parameters to a .txt file.
+  - Load the fit parameter into the dialog. The parameter can only be loaded from a .txt file that has been 
+  previously saved from the Fit dialog. 
+- Edit: 
+  - Clear table
+  - Sort fit functions by wavenumber: Sorts the fit parameter by the peak position, starting with the peak position 
+  with the lowest wavenumber
+
+four buttons at the top:
 - Add Function: add fit function 
 - Remove Function: remove fit function 
 - Apply: Plot functions spectrum with given parameter 
 - Fit: Fit parameters to selected spectrum 
 
-and a table: \
-In the left column a fit function can be selected:
-- Lorentzian
-- Gaussian
-- Breit-Wigner-Fano
-- Voigtian
-- Pseudo-Voigtian
+and a table:
+- In the left column a fit function can be selected:
+  - Lorentzian
+  - Gaussian
+  - Breit-Wigner-Fano
+  - Voigtian
+  - Pseudo-Voigtian
+- The other columns are used to enter values for the fit parameters, lower and upper bounds.
 
-The other columns are used to enter values for the fit parameters, 
-the lower and the upper boundary limit.
+#### Baseline correction
+The baseline correction dialog can be opened from the menu bar ("Analysis" -> "Baseline Correction").
+
+<img src="pics/BaselineCorrection_Dialog.png" width="300"/>
+
+On the left side of the dialog you can select the baseline correction method. They are grouped into (Whittaker, Spline, 
+Polynomial and Miscellaneous). On the right side you can adjust the parameter.
+
+#### Smoothing
+The smoothing dialog can be opened from the menu bar ("Analysis" -> "Smoothing").
+
+<img src="pics/Smoothing_Dialog.png" width="300"/>
+
+On the left side of the dialog you can select the baseline correction method. They are grouped into (Whittaker, Spline, 
+and Window). On the right side you can adjust the parameter.
 
 
 
