@@ -3218,7 +3218,7 @@ class PlotWindow(QMainWindow):
 
         if len(self.selectedDatasetNumber) > 1:
             msg = QtWidgets.QMessageBox()
-            msg.setWindowTitle("Do you want to save the data in one file or every data set in a single file?")
+            msg.setWindowTitle("Do you want to save the data in one file or each dataset in a single file?")
             msg.setText("Yes - one file \nNo  - data set in several files")
             msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
             ret = msg.exec_()
@@ -3236,9 +3236,8 @@ class PlotWindow(QMainWindow):
                 if save_data:
                     # check that every column has same length, otherwise fill up with np.nan
                     max_length = max([len(i) for i in save_data])
-                    for sd in save_data:
-                        np.append(sd, np.full(max_length-len(sd), np.nan))
-
+                    for i in range(len(save_data)):
+                        save_data[i] = np.append(save_data[i], np.full(max_length-len(save_data[i]), np.nan))
                     # transpose data and save it
                     save_data = np.transpose(save_data)
                     self.save_to_file('Save data selected data in file', file_name, save_data)
