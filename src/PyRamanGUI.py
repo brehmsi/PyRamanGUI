@@ -15,6 +15,8 @@ import re
 import scipy
 import sys
 import glob
+
+import setuptools.namespaces
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 import matplotlib.backends.qt_editor.figureoptions as figureoptions
@@ -2328,66 +2330,63 @@ class LineBuilder(matplotlib.lines.Line2D):
         if self.loop:
             c.stop_event_loop()
 
-        if self.parent:
-            self.parent.remove_vertical_line()
-
 
 class MoveSpectra:
-    def __init__(self, line, scaling=False):
+    def __init__(self, parent, scaling=False):
         """
-        Class to move spectra
+        Class to move or scale spectra
         Parameters
         ----------
-        line: Line2D
+        parent: PlotWindow
         """
-
-        self.line = line
+        self.parent = parent
         self.scaling = scaling
-        self.x = line.get_xdata()
-        self.y = line.get_ydata()
-        self.fig = self.line.figure
-        self.canvas = self.fig.canvas
-        self.move_line = False  # True if right line is selected, otherwise False
-        self.cid1 = self.canvas.mpl_connect('pick_event', self.onpick)
-        self.cid2 = self.canvas.mpl_connect('motion_notify_event', self.onmove)
-        self.cid3 = self.canvas.mpl_connect('button_release_event', self.onrelease)
-        self.canvas.start_event_loop(timeout=10000)
+        self.canvas = self.parent.fig.canvas
+        self.move_line = None
+        self.cid1 = self.canvas.mpl_connect('pick_event', self.on_pick)
+        self.cid2 = self.canvas.mpl_connect('motion_notify_event', self.on_move)
+        self.cid3 = self.canvas.mpl_connect('button_release_event', self.on_release)
 
-    def onpick(self, event):
-        if event.artist != self.line:
-            return
-        self.move_line = True
+    def on_pick(self, event):
+        if event.artist in [d["line"] for d in self.parent.data]:
+            self.move_line = event.artist
+        else:
+            self.move_line = None
 
-    def onmove(self, event):
-        if not self.move_line:
+    def on_move(self, event):
+        if self.move_line is None:
             return
         # the click locations
         x_click = event.xdata
         y_click = event.ydata
-
         if x_click is None or y_click is None:
             return
 
+        x = self.move_line.get_xdata()
+        y = self.move_line.get_ydata()
+
         # get index of nearest point
-        ind = min(range(len(self.x)), key=lambda i: abs(self.x[i] - x_click))
+        ind = min(range(len(x)), key=lambda i: abs(x[i] - x_click))
 
         if not self.scaling:
-            shift_factor = y_click - self.y[ind]
-            self.y = self.y + shift_factor
+            shift_factor = y_click - y[ind]
+            y = y + shift_factor
         else:
-            scale_factor = y_click / self.y[ind]
-            self.y = self.y * scale_factor
+            scale_factor = y_click / y[ind]
+            y = y * scale_factor
 
-        self.line.set_ydata(self.y)
+        self.move_line.set_ydata(y)
         self.canvas.draw()
 
-    def onrelease(self, event):
-        if self.move_line:
-            self.canvas.mpl_disconnect(self.cid1)
-            self.canvas.mpl_disconnect(self.cid2)
-            self.canvas.mpl_disconnect(self.cid3)
-            self.move_line = False
-            self.canvas.stop_event_loop(self)
+    def on_release(self, event):
+        if self.move_line is not None:
+            self.move_line = None
+
+    def stop(self):
+        self.canvas.mpl_disconnect(self.cid1)
+        self.canvas.mpl_disconnect(self.cid2)
+        self.canvas.mpl_disconnect(self.cid3)
+        self.canvas.stop_event_loop(self)
 
 
 class LineDrawer:
@@ -2817,7 +2816,7 @@ class PlotWindow(QMainWindow):
     plot_data: array containing dict
     """
 
-    closeWindowSignal = QtCore.pyqtSignal(str, str)  # Signal in case plotwindow is closed
+    closeWindowSignal = QtCore.pyqtSignal(str, str)  # Signal in case PlotWindow is closed
 
     def __init__(self, plot_data, fig, parent):
         super(PlotWindow, self).__init__(parent)
@@ -2832,14 +2831,20 @@ class PlotWindow(QMainWindow):
         self.peak_positions = {}  # dict to store Line2D object marking peak positions
         self.selectedData = []
 
+        # classes
+        self.move_spectra = None
+
+        # actions
+        self.shift_action = None
+        self.scale_action = None
+        self.line_action = None
+
         self.plot()
         self.create_statusbar()
         self.create_menubar()
         self.create_sidetoolbar()
         self.show()
-        # self.cid1 = self.fig.canvas.mpl_connect('button_press_event', self.mousePressEvent)
-        # self.cid2 = self.fig.canvas.mpl_connect('key_press_event', self.keyPressEvent)
-        self.cid3 = self.fig.canvas.mpl_connect('pick_event', self.pickEvent)
+        self.cid = self.fig.canvas.mpl_connect('pick_event', self.pickEvent)
 
     def plot(self):
         self.main_widget = QtWidgets.QWidget()
@@ -2939,7 +2944,7 @@ class PlotWindow(QMainWindow):
 
     def axis_break(self, old_lines, new_lines):
         """in case of axis breaks, new line objects (Line2D) are created, this function replaces old line objects in
-        self.data with new one"""
+        data with new one"""
         for d in self.data:
             for ol, nl in zip(old_lines, new_lines[0]):
                 if ol == d["line"]:
@@ -3109,24 +3114,28 @@ class PlotWindow(QMainWindow):
         self.addToolBar(QtCore.Qt.LeftToolBarArea, toolbar)
 
         # Vertical line for comparison of peak positions
-        self.VertLineAct = QAction(QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Tool_Line.png"),
+        self.line_action = QAction(QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Tool_Line.png"),
                                    'Vertical Line', self)
-        self.VertLineAct.setStatusTip('Vertical line for comparison of peak position')
-        self.VertLineAct.triggered.connect(self.create_vertical_line)
-        self.VertLineAct.setCheckable(True)
-        toolbar.addAction(self.VertLineAct)
+        self.line_action.setStatusTip('Vertical line for comparison of peak position')
+        self.line_action.triggered.connect(self.create_vertical_line)
+        self.line_action.setCheckable(True)
+        toolbar.addAction(self.line_action)
 
         # Tool to scale intensity of selected spectrum
-        ScaleAct = QAction(QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Tool_Scale.png"), 'Scale', self)
-        ScaleAct.setStatusTip('Tool to scale intensity of selected spectrum')
-        ScaleAct.triggered.connect(self.scale_spectrum)
-        toolbar.addAction(ScaleAct)
+        self.scale_action = QAction(QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Tool_Scale.png"),
+                                    'Scale', self)
+        self.scale_action.setStatusTip('Tool to scale intensity of selected spectrum')
+        self.scale_action.setCheckable(True)
+        self.scale_action.triggered.connect(self.scale_spectrum)
+        toolbar.addAction(self.scale_action)
 
         # Tool to shift selected spectrum in y-direction
-        ShiftAct = QAction(QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Tool_Shift.png"), 'Shift', self)
-        ShiftAct.setStatusTip('Tool to shift selected spectrum in y-direction')
-        ShiftAct.triggered.connect(self.shift_spectrum)
-        toolbar.addAction(ShiftAct)
+        self.shift_action = QAction(
+            QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Tool_Shift.png"), 'Shift', self)
+        self.shift_action.setStatusTip('Tool to shift selected spectrum in y-direction')
+        self.shift_action.setCheckable(True)
+        self.shift_action.triggered.connect(self.shift_spectrum)
+        toolbar.addAction(self.shift_action)
 
         # Tool to draw line
         DrawAct = QAction(QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Arrow.png"), 'Draw', self)
@@ -3205,7 +3214,7 @@ class PlotWindow(QMainWindow):
     def menu_save_to_file(self):
         self.select_data_set()
 
-        start_file_name = None
+        file_name = None
 
         if len(self.selectedDatasetNumber) > 1:
             msg = QtWidgets.QMessageBox()
@@ -3218,12 +3227,12 @@ class PlotWindow(QMainWindow):
                 save_data = []
                 for d in self.selectedData:
                     if d["filename"] is not None:
-                        startFileDirName = os.path.dirname(d["filename"])
-                        start_file_name = '{}/{}'.format(startFileDirName, d["label"])
+                        directory_name = os.path.dirname(d["filename"])
+                        file_name = '{}/{}'.format(directory_name, d["label"])
                     else:
-                        start_file_name = None
-                    save_data.append(d["x"])
-                    save_data.append(d["y"])
+                        file_name = None
+                    save_data.append(d["line"].get_xdata())
+                    save_data.append(d["line"].get_ydata())
                 if save_data:
                     # check that every column has same length, otherwise fill up with np.nan
                     max_length = max([len(i) for i in save_data])
@@ -3232,23 +3241,23 @@ class PlotWindow(QMainWindow):
 
                     # transpose data and save it
                     save_data = np.transpose(save_data)
-                    self.save_to_file('Save data selected data in file', start_file_name, save_data)
+                    self.save_to_file('Save data selected data in file', file_name, save_data)
             elif ret == QMessageBox.No:
                 for d in self.selectedData:
                     if d["filename"] is not None:
-                        startFileDirName = os.path.dirname(d["filename"])
-                        start_file_name = '{}/{}'.format(startFileDirName, d["label"])
+                        directory_name = os.path.dirname(d["filename"])
+                        file_name = '{}/{}'.format(directory_name, d["label"])
                     else:
-                        start_file_name = None
-                    save_data = [d["x"], d["y"]]
+                        file_name = None
+                    save_data = [d["line"].get_xdata(), d["line"].get_ydata()]
                     save_data = np.transpose(save_data)
-                    self.save_to_file('Save data selected data in file', start_file_name, save_data)
+                    self.save_to_file('Save data selected data in file', file_name, save_data)
             else:
                 return
         elif len(self.selectedDatasetNumber) == 1:
-            save_data = [self.selectedData[0]["x"], self.selectedData[0]["y"]]
+            save_data = [self.selectedData[0]["line"].get_xdata(), self.selectedData[0]["line"].get_ydata()]
             save_data = np.transpose(save_data)
-            self.save_to_file('Save data selected data in file', start_file_name, save_data)
+            self.save_to_file('Save data selected data in file', file_name, save_data)
 
     def save_to_file(self, window_name, file_name, data, header=""):
         file_name = QFileDialog.getSaveFileName(self, window_name, file_name, "All Files (*);;Text Files (*.txt)")
@@ -4324,46 +4333,52 @@ class PlotWindow(QMainWindow):
 
     # Functions of toolbar
     def create_vertical_line(self):
-        if self.vertical_line is not None:
-            try:
-                self.vertical_line.remove_line()
-            except:
-                pass
-
-            self.vertical_line = None
-        else:
+        # create vertical line in spectrum, which can be dragged by mouseclick
+        self.end_event_loop()
+        if self.line_action.isChecked():
             y_min, y_max = self.ax.get_ylim()
             x_min, x_max = self.ax.get_xlim()
             self.vertical_line = LineBuilder([(x_min + x_max) / 2, (x_min + x_max) / 2], [y_min, y_max], self.canvas,
                                              parent=self)
 
-    def remove_vertical_line(self):
-        self.VertLineAct.setChecked(False)
-        self.vertical_line = None
+    def end_event_loop(self):
+        # end the event loops and uncheck tool buttons for actions: shift spectrum, scale spectrum, vertical line
+        if self.move_spectra is not None:
+            if self.move_spectra.scaling:
+                self.scale_action.setChecked(False)
+            else:
+                self.shift_action.setChecked(False)
+            self.move_spectra.stop()
+            self.move_spectra = None
+
+        if self.vertical_line is not None:
+            try:
+                self.vertical_line.remove_line()
+            except:
+                pass
+            self.vertical_line = None
+            self.line_action.setChecked(False)
 
     def scale_spectrum(self):
-        self.select_data_set(True)
-        for n in self.selectedDatasetNumber:
-            try:
-                ms = MoveSpectra(self.data[n]["line"], scaling=True)
-            except RuntimeError as e:
-                print(e)
-                continue
-            self.data[n]["line"] = ms.line
-            self.data[n]["y"] = ms.y
+        # scale a spectrum by mouse drag
+        self.end_event_loop()
+        if self.scale_action.isChecked():
+            self.move_spectra = MoveSpectra(self, scaling=True)
+            self.canvas.start_event_loop(timeout=10000)
+            for d in self.data:
+                d["y"] = d["line"].get_ydata()
 
     def shift_spectrum(self):
-        self.select_data_set(True)
-        for n in self.selectedDatasetNumber:
-            try:
-                ms = MoveSpectra(self.data[n]["line"])
-            except RuntimeError as e:
-                print(e)
-                continue
-            self.data[n]["line"] = ms.line
-            self.data[n]["y"] = ms.y
+        # shift a spectrum by mouse drag
+        self.end_event_loop()
+        if self.shift_action.isChecked():
+            self.move_spectra = MoveSpectra(self)
+            self.canvas.start_event_loop(timeout=10000)
+            for d in self.data:
+                d["y"] = d["line"].get_ydata()
 
     def draw_line(self):
+        self.end_event_loop()
         self.selected_points = []
         self.pick_arrow_points_connection = self.canvas.mpl_connect('button_press_event', self.pick_points_for_arrow)
 
@@ -4381,6 +4396,7 @@ class PlotWindow(QMainWindow):
             self.canvas.draw()
 
     def insert_text(self):
+        self.end_event_loop()
         self.pick_text_point_connection = self.canvas.mpl_connect('button_press_event', self.pick_point_for_text)
 
     def pick_point_for_text(self, event):
