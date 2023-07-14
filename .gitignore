@@ -13,3 +13,4 @@ venv/
 database_peakpositions.db
 sampleDatabase.db
 analysis_routines/
+/src/.idea/

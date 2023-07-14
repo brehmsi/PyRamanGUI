@@ -31,7 +31,6 @@ from scipy import signal, stats
 from scipy.optimize import curve_fit
 from sklearn import decomposition
 
-
 # Import files
 import myfigureoptions
 import databaseMeasurements
@@ -40,6 +39,8 @@ from BrokenAxes import brokenaxes
 import databaseSpectra
 import analysisMethods
 import peakFitting
+import DialogClasses
+
 
 # This file essentially consists of four parts:
 # 1. Main Window
@@ -56,6 +57,7 @@ class RamanTreeWidgetItem(QtWidgets.QTreeWidgetItem):
     """
         A reimplementation of the PyQt QTreeWidgetItem.
     """
+
     def __init__(self, parent=None):
         """
         Parameters
@@ -195,6 +197,7 @@ class RamanMdiArea(QtWidgets.QMdiArea):
     """
         A reimplementation of the PyQt QTreeWidgetItem.
     """
+
     def __init__(self, parent=None):
         """
         Parameters
@@ -1172,7 +1175,7 @@ class DataImportDialog(QMainWindow):
         self.rows = max([len(d["data"]) for d in self.data])
         self.file_names = None
         self.delimiters = {
-            "Tab/Space": None,      # default is any whitespace
+            "Tab/Space": None,  # default is any whitespace
             "Space": " ",
             "Tab": "    ",
             "Comma": ",",
@@ -1289,7 +1292,7 @@ class DataImportDialog(QMainWindow):
         self.setWindowModality(QtCore.Qt.ApplicationModal)
 
     def comment_editable(self, index):
-        if index == (self.box_comments.count()-1):
+        if index == (self.box_comments.count() - 1):
             self.box_comments.setEditable(True)
         else:
             self.box_comments.setEditable(False)
@@ -1418,7 +1421,7 @@ class FormulaInterpreter:
             "*": operator.mul,
             "/": operator.truediv}
 
-    def interprete_formula(self, f):
+    def interpret_formula(self, f):
         if re.match(r'\ACol\([0-9]+\)\Z', f):
             col_formula = int(re.findall(r'\b\d+\b', f)[0])
             if col_formula >= len(self.data):
@@ -1427,7 +1430,7 @@ class FormulaInterpreter:
                 return np.full(len(self.data[0]['data']), 0)
             return self.data[col_formula]['data']
         elif re.match(r'\A\(.+\)\Z', f) and self.parentheses_enclosed(f):  # e.g. '(Col(1)-Col(2))'
-            return self.interprete_formula(f[1:-1])
+            return self.interpret_formula(f[1:-1])
         elif f.replace('.', '', 1).isdigit():  # constant numbers: e.g. '2+3*Col(0)'
             return float(f)
         elif '+' in f or '-' in f or '*' in f or '/' in f:
@@ -1455,7 +1458,7 @@ class FormulaInterpreter:
             left = f[:pos]  # left component
             right = f[pos + 1:]  # right component
             op = f[pos]  # the operator
-            return self.ops[op](self.interprete_formula(left), self.interprete_formula(right))
+            return self.ops[op](self.interpret_formula(left), self.interpret_formula(right))
         else:
             print('There is something wrong with the formula')
             return np.full(len(self.data[0]['data']), 0)
@@ -1482,8 +1485,8 @@ class FormulaInterpreter:
     def remove_matched_parentheses(self, formula):
         if re.search(r"(?<!Col)\(", formula):
             match_end_par = re.search(r"(?<!Col\(\d)\)", formula)
-            end_par = match_end_par.start()  # index of first ')'
-            start_par = [m.start() for m in re.finditer(r"(?<!Col)\(", formula[:end_par])][-1]  # index of last '('
+            end_par = match_end_par.start()  # index of first )
+            start_par = [m.start() for m in re.finditer(r"(?<!Col)\(", formula[:end_par])][-1]  # index of last (
             return self.remove_matched_parentheses(formula[:start_par] + formula[end_par + 1:])
         else:
             return formula
@@ -1719,10 +1722,7 @@ class SpreadSheetWindow(QMainWindow):
         set_xy.addAction("Y")
         set_xy.addAction("Yerr")
         set_xy.triggered[QAction].connect(lambda QAction: self.set_column_type(QAction, selected_column))
-        convert_unit = header_menu.addMenu("convert unit")
-        convert_unit.addAction("cm^-1 to nm")
-        convert_unit.addAction("nm to cm^-1")
-        convert_unit.triggered[QAction].connect(lambda QAction: self.convert_column_unit(QAction, selected_column))
+        header_menu.addAction("Convert unit", lambda: self.convert_column_unit(selected_column))
         header_menu.addAction("Flip column", lambda: self.flip_column(selected_column))
         mov_col = header_menu.addMenu("Move column")
         mov_col.addAction("Move left")
@@ -1731,7 +1731,7 @@ class SpreadSheetWindow(QMainWindow):
         mov_col.addAction("Move to last")
         mov_col.triggered[QAction].connect(lambda QAction: self.move_column(QAction, selected_column))
         ac = header_menu.exec_(self.header_table.mapToGlobal(position))
-        # Delete selected colums
+        # Delete selected columns
         if ac == delete_column:
             # Get the index of all selected columns in reverse order, so that last column is deleted first
             selCol = sorted(set(index.column() for index in self.header_table.selectedIndexes()), reverse=True)
@@ -1741,30 +1741,36 @@ class SpreadSheetWindow(QMainWindow):
                 self.header_table.removeColumn(j)
                 self.cols = self.cols - 1
 
-    def convert_column_unit(self, action, selected_column):
-        dialog_wavelength = QDialog()
-        layout = QtWidgets.QGridLayout()
-        cbox = QtWidgets.QComboBox()
-        cbox.addItem("325")
-        cbox.addItem("442")
-        cbox.addItem("532")
-        cbox.addItem("633")
-        cbox.addItem("785")
-        layout.addWidget(cbox)
-        dialog_wavelength.setLayout(layout)
-        dialog_wavelength.setWindowTitle("Select a Wavelength")
-        dialog_wavelength.setWindowModality(Qt.ApplicationModal)
-        dialog_wavelength.exec_()
-        wl0 = cbox.currentText()
-        if action.text() == "cm^-1 to nm":
-            unit_text = "nm"
-            formula = f"{wl0}/(1-Col({selected_column})*0.0000001*{wl0})"
+    def convert_column_unit(self, selected_column):
 
-        elif action.text() == "nm to cm^-1":
+        # open dialog to get desired unit and excitation wavelength
+        unit_dialog = DialogClasses.ConvertUnitDialog(self)
+        unit_dialog.show()
+
+        # loop stops code until user selects parameter
+        loop = QtCore.QEventLoop()
+        unit_dialog.closeSignal.connect(loop.quit)
+        loop.exec_()
+
+        # get parameter from dialog
+        wl0 = unit_dialog.wavelength
+        unit = unit_dialog.unit
+        if wl0 is None or unit is None:
+            return
+
+        if unit == "cm\u207B\u00B9 to nm":
+            unit_text = "nm"
+            axis_text = "Wavelength"
+            formula = f"{wl0}/(1-Col({selected_column})*0.0000001*{wl0})"
+        elif unit == "nm to cm\u207B\u00B9":
             unit_text = "cm^-1"
+            axis_text = "Raman Shift"
             formula = f"((1/{wl0})-(1/Col({selected_column})))*10000000"
+        else:
+            return
 
         self.header_table.item(2, selected_column).setText(unit_text)
+        self.header_table.item(1, selected_column).setText(axis_text)
         self.header_table.item(4, selected_column).setText(formula.format(wl0=wl0, selected_column=selected_column))
 
     def flip_column(self, selected_column):
@@ -2050,7 +2056,7 @@ class SpreadSheetWindow(QMainWindow):
             else:
                 Interpreter = FormulaInterpreter(self.data)
                 try:
-                    new_data = Interpreter.interprete_formula(content)
+                    new_data = Interpreter.interpret_formula(content)
                 except Exception as e:
                     print(e)
                     new_data = None
@@ -2802,7 +2808,7 @@ class MyCustomToolbar(NavigationToolbar2QT):
         # keep the default behaviour
         super(MyCustomToolbar, self).save_figure(*args)
 
-    #def _icon(self, name, *args):
+    # def _icon(self, name, *args):
     #    if name == 'Layer.png':
     #        return QIcon(os.path.dirname(os.path.realpath(__file__)) + "/Icons/Layer_content.png")
     #    else:
@@ -3031,54 +3037,56 @@ class PlotWindow(QMainWindow):
     def create_menubar(self):
         menubar = self.menuBar()
         # 1. menu item: File
-        fileMenu = menubar.addMenu('&File')
-        fileMenu.addAction('Save to File', self.menu_save_to_file)
+        file_menu = menubar.addMenu('&File')
+        file_menu.addAction('Save to File', self.menu_save_to_file)
 
         # 2. menu item: Edit
-        editMenu = menubar.addMenu('&Edit')
+        edit_menu = menubar.addMenu('&Edit')
 
         # editDelete = editMenu.addMenu('Delete broken pixel - LabRam')
         # editDelete.addAction("532nm")
         # editDelete.addAction("633nm")
         # editDelete.triggered[QAction].connect(self.del_broken_pixel)
 
-        editDeletePixel = editMenu.addAction('Delete single datapoint', self.del_datapoint)
-        editDeletePixel.setStatusTip(
+        edit_delete_pixel = edit_menu.addAction('Delete single datapoint', self.del_datapoint)
+        edit_delete_pixel.setStatusTip(
             'Delete selected data point with Enter, Move with arrow keys, Press c to leave Delete-Mode')
 
-        edit_remove_spikes = editMenu.addAction("Remove cosmic spikes", self.remove_cosmic_spikes)
+        edit_remove_spikes = edit_menu.addAction("Remove cosmic spikes", self.remove_cosmic_spikes)
 
-        editSelectArea = editMenu.addAction('Define data area', self.DefineArea)
-        editSelectArea.setStatusTip('Move area limit with left mouse click, set it fix with right mouse click')
+        edit_select_area = edit_menu.addAction('Define data area', self.DefineArea)
+        edit_select_area.setStatusTip('Move area limit with left mouse click, set it fix with right mouse click')
 
-        edit_shift = editMenu.addAction("Shift spectrum to zero line", self.shift_spectrum_to_zero)
+        edit_shift = edit_menu.addAction("Shift spectrum to zero line", self.shift_spectrum_to_zero)
 
-        editNorm = editMenu.addMenu('Normalize spectrum regarding ...')
-        editNorm.setStatusTip('Normalizes highest peak to 1')
-        editNorm.addAction('... highest peak', self.normalize)
-        editNorm.addAction('... selected peak', lambda: self.normalize(select_peak=True))
+        edit_norm = edit_menu.addMenu('Normalize spectrum regarding ...')
+        edit_norm.setStatusTip('Normalizes highest peak to 1')
+        edit_norm.addAction('... highest peak', self.normalize)
+        edit_norm.addAction('... selected peak', lambda: self.normalize(select_peak=True))
 
-        editAddSubAct = editMenu.addAction('Add up or subtract two spectra', self.add_subtract_spectra)
+        edit_menu.addAction('Add up or subtract two spectra', self.add_subtract_spectra)
+
+        edit_menu.addAction('Convert unit of x axis', self.convert_unit)
 
         # 3. menu: Analysis
-        analysisMenu = menubar.addMenu('&Analysis')
+        analysis_menu = menubar.addMenu('&Analysis')
 
         # 3.1 Analysis Fit
-        analysisFit = analysisMenu.addMenu('&Fit')
+        analysis_fit = analysis_menu.addMenu('&Fit')
 
-        analysisFitSingleFct = analysisFit.addMenu('&Quick Fit')
-        analysisFitSingleFct.addAction('Lorentz')
-        analysisFitSingleFct.addAction('Gauss')
-        analysisFitSingleFct.addAction('Breit-Wigner-Fano')
-        analysisFitSingleFct.triggered[QAction].connect(self.quick_fit)
+        analysis_fit_single_fct = analysis_fit.addMenu('&Quick Fit')
+        analysis_fit_single_fct.addAction('Lorentz')
+        analysis_fit_single_fct.addAction('Gauss')
+        analysis_fit_single_fct.addAction('Breit-Wigner-Fano')
+        analysis_fit_single_fct.triggered[QAction].connect(self.quick_fit)
 
-        analysisFit.addAction("Fit Dialog", self.open_fit_dialog)
+        analysis_fit.addAction("Fit Dialog", self.open_fit_dialog)
 
-        analysis_routine_menu = analysisMenu.addMenu("&Analysis routines")
-        analysis_routine_menu.addAction("D und G band", self.fit_D_G)
-        analysis_routine_menu.addAction("Fit Sulfur oxyanion spectrum", self.fit_sulfuroxyanion)
-        analysis_routine_menu.addAction("Get m/I(G) (Hydrogen content)", self.hydrogen_estimation)
-        analysis_routine_menu.addAction("Norm to water peak", self.norm_to_water)
+        analysis_routine_menu = analysis_menu.addMenu("&Analysis routines")
+        # analysis_routine_menu.addAction("D und G band", self.fit_D_G)
+        # analysis_routine_menu.addAction("Fit Sulfur oxyanion spectrum", self.fit_sulfuroxyanion)
+        # analysis_routine_menu.addAction("Get m/I(G) (Hydrogen content)", self.hydrogen_estimation)
+        # analysis_routine_menu.addAction("Norm to water peak", self.norm_to_water)
         analysis_routine_menu.addAction("Create own routine", self.create_analysis_routine)
         own_routine_menu = analysis_routine_menu.addMenu("&Apply own routine")
         files = glob.glob("analysis_routines/*.txt")
@@ -3087,20 +3095,20 @@ class PlotWindow(QMainWindow):
         own_routine_menu.triggered[QAction].connect(self.get_own_routine)
 
         # 3.2 Linear regression
-        analysisMenu.addAction("Linear regression", self.linear_regression)
+        analysis_menu.addAction("Linear regression", self.linear_regression)
 
         # 3.3 Analysis baseline correction
-        analysisMenu.addAction('Baseline Corrections', self.baseline)
+        analysis_menu.addAction('Baseline Corrections', self.baseline)
 
         # 3.3 Smoothing
-        analysisMenu.addAction("Smooth spectrum", self.smoothing)
+        analysis_menu.addAction("Smooth spectrum", self.smoothing)
 
         # add later
         # 3.4 Analysis find peaks
-        # analysisMenu.addAction('Find Peak', self.find_peaks)
+        # analysis_menu.addAction('Find Peak', self.find_peaks)
 
         # 3.5 Get Area below curve
-        analysisMenu.addAction('Get Area below Curve', self.determine_area)
+        analysis_menu.addAction('Get Area below Curve', self.determine_area)
 
         # 4. menu: spectra data base
         menubar.addAction('&Data base peak positions', self.open_peakdatabase)
@@ -3237,7 +3245,7 @@ class PlotWindow(QMainWindow):
                     # check that every column has same length, otherwise fill up with np.nan
                     max_length = max([len(i) for i in save_data])
                     for i in range(len(save_data)):
-                        save_data[i] = np.append(save_data[i], np.full(max_length-len(save_data[i]), np.nan))
+                        save_data[i] = np.append(save_data[i], np.full(max_length - len(save_data[i]), np.nan))
                     # transpose data and save it
                     save_data = np.transpose(save_data)
                     self.save_to_file('Save data selected data in file', file_name, save_data)
@@ -3391,7 +3399,7 @@ class PlotWindow(QMainWindow):
 
     def add_subtract_spectra(self):
         """
-        function to add or subtract a spectrum from an other spectrum
+        function to add or subtract a spectrum from another spectrum
         """
         self.dialog_add_sub = QDialog()
         vlayout = QtWidgets.QVBoxLayout()
@@ -3457,6 +3465,50 @@ class PlotWindow(QMainWindow):
 
         self.canvas.draw()
 
+    def convert_unit(self):
+        """convert units of the x-axis from wavelength to wavenumber and vice versa"""
+
+        # open dialog to get desired unit and excitation wavelength
+        unit_dialog = DialogClasses.ConvertUnitDialog(self)
+        unit_dialog.show()
+
+        # loop stops code until user selects parameter
+        loop = QtCore.QEventLoop()
+        unit_dialog.closeSignal.connect(loop.quit)
+        loop.exec_()
+
+        # get parameter from dialog
+        wavelength = unit_dialog.wavelength
+        unit = unit_dialog.unit
+        if wavelength is None or unit is None:
+            return
+
+        # get limits of x-axis
+        x_min, x_max = self.ax.get_xlim()
+
+        # conversion formula
+        if unit == "cm\u207B\u00B9 to nm":
+            conversion_formula = lambda x: wavelength / (1 - x * 0.0000001 * wavelength)
+            axis_label = r"Wavelength / nm"
+        elif unit == "nm to cm\u207B\u00B9":
+            conversion_formula = lambda x: ((1 / wavelength) - (1 / x)) * 10000000
+            axis_label = r"Raman Shift / cm$^{-1}$"
+        else:
+            return
+
+        # convert data
+        for d in self.data:
+            d["line"].set_xdata(conversion_formula(d["line"].get_xdata()))
+            d["x"] = d["line"].get_xdata()
+
+        # adjust axis options
+        self.ax.set_xlim((conversion_formula(x_min), conversion_formula(x_max)))
+        loc = matplotlib.ticker.AutoLocator()
+        self.ax.xaxis.set_major_locator(loc)
+        self.ax.set_xlabel(axis_label)
+
+        self.canvas.draw()
+
     def quick_fit(self, q):
         """fit one peak without opening the fit dialog"""
         self.select_data_set()
@@ -3474,7 +3526,7 @@ class PlotWindow(QMainWindow):
             idx_peaks, properties = signal.find_peaks(y, height=0.1 * max(y))
             if idx_peaks.size > 0:
                 background = round(np.mean(np.concatenate([y[:3], y[-3:]])), 2)
-                idx = np.argmax(properties["peak_heights"]) # get index of highest peak
+                idx = np.argmax(properties["peak_heights"])  # get index of highest peak
                 p = round(x[idx_peaks[idx]], 2)
                 h = round(properties["peak_heights"][idx] - background, 2)
                 w = signal.peak_widths(y, idx_peaks)[0][idx]
@@ -4102,7 +4154,8 @@ class PlotWindow(QMainWindow):
             save_data = prettytable.PrettyTable()
             save_data.field_names = ["Parameters", "Values", "Errors"]
             save_data.add_rows(print_table)
-            save_data = "R^2={:.6f} \n Lorentz 1 = D-Bande, BWF (Breit-Wigner-Fano) 1 = G-Bande \n {}".format(r_squared, save_data)
+            save_data = "R^2={:.6f} \n Lorentz 1 = D-Bande, BWF (Breit-Wigner-Fano) 1 = G-Bande \n {}".format(r_squared,
+                                                                                                              save_data)
 
             print('\n')
             print(self.data[n]["line"].get_label())
